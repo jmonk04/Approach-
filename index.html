@@ -103,6 +103,7 @@ label{display:block;margin-bottom:10px}
 .tag.xfer{background:#E6EDF2;color:#3A5A72}.tag.ref{background:#E7F1EC;color:var(--path)}
 .tag.dup{background:#F7E9E6;color:var(--over)}.tag.one{background:#F5EFE0;color:var(--hold)}
 .tag.fix{background:#ECEEF0;color:#5A6B75}
+.tag.pend{background:#EFEAF3;color:#6B5B84}
 .filters{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px}
 .chip{flex:none;padding:5px 11px;border:1px solid var(--rule);background:#fff;border-radius:999px;
   font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;color:var(--quiet)}
@@ -144,6 +145,10 @@ label{display:block;margin-bottom:10px}
 .bill .body{flex:1;min-width:0}
 .bill .bamt{text-align:right;flex:none}
 .range{font-family:var(--mono);font-size:11px;color:var(--quiet)}
+.billbar{position:relative;height:9px;background:var(--track);border-radius:3px;margin-top:12px;overflow:hidden}
+.billbar .bfill{position:absolute;left:0;top:0;bottom:0;background:#5F8090;border-radius:3px;
+  transition:width .5s cubic-bezier(.22,.9,.3,1)}
+@media (prefers-reduced-motion:reduce){.billbar .bfill{transition:none}}
 .daystrip{display:flex;gap:1px;height:46px;align-items:flex-end;margin-top:9px;
   padding:0 0 3px;border-bottom:1px solid var(--rule)}
 .dcol{flex:1;height:100%;display:flex;align-items:flex-end;position:relative}
@@ -171,6 +176,7 @@ label{display:block;margin-bottom:10px}
   <section id="v-dash" class="on">
     <div class="card" id="gsCard"></div>
     <div class="card" id="incomeCard"></div>
+    <div class="card" id="billsCard"></div>
     <div class="card" id="flowCard"></div>
     <div class="card" id="hero"></div>
     <div class="card" id="splitCard"></div>
@@ -284,10 +290,15 @@ label{display:block;margin-bottom:10px}
     </div>
     <div class="card">
       <div class="eyebrow">Paste</div>
-      <h2 style="margin:4px 0 6px">Quick lines</h2>
-      <p class="hint">Comma-separated lines, or text copied straight off a bank screen &mdash;
-        anything with a date and an amount on each line.</p>
-      <textarea id="pasteBox" placeholder="2026-08-14, Trader Joes, 84.21, Joe&#10;&#10;or paste rows:&#10;08/01/2026  MORTGAGE PMT LOANCARE  -3,150.00  21,428.95"></textarea>
+      <h2 style="margin:4px 0 6px">From a screen or a screenshot</h2>
+      <p class="hint">Comma lines, rows copied off a bank page, or text lifted out of a
+        screenshot &mdash; on iPhone, long-press the screenshot, Select All, Copy.
+        Stacked merchant / date / amount is fine.</p>
+      <textarea id="pasteBox" placeholder="Trader Joe's&#10;Aug 22&#10;$84.21&#10;&#10;or:  2026-08-22, Trader Joes, 84.21, Joe"></textarea>
+      <label class="teach" style="margin:11px 0 12px">
+        <input type="checkbox" id="pastePending">
+        <span>These are pending charges &mdash; replace them when the real ones post</span>
+      </label>
       <button class="btn" id="doPaste" style="margin-top:10px">Add lines</button>
     </div>
     <div class="card">
@@ -352,6 +363,7 @@ const DEFAULTS = {
   notRecurring: [],
   bills: [],
   customCats: [],
+  gsMode: "spent",
   targets: {},          // cat -> monthly ceiling
   rules: {},            // normalized merchant -> category (learned)
   ambiguous: [],
@@ -379,7 +391,9 @@ function paceOf(ym){
   return now.getDate()/daysIn(ym);
 }
 function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
-function titleCase(s){ return s.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()); }
+function titleCase(s){
+  return s.toLowerCase().replace(/(^|[^A-Za-z'\u2019])([a-z])/g,(_,a,b)=>a+b.toUpperCase());
+}
 
 /* ---------- classification ---------- */
 const AMEX_PAY_RX  = /(payment\s*[-\u2013]?\s*thank\s*you|mobile payment|online payment|american express\s*(ach|pmt|payment|e-?pay)|\bamex\b\s*(ach|pmt|payment))/i;
@@ -457,6 +471,17 @@ function assess(t, pool){
 
   if (t.type === "refund" && !t.linkedTo) return { ok:false, reason:"unmatched-refund" };
 
+  /* Same merchant, same day, close but not equal: usually the same purchase
+     arriving twice from two sources with a tip or adjustment between them.
+     Small repeat buys (two coffees) are left alone. */
+  if(t.amount>=25){
+    const twin=pool.find(x=>x.id!==t.id && !x.pending && x.type==="spend"
+      && x.merchant===t.merchant && x.date===t.date
+      && Math.abs(x.amount-t.amount)>0.011
+      && Math.abs(x.amount-t.amount)<=Math.max(x.amount,t.amount)*0.30);
+    if(twin) return { ok:false, reason:"near-duplicate" };
+  }
+
   const amb = (S.settings.ambiguous||[]).some(a =>
     t.merchant.toLowerCase().includes(a.toLowerCase()));
   if (amb) return { ok:false, reason:"ambiguous-merchant" };
@@ -484,6 +509,7 @@ function assess(t, pool){
 
 const REASON_TEXT = {
   "duplicate":          "Matches a transaction already on file",
+  "near-duplicate":     "Same merchant and day as another charge, close amount",
   "unmatched-refund":   "Refund with no charge to attach it to",
   "ambiguous-merchant": "This merchant lands in different buckets each time",
   "new-merchant":       "First time seeing this merchant",
@@ -504,6 +530,7 @@ function makeTxn(p){
     seq: p.seq==null?0:p.seq,
     balance: p.balance==null?null:p.balance,
     oneTime: false,
+    provisional: p.provisional===true,
     linkedTo: null,
     dupeOf: null,
     pending: false,
@@ -552,26 +579,34 @@ function monthOf(t){
 
 /* ---------- ingest ---------- */
 function ingest(parts){
-  const known = new Map(S.txns.map(t=>[t.hash,t.id]));
   const fresh=[];
-  for (const p of parts){
-    const t = makeTxn(p);
+  for(const p of parts){
+    const t=makeTxn(p);
     markCrossAccount(t);
-    if (known.has(t.hash)) t.dupeOf = known.get(t.hash);
-    known.set(t.hash, t.id);
     fresh.push(t);
   }
+  /* a posted charge supersedes its own pending placeholder first, so it is
+     never then mistaken for a duplicate of the row it replaced */
+  const superseded = reconcileProvisional(fresh);
+
+  const known=new Map(S.txns.map(t=>[t.hash,t.id]));
+  const seen=new Set();
+  for(const t of fresh){
+    if(known.has(t.hash)||seen.has(t.hash)) t.dupeOf=known.get(t.hash)||"batch";
+    seen.add(t.hash);
+  }
+
   const pool = S.txns.concat(fresh);
   for (const t of fresh) linkRefund(t,pool);
   for (const t of fresh){
-    const a = assess(t,pool);
-    t.pending = !a.ok;
-    t.reason  = a.reason;
+    const a=assess(t,pool);
+    t.pending=!a.ok;
+    t.reason=a.reason;
   }
   S.txns = pool;
   S.txns.sort((a,b)=> a.date<b.date?1 : a.date>b.date?-1 : 0);
   const held = fresh.filter(t=>t.pending).length;
-  return { added: fresh.length-held, held };
+  return { added: fresh.length-held, held, superseded };
 }
 
 /* teaching: resolving one transaction settles the merchant for good,
@@ -581,6 +616,17 @@ function resolve(id, cat, teach){
   if (!t) return;
   t.category = cat; t.pending = false; t.reason = "";
   if (t.type === "refund" && !t.linkedTo) t.type = "refund";
+  /* Same merchant, same day, close but not equal: usually the same purchase
+     arriving twice from two sources with a tip or adjustment between them.
+     Small repeat buys (two coffees) are left alone. */
+  if(t.amount>=25){
+    const twin=pool.find(x=>x.id!==t.id && !x.pending && x.type==="spend"
+      && x.merchant===t.merchant && x.date===t.date
+      && Math.abs(x.amount-t.amount)>0.011
+      && Math.abs(x.amount-t.amount)<=Math.max(x.amount,t.amount)*0.30);
+    if(twin) return { ok:false, reason:"near-duplicate" };
+  }
+
   const amb = (S.settings.ambiguous||[]).some(a =>
     t.merchant.toLowerCase().includes(a.toLowerCase()));
   if (teach && !amb){
@@ -705,6 +751,26 @@ function incomeView(ym){
 }
 
 /* ============================================================
+   BILLS THIS MONTH — what has posted, what is still coming.
+   Only counts bills we have actually watched post before.
+   ============================================================ */
+function billsThisMonth(ym){
+  const d=monthData(ym);
+  const posted=FIXED_CATS.reduce((a,c)=>a+(d.byCat[c]||0),0);
+  const seen=new Set(d.live.filter(t=>FIXED_CATS.includes(t.category)).map(t=>t.merchant));
+  const known=billRows().filter(r=>r.origin==="detected");
+  const pending=known.filter(r=>!seen.has(r.name))
+    .map(r=>({...r, estimate: r.varies?r.latest:r.amount}))
+    .sort((a,b)=>a.day-b.day);
+  const toCome=pending.reduce((a,r)=>a+r.estimate,0);
+  const dim=daysIn(ym);
+  const today=paceOf(ym)>=1?dim:new Date().getDate();
+  return { posted, toCome, total:posted+toCome, pending,
+           next:pending[0]||null, postedCount:seen.size, today, dim,
+           anyKnown: known.length>0 };
+}
+
+/* ============================================================
    GLIDESLOPE — cumulative discretionary spend against a linear
    burn from zero to the sum of the four ceilings
    ============================================================ */
@@ -786,9 +852,13 @@ function requiredFor(goal,targetDate){
     const take=Math.min(room,remaining);
     if(take>10){ cuts.push({cat,from:amt,cut:take}); remaining-=take; }
   }
-  const feasible = income>0 ? need<=income*0.6 : null;
+  /* The real ceiling on saving is income minus the bills you cannot cancel.
+     Anything at or under that is reachable; past it, nothing can get you there. */
+  const rp=ratePlan();
+  const maxPossible = income>0 ? income-rp.committedOutside : 0;
+  const feasible = income>0 ? need<=maxPossible : null;
   return { need, months:p.months, start:p.start, gapPlanned, gapActual,
-           cuts, shortfall:remaining, feasible, project:p };
+           cuts, shortfall:remaining, feasible, maxPossible, project:p };
 }
 
 /* ============================================================
@@ -1094,6 +1164,111 @@ function committedView(){
                  .sort((a,b)=>a.day-b.day) };
 }
 
+
+/* ============================================================
+   SCREENSHOT / APP-LAYOUT PASTE
+   Text lifted out of a phone screenshot stacks merchant, date and
+   amount on separate lines instead of one row per transaction.
+   ============================================================ */
+const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function toISOloose(str){
+  const s=String(str||"").trim();
+  const now=new Date();
+  const backdate=(y,mo,day)=>{
+    /* screenshots omit the year; pick the most recent one that isn't in the future */
+    if(new Date(y,mo-1,day)-now>45*86400000) y--;
+    return y+"-"+String(mo).padStart(2,"0")+"-"+String(day).padStart(2,"0");
+  };
+  let m;
+  /* explicit forms first, so a loose Date() parse never gets the chance to
+     invent a year (new Date("Aug 22") lands in 2001) */
+  if((m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)))
+    return m[1]+"-"+m[2].padStart(2,"0")+"-"+m[3].padStart(2,"0");
+  if((m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/))){
+    let y=m[3]; if(y.length===2) y="20"+y;
+    return y+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0");
+  }
+  if((m=s.match(/^([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?$/))){
+    const mo=MONTHS[m[1].slice(0,3).toLowerCase()];
+    if(mo) return m[3]?backdate(Number(m[3])+1000,mo,Number(m[2])).replace(/^\d{4}/,m[3])
+                     :backdate(now.getFullYear(),mo,Number(m[2]));
+  }
+  if((m=s.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\.?(?:\s+(\d{4}))?$/))){
+    const mo=MONTHS[m[2].slice(0,3).toLowerCase()];
+    if(mo) return m[3]?m[3]+"-"+String(mo).padStart(2,"0")+"-"+m[1].padStart(2,"0")
+                     :backdate(now.getFullYear(),mo,Number(m[1]));
+  }
+  if((m=s.match(/^(\d{1,2})[\/\-](\d{1,2})$/)))
+    return backdate(now.getFullYear(),Number(m[1]),Number(m[2]));
+  return null;
+}
+
+const AMT_LINE=/^[+-]?\(?\$\s?[\d,]+\.\d{2}\)?$|^[+-]?[\d,]+\.\d{2}$/;
+const DATE_LINE=/^(\d{1,2}[\/\-]\d{1,2}([\/\-]\d{2,4})?|\d{4}-\d{2}-\d{2}|[A-Za-z]{3,9}\.?\s+\d{1,2}(,?\s*\d{4})?|\d{1,2}\s+[A-Za-z]{3,9}(\s+\d{4})?)$/;
+const NOISE_LINE=/^(pending|posted|processing|transactions?|recent activity|activity|view all|show more|see all|search|filter|sort|balance|available credit|current balance|statement|today|yesterday|amount|date|description|categor(y|ies)|\$?0\.00|[•·|—–-]+)$/i;
+
+function parseBlocks(text, account, opts){
+  opts=opts||{};
+  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const out=[];
+  let date=null, amount=null, desc=[], sawPending=false;
+  const flush=()=>{
+    if(date!=null && amount!=null && desc.length){
+      let a=amount;
+      if(account!=="amex") a=-a;          /* bank screens show debits negative */
+      out.push({ date, amount:a, rawDesc:desc.join(" ").slice(0,80),
+                 account, source:"screenshot",
+                 provisional: opts.pending===true || sawPending });
+    }
+    date=null; amount=null; desc=[]; sawPending=false;
+  };
+  for(const raw of lines){
+    const l=raw.replace(/\s{2,}/g," ").trim();
+    if(/^pending$/i.test(l)){ sawPending=true; continue; }
+    if(NOISE_LINE.test(l)) continue;
+    if(AMT_LINE.test(l)){
+      if(amount!=null) flush();
+      let n=l.replace(/[$,\s]/g,"");
+      const neg=/^\(.*\)$/.test(n)||n.startsWith("-");
+      n=parseFloat(n.replace(/[()+-]/g,""));
+      if(isFinite(n)) amount=neg?-n:n;
+      if(date!=null&&desc.length) flush();
+      continue;
+    }
+    const iso=DATE_LINE.test(l)?toISOloose(l):null;
+    if(iso){
+      if(date!=null) flush();
+      date=iso;
+      if(amount!=null&&desc.length) flush();
+      continue;
+    }
+    if(/[A-Za-z]{2}/.test(l)) desc.push(l);
+    if(date!=null&&amount!=null&&desc.length) flush();
+  }
+  flush();
+  return out.map((r,i)=>({...r, seq:i}));
+}
+
+/* A pending charge and the posted version of it are the same purchase.
+   When the real one arrives, the placeholder steps aside. */
+function reconcileProvisional(fresh){
+  let replaced=0;
+  for(const t of fresh){
+    if(t.provisional) continue;
+    const match=S.txns.find(x=>x.provisional && x.account===t.account
+      && x.merchant===t.merchant
+      && Math.abs(dnum(x.date)-dnum(t.date))<=7
+      && ( Math.abs(x.amount-t.amount)<=0.011
+           || (t.amount>=x.amount && t.amount-x.amount<=Math.max(3,x.amount*0.30))
+           || (Math.abs(x.amount)<=5 && t.amount>Math.abs(x.amount)) ));
+    if(match){
+      S.txns=S.txns.filter(x=>x.id!==match.id);
+      replaced++;
+    }
+  }
+  return replaced;
+}
+
 /* ---------- CSV ---------- */
 function parseCSV(text){
   const rows=[]; let row=[],cell="",q=false;
@@ -1352,68 +1527,114 @@ function renderGlideslope(){
   const el=document.getElementById("gsCard");
   if(!g.target){
     el.innerHTML='<div class="eyebrow">Glideslope</div>'
-      + '<div class="empty">Set your four ceilings in Plan and the slope appears here.</div>';
+      + '<div class="empty">Set your ceilings in Plan and the slope appears here.</div>';
     return;
   }
+  const rem=(S.settings.gsMode||"spent")==="remaining";
   const W=320,H=176,PL=6,PR=6,PT=16,PB=24;
   const iw=W-PL-PR, ih=H-PT-PB;
-  const ymax=Math.max(g.target,g.landing,g.run,1)*1.10;
-  const X=d=>PL+(d/g.dim)*iw;
-  const Y=v=>PT+ih-(Math.max(0,v)/ymax)*ih;
-
   const hot=g.delta>0;
   const col=hot?"var(--over)":"var(--path)";
+  const X=d=>PL+(d/g.dim)*iw;
+  const val=v=>rem?g.target-v:v;
+  const endVal=val(g.landing);
+  const lo=Math.min(0,endVal,val(g.run));
+  const hi=Math.max(g.target,val(0),val(g.run),val(g.landing))*1.06;
+  const Y=v=>PT+ih-((v-lo)/Math.max(1,(hi-lo)))*ih;
+
   const actual=g.pts.length
-    ? "M"+X(0)+","+Y(0)+" "+g.pts.map(p=>"L"+X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1)).join(" ")
+    ? "M"+X(0)+","+Y(val(0)).toFixed(1)+" "
+      + g.pts.map(p=>"L"+X(p[0]).toFixed(1)+","+Y(val(p[1])).toFixed(1)).join(" ")
     : "";
+  const base=Y(Math.max(lo,0));
   const area=g.pts.length
-    ? actual+" L"+X(g.today).toFixed(1)+","+Y(0)+" L"+X(0)+","+Y(0)+" Z"
+    ? actual+" L"+X(g.today).toFixed(1)+","+base.toFixed(1)+" L"+X(0)+","+base.toFixed(1)+" Z"
     : "";
   const proj=(g.today>0&&g.today<g.dim)
-    ? "M"+X(g.today).toFixed(1)+","+Y(g.run).toFixed(1)
-      +" L"+X(g.dim)+","+Y(g.landing).toFixed(1)
+    ? "M"+X(g.today).toFixed(1)+","+Y(val(g.run)).toFixed(1)
+      +" L"+X(g.dim)+","+Y(endVal).toFixed(1)
     : "";
-
   const gsPct=g.gs==null?null:Math.round(g.gs*100);
-  const land=g.landing;
-  const landOver=land-g.target;
+  const headline=rem?g.target-g.run:g.run;
+  const leftAtEnd=g.target-g.landing;
 
   el.innerHTML='<div class="spread"><span class="eyebrow">Glideslope</span>'
-    + (gsPct!=null?'<span class="eyebrow '+(hot?"overc":"pathc")+'">'+gsPct+'% of plan</span>':'')+'</div>'
-    + '<div class="row" style="align-items:baseline;gap:10px;margin:8px 0 2px">'
-    +   '<span class="big num">'+money(g.run)+'</span>'
-    +   '<span class="sm '+(hot?"overc":"pathc")+' num">'
-    +     (hot?"+":"\u2212")+money(Math.abs(g.delta)).replace("$","$")+'</span>'
+    + '<div class="miniseg" id="gsMode">'
+    +   '<button data-g="spent" aria-pressed="'+(!rem)+'">Spent</button>'
+    +   '<button data-g="remaining" aria-pressed="'+rem+'">Left</button></div></div>'
+    + '<div class="row" style="align-items:baseline;gap:10px;margin:9px 0 2px">'
+    +   '<span class="big num '+(rem?(headline<0?"overc":"pathc"):"")+'">'+money(headline)+'</span>'
+    +   '<span class="sm '+(hot?"overc":"pathc")+' num">'+(hot?"+":"\u2212")+money(Math.abs(g.delta))+'</span>'
     +   '<span class="sm muted">vs plan today</span></div>'
+    + (gsPct!=null?'<div class="sm muted">'+gsPct+'% of planned pace</div>':'')
     + '<svg viewBox="0 0 '+W+' '+H+'" class="gs" preserveAspectRatio="none" role="img" '
-    +   'aria-label="Cumulative spending against the planned rate">'
-    /* ceiling */
+    +   'aria-label="'+(rem?"Budget remaining":"Cumulative spending")+' against the planned rate">'
+    + (lo<0?'<line x1="'+PL+'" y1="'+Y(0).toFixed(1)+'" x2="'+(W-PR)+'" y2="'+Y(0).toFixed(1)
+        +'" stroke="var(--over)" stroke-width="1" opacity=".4"/>':'')
     + '<line x1="'+PL+'" y1="'+Y(g.target).toFixed(1)+'" x2="'+(W-PR)+'" y2="'+Y(g.target).toFixed(1)
     +   '" stroke="var(--rule)" stroke-width="1"/>'
-    /* the glideslope itself: linear day 1 to last day */
-    + '<line x1="'+X(0)+'" y1="'+Y(0)+'" x2="'+X(g.dim)+'" y2="'+Y(g.target).toFixed(1)
+    + '<line x1="'+X(0)+'" y1="'+Y(val(0)).toFixed(1)+'" x2="'+X(g.dim)+'" y2="'+Y(val(g.target)).toFixed(1)
     +   '" stroke="var(--ink)" stroke-width="1.25" stroke-dasharray="4 3" opacity=".55"/>'
     + (area?'<path d="'+area+'" fill="'+col+'" opacity=".10"/>':'')
-    + (proj?'<path d="'+proj+'" fill="none" stroke="'+col+'" stroke-width="1.5" '
-        +'stroke-dasharray="3 3" opacity=".55"/>':'')
-    + (actual?'<path d="'+actual+'" fill="none" stroke="'+col+'" stroke-width="2.5" '
-        +'stroke-linejoin="round" stroke-linecap="round"/>':'')
-    + (g.today>0?'<circle cx="'+X(g.today).toFixed(1)+'" cy="'+Y(g.run).toFixed(1)
+    + (proj?'<path d="'+proj+'" fill="none" stroke="'+col+'" stroke-width="1.5" stroke-dasharray="3 3" opacity=".55"/>':'')
+    + (actual?'<path d="'+actual+'" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>':'')
+    + (g.today>0?'<circle cx="'+X(g.today).toFixed(1)+'" cy="'+Y(val(g.run)).toFixed(1)
         +'" r="3.5" fill="'+col+'" stroke="var(--card)" stroke-width="1.5"/>':'')
     + '<text x="'+PL+'" y="'+(H-7)+'" class="ax">1</text>'
     + '<text x="'+(W/2)+'" y="'+(H-7)+'" class="ax" text-anchor="middle">'+Math.round(g.dim/2)+'</text>'
     + '<text x="'+(W-PR)+'" y="'+(H-7)+'" class="ax" text-anchor="end">'+g.dim+'</text>'
-    + '<text x="'+(W-PR)+'" y="'+(Y(g.target)-4).toFixed(1)+'" class="ax" text-anchor="end">'
-    +   'ceiling '+money(g.target)+'</text>'
+    + '<text x="'+(W-PR)+'" y="'+(Y(g.target)-4).toFixed(1)+'" class="ax" text-anchor="end">ceiling '
+    +   money(g.target)+'</text>'
     + '</svg>'
-    + '<div class="spread" style="margin-top:2px"><span class="sm muted">Landing at this rate</span>'
-    +   '<span class="num '+(landOver>0?"overc":"pathc")+'">'+money(land)
-    +   (landOver>0?' \u00b7 '+money(landOver)+' over':'')+'</span></div>'
+    + (rem
+      ? '<div class="spread" style="margin-top:2px"><span class="sm muted">Ends the month with</span>'
+        + '<span class="num '+(leftAtEnd<0?"overc":"pathc")+'">'+money(Math.abs(leftAtEnd))
+        + (leftAtEnd<0?' short':' spare')+'</span></div>'
+      : '<div class="spread" style="margin-top:2px"><span class="sm muted">Landing at this rate</span>'
+        + '<span class="num '+(g.landing>g.target?"overc":"pathc")+'">'+money(g.landing)
+        + (g.landing>g.target?' \u00b7 '+money(g.landing-g.target)+' over':'')+'</span></div>')
     + (g.heldAmt>0
-       ? '<div class="warn"><strong class="num">'+money(g.heldAmt)+'</strong> is held for your review and '
+       ? '<div class="warn"><strong class="num">'+money(g.heldAmt)+'</strong> is held for review and '
          + 'is not on this slope. <button class="link" data-goto="review">Review</button></div>'
        : '');
+
+  el.querySelectorAll("#gsMode button").forEach(b=>b.onclick=()=>{
+    S.settings.gsMode=b.dataset.g; save(); renderGlideslope();
+  });
   el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
+}
+
+/* ---------- BILLS AT A GLANCE ---------- */
+function renderBillsGlance(){
+  const b=billsThisMonth(cursor);
+  const el=document.getElementById("billsCard");
+  if(!b.anyKnown && !b.posted){
+    el.innerHTML='<div class="spread"><span class="eyebrow">Bills</span>'
+      + '<button class="link" data-goto="commit">Set up</button></div>'
+      + '<div class="empty">No bills tracked yet. Import the cash account, or add the ones you know under Bills.</div>';
+    el.querySelectorAll("[data-goto]").forEach(x=>x.onclick=()=>go(x.dataset.goto));
+    return;
+  }
+  const pct=b.total>0?(b.posted/b.total)*100:0;
+  el.innerHTML='<div class="spread"><span class="eyebrow">Bills</span>'
+    + '<button class="link" data-goto="commit">All bills</button></div>'
+    + '<div class="twocol" style="margin-top:10px">'
+    +   '<div class="col"><div class="sm muted">Posted</div>'
+    +     '<div class="mid num">'+money(b.posted)+'</div></div>'
+    +   '<div class="col"><div class="sm muted">Still to come</div>'
+    +     '<div class="mid num '+(b.toCome>0?"holdc":"pathc")+'">'+money(b.toCome)+'</div></div>'
+    + '</div>'
+    + '<div class="billbar"><div class="bfill" style="width:'+pct.toFixed(1)+'%"></div></div>'
+    + '<div class="spread sm muted" style="margin-top:7px">'
+    +   '<span>'+money(b.total)+' this month</span>'
+    +   '<span>'+(b.toCome>0?Math.round(100-pct)+"% outstanding":"all posted")+'</span></div>'
+    + (b.next
+       ? '<div class="spread" style="margin-top:11px;border-top:1px solid var(--rule);padding-top:9px">'
+         + '<span class="sm">Next up \u00b7 <strong>'+esc(b.next.name)+'</strong></span>'
+         + '<span class="num sm">day '+b.next.day+' \u00b7 '+money(b.next.estimate)
+         + (b.next.varies?' est':'')+'</span></div>'
+       : '');
+  el.querySelectorAll("[data-goto]").forEach(x=>x.onclick=()=>go(x.dataset.goto));
 }
 
 function renderDash(){
@@ -1427,6 +1648,7 @@ function renderDash(){
 
   renderGlideslope();
   renderIncome();
+  renderBillsGlance();
   renderFlow();
   document.getElementById("hero").innerHTML =
     '<div class="spread"><span class="eyebrow">Day '+dayNo+' of '+dim+'</span>'
@@ -1561,7 +1783,8 @@ function renderLedger(){
     const tags=(t.type==="transfer"?'<span class="tag xfer">'+(t.crossAccount?"card payment":"transfer")+'</span>':"")
       +(t.type==="refund"?'<span class="tag ref">'+(t.linkedTo?"refund \u2192 origin":"refund")+'</span>':"")
       +(FIXED_CATS.includes(t.category)?'<span class="tag fix">committed</span>':"")
-      +(t.oneTime?'<span class="tag one">one-time</span>':"");
+      +(t.oneTime?'<span class="tag one">one-time</span>':"")
+      +(t.provisional?'<span class="tag pend">pending</span>':"");
     return '<div class="txn" data-id="'+t.id+'"><div class="body">'
       + '<div class="name">'+esc(t.merchant)+tags+'</div>'
       + '<div class="meta">'+t.date+' \u00b7 '+esc(personOf(t))+' \u00b7 '+esc(t.category)+'</div></div>'
@@ -1606,7 +1829,10 @@ function renderCommitted(){
   const moves=total-steady;
 
   document.getElementById("commitTop").innerHTML=
-    '<div class="eyebrow">Leaves every month before discretionary</div>'
+    '<div class="eyebrow">Bills</div>'
+    + '<p class="hint" style="margin:6px 0 10px">Everything that leaves the cash account on a '
+    + 'schedule \u2014 rent, utilities, insurance, loans. These come out before your four '
+    + 'ceilings, not against them.</p>'
     + '<div class="big num" style="margin:8px 0 4px">'+money(total)+'</div>'
     + '<div class="sm muted">'+money(steady)+' fixed'
     + (moves>0?' \u00b7 <span class="holdc">'+money(moves)+' varies</span>':'')+'</div>';
@@ -1614,8 +1840,8 @@ function renderCommitted(){
   const list=document.getElementById("billList");
   if(!rows.length){
     list.innerHTML='<div class="eyebrow">Your bills</div>'
-      + '<div class="empty">Nothing yet. Add the ones you know about below \u2014 '
-      + 'they count right away, without waiting on an export.</div>';
+      + '<div class="empty">A charge has to appear three times before it is called recurring. '
+      + 'Until then, add your known bills below \u2014 they count right away.</div>';
   } else {
     list.innerHTML='<div class="spread"><span class="eyebrow">Your bills</span>'
       + '<span class="eyebrow">by day of month</span></div>'
@@ -1735,7 +1961,9 @@ function renderProject(){
   const already = r.gapActual!=null && r.gapActual<=0;
   let verdict, cls;
   if(already){ verdict="Your recent saving already gets you there."; cls="pathc"; }
-  else if(r.feasible===false){ verdict="This would take more than 60% of take-home. Not realistic on this timeline."; cls="overc"; }
+  else if(r.gapPlanned<=0){ verdict="Your current ceilings already get you there."; cls="pathc"; }
+  else if(r.feasible===false){ verdict="Out of reach on this timeline \u2014 even spending nothing "
+    + "discretionary only frees "+money(r.maxPossible)+"/mo."; cls="overc"; }
   else if(r.shortfall>10){ verdict="Reachable only partly through spending cuts \u2014 "+money(r.shortfall)+"/mo would still be unaccounted for."; cls="overc"; }
   else { verdict="Reachable, but it needs cuts."; cls="holdc"; }
 
@@ -1973,20 +2201,34 @@ document.getElementById("csvFile").onchange=e=>{
 };
 document.getElementById("doPaste").onclick=()=>{
   const box=document.getElementById("pasteBox");
-  let parts=[];
-  for(const l of box.value.split("\n").map(x=>x.trim()).filter(Boolean)){
-    const f=l.split(/\s*[,\t]\s*/); if(f.length<3) continue;
-    const date=toISO(f[0]); const amount=parseFloat(String(f[2]).replace(/[$,]/g,""));
+  const text=box.value;
+  const pendingFlag=document.getElementById("pastePending").checked;
+  /* Three shapes turn up here: tidy comma lines, rows copied off a bank page,
+     and screenshot text where each transaction is stacked over several lines.
+     Parse all three and keep whichever read the most transactions. */
+  const comma=[];
+  for(const l of text.split("\n").map(x=>x.trim()).filter(Boolean)){
+    const f=l.split(/\s*,\s*|\t/);
+    if(f.length<3) continue;
+    const date=toISO(f[0]);
+    const amount=parseFloat(String(f[2]).replace(/[$,]/g,""));
     if(!date||!isFinite(amount)) continue;
-    parts.push({date,rawDesc:f[1],amount,person:f[3]?titleCase(f[3]):null,
-                rawPerson:f[3]||null,account:importAccount,source:"paste"});
+    if(/\s{2,}/.test(f[1])||/\s{2,}/.test(String(f[2]))) continue;
+    comma.push({date,rawDesc:f[1],amount,person:f[3]?titleCase(f[3]):null,
+                rawPerson:f[3]||null,account:importAccount,source:"paste",
+                provisional:pendingFlag});
   }
-  /* not comma-shaped? treat it as text lifted off a bank screen */
-  if(!parts.length) parts=parseLoose(box.value,importAccount);
-  if(!parts.length){ toast("Couldn't find a date and an amount on any line"); return; }
+  const loose=parseLoose(text,importAccount).map(r=>({...r,provisional:pendingFlag}));
+  const blocks=parseBlocks(text,importAccount,{pending:pendingFlag});
+  let parts=comma;
+  if(loose.length>parts.length) parts=loose;
+  if(blocks.length>parts.length) parts=blocks;
+  if(!parts.length){ toast("Couldn't find a date and an amount to work with"); return; }
   box.value="";
   const res=ingest(parts); save(); renderAll();
-  toast(res.added+" filed"+(res.held?" \u00b7 "+res.held+" need your call":""));
+  toast(res.added+" filed"
+    +(res.superseded?" \u00b7 "+res.superseded+" pending replaced":"")
+    +(res.held?" \u00b7 "+res.held+" need your call":""));
   if(res.held) go("review");
 };
 document.getElementById("doManual").onclick=()=>{
@@ -2029,6 +2271,7 @@ document.getElementById("doClear").onclick=()=>{
   document.getElementById("mDate").value=todayISO();
   renderAll();
 })();
+
 
 </script>
 </body>
