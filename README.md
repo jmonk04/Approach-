@@ -155,6 +155,41 @@ should never quietly flatter you.
 
 ---
 
+## The Approach screen
+
+The home screen answers one question — *am I okay this month?* — and everything on
+it is ranked by how much it contributes to that answer.
+
+1. **The verdict.** One word, one number, and the total ribbon as evidence. This is
+   the only element on the screen allowed to be loud.
+2. **The glideslope.** Why the verdict says what it says.
+3. **The ceilings.** Where it's coming from, per category.
+4. **The rest of the month**, folded. Money in, bills still due, the cash-flow split,
+   committed vs discretionary, save rate, by person. All still there, none of it
+   competing. The fold's own label carries the two figures worth seeing without
+   opening it.
+
+### How the verdict decides
+
+Four answers, not two. "Yes" and "no" are both lies when enough money is still
+sitting in the review queue.
+
+| Answer | Condition |
+|---|---|
+| **Yes** | Discretionary spending at the current rate lands under the ceilings, with room |
+| **Tight** | Lands under, but with less than 6% of the ceiling total to spare — or the ceilings hold while the month still doesn't close on income |
+| **No** | Lands over the ceilings |
+| **Can't say yet** | Held money exceeds the remaining margin, so the queue decides the answer, not the spending |
+
+The loud number is always the one that carries the verdict: spare at this rate, over
+at this rate, or the size of the queue when the queue is what's in doubt.
+
+The second test is separate from the first and can drag a "yes" down to "tight":
+committed spending plus bills still expected plus projected discretionary, measured
+against income. Ceilings can be perfectly healthy in a month that still doesn't close.
+
+---
+
 ## Ceilings card
 
 The same two readings as the glideslope, per category, on a **Pace / Left** toggle.
@@ -171,6 +206,43 @@ for. Only holds whose category is already settled are attributed to a ceiling. A
 or ambiguous merchant defaults to Flex/Buffer internally, and pinning it there would
 be precisely the silent guess the review queue exists to prevent — those appear on the
 header total only.
+
+---
+
+## Storage, and why it disappears
+
+**iOS clears `localStorage` for web content it treats as dormant.** A Home Screen icon
+is not as exempt as Apple's documentation implies. The symptom is specific: the app is
+stable while you're using it and empty when you come back after a gap — which is
+exactly when you return to import new data.
+
+Redundancy inside the browser does not help. IndexedDB and script-set cookies fall
+under the same eviction rules. The durable copy has to leave the browser.
+
+The state splits in two, and only one half is expensive:
+
+- **Transactions** are replaceable. The statements still exist; re-import them.
+- **The brain** — learned merchant rules, ceilings, declared bills, aliases, income —
+  is a few kilobytes that cost a month of review taps to build. Losing it is what
+  makes a re-import miserable.
+
+### Three durable paths, in order of reliability
+
+1. **Copy backup** — the whole state as text on the clipboard. Paste it into Notes.
+   In a Home Screen web app an `<a download>` frequently goes nowhere, so clipboard
+   beats file export on iOS. Restore by pasting it back.
+2. **Export file** — the same JSON as a download. Better on a laptop.
+3. **Seed** — the brain only, as one line to paste over `const SEED = null;` in
+   `index.html`. A device with empty storage rebuilds its own rules on first load and
+   says so. Statements then import already categorized, with no queue to re-teach.
+
+The seed carries merchant names, ceilings and declared bills. It carries no
+transactions, no amounts spent, no balances, no account numbers. Judge that against a
+public repo before pasting it in.
+
+The Data tab leads with backup age and turns it red at seven days or if you have never
+taken one. Safari and the Home Screen app keep **separate** storage — a backup taken in
+one will not appear in the other.
 
 ---
 

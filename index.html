@@ -76,6 +76,41 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .ribbon .legend{display:flex;justify-content:space-between;margin-top:7px;font-size:11px}
 @media (prefers-reduced-motion:reduce){.ribbon .fill{transition:none}}
 .warn{margin-top:12px;padding:10px;border-radius:8px;background:#FBF1EF;border:1px solid #E8CFC9;font-size:13px}
+
+/* ---- hierarchy ----------------------------------------------------------
+   Exactly one element on the home screen is allowed to be loud: .display,
+   inside the verdict card. Everything else steps down from there. The fold
+   holds the supporting cards and strips them of card-weight so they read as
+   a list, not as nine competing panels. */
+.verdict{border-top:3px solid var(--rule);padding:16px 16px 15px}
+.verdict.ok{border-top-color:var(--path)}
+.verdict.tight{border-top-color:var(--hold)}
+.verdict.over{border-top-color:var(--over)}
+.verdict.unknown{border-top-color:var(--quiet)}
+.vword{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:600}
+.display{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:clamp(40px,13vw,54px);
+  font-weight:600;line-height:1;letter-spacing:-.035em;margin:9px 0 3px}
+.vsub{font-size:13.5px;color:var(--quiet);line-height:1.35}
+.vwhy{margin-top:13px;border-top:1px solid var(--rule);padding-top:10px;display:flex;
+  flex-direction:column;gap:7px}
+.vwhy .r{display:flex;align-items:baseline;gap:9px;font-size:12.5px;color:var(--quiet)}
+.vwhy .r .num{color:var(--ink)}
+.vwhy .r button{margin-left:auto}
+.fold{margin:0 0 12px}
+.fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;
+  padding:12px 14px;background:var(--card);border:1px solid var(--rule);border-radius:12px;
+  box-shadow:var(--shadow)}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary .chev{margin-left:auto;color:var(--quiet);font-size:15px;transition:transform .18s ease}
+.fold[open]>summary{border-radius:12px 12px 0 0;border-bottom-color:transparent;box-shadow:none}
+.fold[open]>summary .chev{transform:rotate(90deg)}
+.fold .inner{background:var(--card);border:1px solid var(--rule);border-top:0;
+  border-radius:0 0 12px 12px;box-shadow:var(--shadow);padding:0 14px 4px}
+.fold .inner .card{background:none;border:0;border-top:1px solid var(--rule);border-radius:0;
+  box-shadow:none;margin:0;padding:14px 0}
+.fold .inner .card:first-child{border-top:0}
+.fold .inner .big{font-size:22px}
+@media (prefers-reduced-motion:reduce){.fold>summary .chev{transition:none}}
 input,select,textarea,button{font-family:inherit;font-size:15px;color:var(--ink)}
 input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--rule);border-radius:8px;background:#fff}
 textarea{min-height:100px;font-family:var(--mono);font-size:12.5px;line-height:1.5}
@@ -174,15 +209,21 @@ label{display:block;margin-bottom:10px}
   </header>
 
   <section id="v-dash" class="on">
+    <div class="card verdict" id="verdictCard"></div>
     <div class="card" id="gsCard"></div>
-    <div class="card" id="incomeCard"></div>
-    <div class="card" id="billsCard"></div>
-    <div class="card" id="flowCard"></div>
-    <div class="card" id="hero"></div>
-    <div class="card" id="splitCard"></div>
-    <div class="card" id="saveCard"></div>
     <div class="card" id="catCard"></div>
-    <div class="card" id="peopleCard"></div>
+    <details class="fold" id="foldRest">
+      <summary><span class="eyebrow">The rest of the month</span>
+        <span class="chev" aria-hidden="true">&#8250;</span></summary>
+      <div class="inner">
+        <div class="card" id="incomeCard"></div>
+        <div class="card" id="billsCard"></div>
+        <div class="card" id="flowCard"></div>
+        <div class="card" id="splitCard"></div>
+        <div class="card" id="saveCard"></div>
+        <div class="card" id="peopleCard"></div>
+      </div>
+    </details>
   </section>
 
   <section id="v-review"><div id="reviewList"></div></section>
@@ -314,14 +355,30 @@ label{display:block;margin-bottom:10px}
       <button class="btn" id="doManual">Add transaction</button>
     </div>
     <div class="card">
-      <div class="eyebrow">Backup</div>
-      <h2 style="margin:4px 0 10px">Your data</h2>
-      <div id="dataStats" class="sm muted" style="margin-bottom:10px"></div>
+      <div class="eyebrow">Keeping it</div>
+      <h2 style="margin:4px 0 6px">Backup and restore</h2>
+      <div id="storageNote" class="hint"></div>
+      <div id="dataStats" class="sm muted" style="margin:10px 0"></div>
       <div class="btn2" style="margin-bottom:8px">
+        <button class="btn" id="doCopy">Copy backup</button>
         <button class="btn ghost" id="doExport">Export file</button>
+      </div>
+      <label><span class="lt">Paste a backup to restore</span>
+        <textarea id="restoreBox" style="min-height:70px"
+          placeholder="Paste the JSON you copied earlier"></textarea></label>
+      <div class="btn2" style="margin-bottom:8px">
+        <button class="btn ghost" id="doRestorePaste">Restore from paste</button>
         <button class="btn ghost" id="doImportBtn">Restore file</button>
       </div>
       <input type="file" id="jsonFile" accept=".json,application/json" style="display:none">
+      <hr>
+      <div class="eyebrow">Seed</div>
+      <p class="hint">Your rules, ceilings and declared bills as one line to paste into
+        <code>index.html</code>. A wiped device rebuilds its own brain on first load and
+        imports arrive already categorized. Carries merchant names &mdash; no transactions,
+        balances or account numbers.</p>
+      <button class="btn ghost" id="doSeed">Copy seed line</button>
+      <hr>
       <button class="btn danger" id="doClear">Erase everything</button>
     </div>
   </section>
@@ -368,7 +425,8 @@ const DEFAULTS = {
   targets: {},          // cat -> monthly ceiling
   rules: {},            // normalized merchant -> category (learned)
   ambiguous: [],
-  resolved: {}          // merchant -> true once taught
+  resolved: {},         // merchant -> true once taught
+  lastBackup: null      // ISO date of the last export or clipboard copy
 };
 
 /* DEFAULTS holds nested objects. A shallow spread hands out the SAME rules{}
@@ -376,6 +434,31 @@ const DEFAULTS = {
    and survives an erase. Always hand out a fresh deep copy. */
 function freshSettings(){ return JSON.parse(JSON.stringify(DEFAULTS)); }
 let S = { txns: [], settings: freshSettings() };
+
+/* ---------- the seed ----------
+   iOS evicts localStorage for dormant web content, and a Home Screen icon is
+   not reliably exempt. Transactions survive that because the statements still
+   exist — the taught merchant rules do not. Data -> Copy seed emits a single
+   line to paste over the one below. A device with empty storage then rebuilds
+   its own brain on first load, with no queue to re-teach.
+
+   The seed carries merchant names, ceilings and declared bills. No transactions,
+   amounts spent, balances or account numbers. Judge that against a public repo
+   before you paste it in. */
+const SEED = null;
+
+/* the expensive half of the state: what you taught it, not what you imported */
+const BRAIN_KEYS = ["rules","aliases","targets","bills","customCats",
+                    "ambiguous","notRecurring","people","income","objective"];
+function brainOut(){
+  const o={}; for(const k of BRAIN_KEYS) if(S.settings[k]!=null) o[k]=S.settings[k];
+  return o;
+}
+function brainIn(o){
+  if(!o||typeof o!=="object") return 0;
+  let n=0; for(const k of BRAIN_KEYS) if(o[k]!=null){ S.settings[k]=o[k]; n++; }
+  return n;
+}
 
 /* ---------- date helpers ---------- */
 function ymOf(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
@@ -800,6 +883,81 @@ function glideslope(ym){
            delta: run-requiredNow,
            heldAmt: d.heldAmt };
 }
+
+/* ============================================================
+   THE VERDICT — the one question the home screen exists to answer:
+   am I okay this month? Four answers, not two, because "yes" and "no"
+   are both lies when enough money is still sitting in the review queue.
+   ============================================================ */
+function verdict(ym){
+  const d=monthData(ym), g=glideslope(ym), b=billsThisMonth(ym);
+  const target=targetTotal(), pace=paceOf(ym);
+  const spent=d.discretionary-d.refunds;
+  const closed=pace>=1;
+
+  if(!target){
+    return { state:"unset", word:"No ceilings set", figure:null, label:"",
+             sub:"Approach can't answer anything until it knows your limits.",
+             why:[{ text:"Set your four ceilings in Plan", goto:"plan" }] };
+  }
+
+  /* At today's rate, where does discretionary spending finish? */
+  const landing = closed ? spent : g.landing;
+  const slack   = target - landing;
+  const held    = d.heldAmt;
+
+  /* Held money is the thing that can flip the answer. If there is more of it
+     than there is margin, the honest answer is that we do not know yet. */
+  let state;
+  if (slack < 0)            state = "over";
+  else if (held > slack)    state = "unknown";
+  else if (slack < target*0.06) state = "tight";
+  else                      state = "ok";
+
+  /* Second test, different failure: the ceilings can be fine while the month
+     still doesn't close on the money coming in. */
+  const cashOut  = d.fixed + b.toCome + landing;
+  const cashLeft = d.income>0 ? d.income - cashOut : null;
+  if (cashLeft!=null && cashLeft<0 && state==="ok") state="tight";
+
+  const why=[];
+  if (state==="unknown" || held>0)
+    why.push({ text:"held for review, out of every total above", figure:held,
+               goto:"review" });
+  if (b.toCome>0)
+    why.push({ text:"in bills still expected this month", figure:b.toCome, goto:"commit" });
+  if (cashLeft!=null && cashLeft<0)
+    why.push({ text:"more than the month brings in, all in", figure:-cashLeft });
+  else if (cashLeft!=null && why.length<3)
+    why.push({ text:"left over once everything lands", figure:cashLeft });
+  if (d.refunds>0 && why.length<3)
+    why.push({ text:"in refunds applied to this month", figure:d.refunds });
+
+  const word = state==="ok"      ? (closed?"Finished under":"Yes")
+             : state==="tight"   ? (closed?"Finished close":"Tight")
+             : state==="over"    ? (closed?"Finished over":"No")
+             :                     "Can't say yet";
+  const figure = state==="unknown" ? held : Math.abs(slack);
+  const label  = state==="unknown"
+      ? "held for review \u2014 enough to change the answer"
+    : state==="over"
+      ? (closed?"over your ceilings":"over your ceilings at this rate")
+      : (closed?"under your ceilings":"spare at this rate");
+
+  const sub = state==="unknown"
+      ? "Clear the queue and the month resolves one way or the other."
+    : state==="over"
+      ? "Spending has to slow for the rest of the month to land inside plan."
+    : state==="tight"
+      ? (cashLeft!=null && cashLeft<0
+          ? "Inside the ceilings, but the month doesn't close on income."
+          : "Inside the ceilings, with very little room to spare.")
+      : "On plan across all ceilings.";
+
+  return { state, word, figure, label, sub, why:why.slice(0,3),
+           spent, target, landing, slack, held, closed };
+}
+
 
 /* ============================================================
    PROJECTION — planned rate vs trailing actual
@@ -1631,7 +1789,7 @@ function renderGlideslope(){
     +   '<button data-g="spent" aria-pressed="'+(!rem)+'">Spent</button>'
     +   '<button data-g="remaining" aria-pressed="'+rem+'">Left</button></div></div>'
     + '<div class="row" style="align-items:baseline;gap:10px;margin:9px 0 2px">'
-    +   '<span class="big num '+(rem?(headline<0?"overc":"pathc"):"")+'">'+money(headline)+'</span>'
+    +   '<span class="mid num '+(rem?(headline<0?"overc":"pathc"):"")+'" style="font-size:26px">'+money(headline)+'</span>'
     +   '<span class="sm '+(hot?"overc":"pathc")+' num">'+(hot?"+":"\u2212")+money(Math.abs(g.delta))+'</span>'
     +   '<span class="sm muted">vs plan today</span></div>'
     + (gsPct!=null?'<div class="sm muted">'+gsPct+'% of planned pace</div>':'')
@@ -1705,24 +1863,65 @@ function renderBillsGlance(){
   el.querySelectorAll("[data-goto]").forEach(x=>x.onclick=()=>go(x.dataset.goto));
 }
 
+/* ---------- THE VERDICT ---------- */
+function renderVerdict(){
+  const v=verdict(cursor), pace=paceOf(cursor), dim=daysIn(cursor);
+  const dayNo=pace>=1?dim:Math.max(1,Math.round(pace*dim));
+  const col=v.state==="ok"?"pathc":v.state==="tight"?"holdc":v.state==="over"?"overc":"muted";
+  const el=document.getElementById("verdictCard");
+  el.className="card verdict "+v.state;
+
+  if(v.state==="unset"){
+    el.innerHTML='<div class="spread"><span class="vword muted">'+esc(v.word)+'</span>'
+      + '<span class="eyebrow">Day '+dayNo+' of '+dim+'</span></div>'
+      + '<div class="vsub" style="margin-top:10px">'+esc(v.sub)+'</div>'
+      + '<div class="vwhy"><div class="r"><span>Set your four ceilings</span>'
+      + '<button class="link" data-goto="plan">Plan</button></div></div>';
+    el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
+    return;
+  }
+
+  el.innerHTML='<div class="spread"><span class="vword '+col+'">'+esc(v.word)+'</span>'
+    + '<span class="eyebrow">Day '+dayNo+' of '+dim+'</span></div>'
+    + '<div class="display '+col+'">'+money(v.figure)+'</div>'
+    + '<div class="vsub"><strong style="font-weight:600;color:var(--ink)">'+esc(v.label)+'</strong>'
+    +   ' \u00b7 '+esc(v.sub)+'</div>'
+    /* the total ribbon lives here now: it is the evidence for the word above it */
+    + ribbon(v.spent,v.target,pace,v.held,S.settings.catMode==="remaining"?"remaining":"pace",dim)
+    + (v.why.length
+       ? '<div class="vwhy">'+v.why.map(w=>'<div class="r">'
+           + '<span class="num mid" style="font-size:14px">'+money(w.figure)+'</span>'
+           + '<span>'+esc(w.text)+'</span>'
+           + (w.goto?'<button class="link" data-goto="'+esc(w.goto)+'">Open</button>':'')
+           + '</div>').join("")+'</div>'
+       : '');
+  el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
+}
+
+/* ---------- fold summary: enough to decide whether to open it ---------- */
+function renderFoldSummary(){
+  const d=monthData(cursor), b=billsThisMonth(cursor);
+  const bits=[];
+  if(d.income>0) bits.push(money(d.income)+" in");
+  if(b.toCome>0) bits.push(money(b.toCome)+" to come");
+  if(d.income>0 && d.saveRate!=null) bits.push(Math.round(d.saveRate*100)+"% kept");
+  const s=document.querySelector("#foldRest > summary .eyebrow");
+  if(s) s.textContent = bits.length
+    ? "Rest of the month \u00b7 "+bits.slice(0,2).join(" \u00b7 ")
+    : "The rest of the month";
+}
+
 function renderDash(){
   const d=monthData(cursor), pace=paceOf(cursor), tt=targetTotal();
-  const dim=daysIn(cursor), dayNo=pace>=1?dim:Math.max(1,Math.round(pace*dim));
+  const dim=daysIn(cursor);
   const disc=d.discretionary-d.refunds;
-  const st=statusOf(disc,tt,pace);
-  const word=!tt?"No ceilings set":st==="over"?"Over the ceiling":st==="hold"?"Ahead of pace"
-    :pace>=1?"Finished on target":"On path";
-  const color=st==="over"?"overc":st==="hold"?"holdc":"pathc";
 
+  renderVerdict();
   renderGlideslope();
   renderIncome();
   renderBillsGlance();
   renderFlow();
-  document.getElementById("hero").innerHTML =
-    '<div class="spread"><span class="eyebrow">Day '+dayNo+' of '+dim+'</span>'
-    + '<span class="eyebrow '+color+'">'+word+'</span></div>'
-    + ribbon(disc,tt,pace,d.heldAmt)
-    + (d.refunds?'<div class="sm muted" style="margin-top:8px">'+money(d.refunds)+' in refunds applied</div>':'');
+  renderFoldSummary();
 
   /* committed vs discretionary */
   document.getElementById("splitCard").innerHTML =
@@ -2177,8 +2376,30 @@ function renderData(){
   document.querySelectorAll("#acctPick button").forEach(b=>
     b.setAttribute("aria-pressed", b.dataset.acct===importAccount));
   const live=S.txns.filter(t=>!t.pending);
-  document.getElementById("dataStats").textContent=
-    live.length+" filed \u00b7 "+S.txns.filter(t=>t.pending).length+" held \u00b7 saved to this "+Store.mode;
+
+  /* Backup age is the number that matters here, so it leads. */
+  const lb=S.settings.lastBackup;
+  const ageDays=lb?Math.floor((Date.now()-new Date(lb).getTime())/86400000):null;
+  const stale=live.length>0 && (ageDays==null || ageDays>=7);
+  document.getElementById("dataStats").innerHTML=
+    live.length+" filed \u00b7 "+S.txns.filter(t=>t.pending).length+" held"
+    + '<br><span class="'+(stale?"overc":"muted")+'">'
+    + (lb ? "Last backup "+(ageDays===0?"today":ageDays===1?"yesterday":ageDays+" days ago")
+          : "Never backed up")
+    + (stale?" \u2014 copy one now":"")+'</span>';
+
+  const standalone = window.navigator.standalone===true
+    || (typeof window.matchMedia==="function"
+        && window.matchMedia("(display-mode: standalone)").matches);
+  document.getElementById("storageNote").innerHTML =
+    "Saved to this "+Store.mode+" only. iOS clears storage for web apps it treats as "
+    + "dormant, which is why a gap between imports can come back empty."
+    + (standalone
+        ? " You're in the Home Screen app, which keeps its data separate from Safari \u2014 "
+          + "a backup taken in one will not appear in the other."
+        : " Opened in the browser. The Home Screen icon keeps a separate copy of this data.")
+    + " Keep a copy somewhere iOS doesn't manage.";
+
   const ps=document.getElementById("mPerson");
   if(ps.options.length!==S.settings.people.length)
     ps.innerHTML=S.settings.people.map(p=>'<option>'+esc(p)+'</option>').join("");
@@ -2210,10 +2431,15 @@ function save(){
 }
 async function load(){
   const raw=await Store.get(KEY);
-  if(!raw) return;
+  if(!raw){
+    /* Storage was empty — first run, or iOS cleared it. Rebuild what we can. */
+    if(SEED && brainIn(SEED)) wipedFromSeed=true;
+    return;
+  }
   try{ const p=JSON.parse(raw); S.txns=p.txns||[]; S.settings=Object.assign(freshSettings(),p.settings||{}); migrate(); }
   catch(e){ toast("Saved data unreadable \u2014 starting fresh"); }
 }
+let wipedFromSeed=false;
 
 /* ---------- wiring ---------- */
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>go(b.dataset.v));
@@ -2331,22 +2557,57 @@ document.getElementById("doManual").onclick=()=>{
   document.getElementById("mDesc").value=""; document.getElementById("mAmt").value="";
   save(); renderAll(); toast("Added");
 };
+/* Clipboard first, file second. In a Home Screen web app an <a download> often
+   goes nowhere, so the reliable durable copy is text you paste into Notes. */
+async function copyText(s){
+  try{ await navigator.clipboard.writeText(s); return true; }
+  catch(e){
+    try{
+      const ta=document.createElement("textarea");
+      ta.value=s; ta.style.position="fixed"; ta.style.opacity="0";
+      document.body.appendChild(ta); ta.select();
+      const ok=document.execCommand("copy"); ta.remove(); return ok;
+    }catch(e2){ return false; }
+  }
+}
+function markBackedUp(){ S.settings.lastBackup=new Date().toISOString(); save(); renderData(); }
+
+function applyBackup(p){
+  if(!p||!p.txns) throw new Error("not a backup");
+  S.txns=p.txns; S.settings=Object.assign(freshSettings(),p.settings||{}); migrate();
+  save(); renderAll(); toast("Restored "+p.txns.length+" transactions");
+}
+
+document.getElementById("doCopy").onclick=async()=>{
+  const ok=await copyText(JSON.stringify(S));
+  if(ok){ markBackedUp(); toast("Backup copied \u2014 paste it somewhere safe"); }
+  else toast("Couldn't reach the clipboard \u2014 use Export file");
+};
+document.getElementById("doSeed").onclick=async()=>{
+  const line="const SEED = "+JSON.stringify(brainOut())+";";
+  const ok=await copyText(line);
+  toast(ok?"Seed copied \u2014 paste it over the SEED line in index.html"
+         :"Couldn't reach the clipboard");
+};
+document.getElementById("doRestorePaste").onclick=()=>{
+  const box=document.getElementById("restoreBox");
+  try{ applyBackup(JSON.parse(box.value)); box.value=""; }
+  catch(err){ toast("That text isn't an Approach backup"); }
+};
 document.getElementById("doExport").onclick=()=>{
   const b=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(b); a.download="approach-"+todayISO()+".json"; a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),2000); toast("Backup downloaded");
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  markBackedUp(); toast("Backup downloaded");
 };
 document.getElementById("doImportBtn").onclick=()=>document.getElementById("jsonFile").click();
 document.getElementById("jsonFile").onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
   r.onload=()=>{
-    try{
-      const p=JSON.parse(r.result); if(!p.txns) throw 0;
-      S.txns=p.txns; S.settings=Object.assign(freshSettings(),p.settings||{}); migrate();
-      save(); renderAll(); toast("Restored "+p.txns.length+" transactions");
-    }catch(err){ toast("That file isn't an Approach backup"); }
+    try{ applyBackup(JSON.parse(r.result)); }
+    catch(err){ toast("That file isn't an Approach backup"); }
   };
   r.readAsText(f); e.target.value="";
 };
@@ -2359,6 +2620,8 @@ document.getElementById("doClear").onclick=()=>{
   await load();
   document.getElementById("mDate").value=todayISO();
   renderAll();
+  if(wipedFromSeed)
+    toast("Storage was empty \u2014 rules and ceilings rebuilt from the seed");
 })();
 
 
