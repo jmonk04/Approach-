@@ -364,13 +364,18 @@ const DEFAULTS = {
   bills: [],
   customCats: [],
   gsMode: "spent",
+  catMode: "pace",       // ceilings card: "pace" or "remaining"
   targets: {},          // cat -> monthly ceiling
   rules: {},            // normalized merchant -> category (learned)
   ambiguous: [],
   resolved: {}          // merchant -> true once taught
 };
 
-let S = { txns: [], settings: {...DEFAULTS} };
+/* DEFAULTS holds nested objects. A shallow spread hands out the SAME rules{}
+   and aliases{} every time, so a learned rule writes straight into the literal
+   and survives an erase. Always hand out a fresh deep copy. */
+function freshSettings(){ return JSON.parse(JSON.stringify(DEFAULTS)); }
+let S = { txns: [], settings: freshSettings() };
 
 /* ---------- date helpers ---------- */
 function ymOf(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
@@ -465,9 +470,11 @@ function autoCategory(t){
 /* ---------- confidence: what gets held for your call ---------- */
 function assess(t, pool){
   /* returns {ok:bool, reason:string} */
-  if (t.type === "transfer" || t.type === "income" || t.type === "savings") return { ok:true, reason:"" };
-
+  /* Duplicates first. A re-imported deposit used to sail through on type alone
+     and inflate detected income, which inflates the save rate. */
   if (t.dupeOf) return { ok:false, reason:"duplicate" };
+
+  if (t.type === "transfer" || t.type === "income" || t.type === "savings") return { ok:true, reason:"" };
 
   if (t.type === "refund" && !t.linkedTo) return { ok:false, reason:"unmatched-refund" };
 
@@ -506,6 +513,10 @@ function assess(t, pool){
   }
   return { ok:true, reason:"" };
 }
+
+/* Hold reasons where the category is settled and only the amount is in doubt.
+   Everything else is unattributed and shows on the hero total instead. */
+const CAT_KNOWN_HOLDS = new Set(["amount-outlier","reopened"]);
 
 const REASON_TEXT = {
   "duplicate":          "Matches a transaction already on file",
@@ -615,18 +626,6 @@ function resolve(id, cat, teach){
   const t = S.txns.find(x=>x.id===id);
   if (!t) return;
   t.category = cat; t.pending = false; t.reason = "";
-  if (t.type === "refund" && !t.linkedTo) t.type = "refund";
-  /* Same merchant, same day, close but not equal: usually the same purchase
-     arriving twice from two sources with a tip or adjustment between them.
-     Small repeat buys (two coffees) are left alone. */
-  if(t.amount>=25){
-    const twin=pool.find(x=>x.id!==t.id && !x.pending && x.type==="spend"
-      && x.merchant===t.merchant && x.date===t.date
-      && Math.abs(x.amount-t.amount)>0.011
-      && Math.abs(x.amount-t.amount)<=Math.max(x.amount,t.amount)*0.30);
-    if(twin) return { ok:false, reason:"near-duplicate" };
-  }
-
   const amb = (S.settings.ambiguous||[]).some(a =>
     t.merchant.toLowerCase().includes(a.toLowerCase()));
   if (teach && !amb){
@@ -780,8 +779,14 @@ function glideslope(ym){
   const today = ym<cur ? dim : ym>cur ? 0 : now.getDate();
   const daily={};
   for(const t of d.live){
-    if(!TC().includes(t.category)) continue;
-    const day=Math.max(1,Math.min(dim,Number(t.date.slice(8,10))||1));
+    /* A refund is booked against the month, category and DAY of the charge it
+       reverses — otherwise the line dips before the spend it cancels. */
+    const origin = t.type==="refund" && t.linkedTo
+      ? S.txns.find(x=>x.id===t.linkedTo) : null;
+    const cat = origin ? (origin.category||t.category) : t.category;
+    if(!TC().includes(cat)) continue;
+    const src = origin ? origin.date : t.date;
+    const day=Math.max(1,Math.min(dim,Number(src.slice(8,10))||1));
     daily[day]=(daily[day]||0)+(t.type==="refund"?-Math.abs(t.amount):t.amount);
   }
   const pts=[]; let run=0;
@@ -963,6 +968,9 @@ function ratePlan(){
    Navy Federal offers OFX/QFX and QIF alongside CSV, and its mobile
    site often offers neither — so loose pasted text works too.
    ============================================================ */
+/* what the last file-based parse decided, so the import can say so out loud */
+let LAST_PARSE = null;
+
 function parseOFX(text, account){
   const out=[];
   const blocks=text.split(/<STMTTRN>/i).slice(1);
@@ -980,7 +988,26 @@ function parseOFX(text, account){
                amount:amt, rawDesc:name||"Unlabeled", balance:null });
   }
   /* OFX signs debits negative */
-  return out.map((r,i)=>({...r, amount:-r.amount, seq:i, account, source:"ofx"}));
+  const rows = out.map((r,i)=>({...r, amount:-r.amount, seq:i, account, source:"ofx"}));
+  /* The running balance never appears on the transactions themselves — it sits
+     once in LEDGERBAL. Without it currentCash() is null and every projection
+     starts from zero, which is the whole point of importing from the bank. */
+  const bm = text.match(/<LEDGERBAL>[\s\S]*?<BALAMT>([^<\r\n]*)/i);
+  if (bm && rows.length){
+    const bal = parseFloat(String(bm[1]).replace(/[$,\s]/g,""));
+    if (isFinite(bal)){
+      /* attach to whichever row currentCash() would call the newest */
+      let k=0;
+      for(let i=1;i<rows.length;i++){
+        if(rows[i].date>rows[k].date ||
+           (rows[i].date===rows[k].date && rows[i].seq>rows[k].seq)) k=i;
+      }
+      rows[k].balance = bal;
+    }
+  }
+  LAST_PARSE = { conv:"ofx", convSource:"account", declared:"ofx",
+                 rows:rows.length, neg:0 };
+  return rows;
 }
 
 function parseQIF(text, account){
@@ -1033,6 +1060,7 @@ function parseLoose(text, account){
 
 /* pick the parser from the file itself */
 function parseAny(text, account, filename){
+  LAST_PARSE = null;
   const head=text.slice(0,4000).toUpperCase();
   if(head.includes("<OFX")||head.includes("OFXHEADER")||head.includes("<STMTTRN"))
     return parseOFX(text,account);
@@ -1260,7 +1288,10 @@ function reconcileProvisional(fresh){
       && Math.abs(dnum(x.date)-dnum(t.date))<=7
       && ( Math.abs(x.amount-t.amount)<=0.011
            || (t.amount>=x.amount && t.amount-x.amount<=Math.max(3,x.amount*0.30))
-           || (Math.abs(x.amount)<=5 && t.amount>Math.abs(x.amount)) ));
+           /* the $1 fuel authorization settling at the real amount. Kept tight:
+              at $5 a pending coffee could be eaten by an unrelated $45 charge
+              at the same merchant. */
+           || (Math.abs(x.amount)<=2 && t.amount>Math.abs(x.amount)) ));
     if(match){
       S.txns=S.txns.filter(x=>x.id!==match.id);
       replaced++;
@@ -1332,13 +1363,20 @@ function parseStatement(text, account){
     raw.push({ date, amount, balance, rawDesc:(r[iDesc]||"").trim(),
                rawPerson: iWho>=0 ? (r[iWho]||"").trim()||null : null });
   }
-  /* sign convention: internally, positive = money leaving the household */
-  let conv = (ACCOUNTS[account]||{}).sign || "charge-positive";
+  /* sign convention: internally, positive = money leaving the household.
+     The account label is the default. The file only overrides it on a clear
+     supermajority — a bare 60% count flipped every sign in a short or
+     paycheck-heavy export, turning a deposit into spending. */
+  const declared = (ACCOUNTS[account]||{}).sign || "charge-positive";
+  let conv = declared, convSource = "account";
   const neg = raw.filter(r=>r.amount<0).length;
-  if (raw.length>=5){
-    /* trust the data over the label if it clearly disagrees */
-    conv = neg > raw.length*0.6 ? "debit-negative" : "charge-positive";
+  const pos = raw.length - neg;
+  if (raw.length>=8){
+    const observed = neg >= raw.length*0.8 ? "debit-negative"
+                   : pos >= raw.length*0.8 ? "charge-positive" : null;
+    if (observed && observed!==declared){ conv = observed; convSource = "file"; }
   }
+  LAST_PARSE = { conv, convSource, declared, rows: raw.length, neg };
   const newestFirst = raw.length>1 && raw[0].date > raw[raw.length-1].date;
   return raw.map((r,i)=>({
     seq: newestFirst ? raw.length-1-i : i,
@@ -1397,19 +1435,49 @@ function toast(m){
   clearTimeout(toastT); toastT=setTimeout(()=>e.classList.remove("show"),2600);
 }
 
-/* ---------- ribbon: fill + pace tick + hatched unresolved exposure ---------- */
-function ribbon(spent,target,pace,unresolved){
+/* ---------- ribbon: fill + pace tick + hatched unresolved exposure ----------
+   Two readings of the same row. "pace" fills as you spend and asks whether you
+   are ahead of plan. "remaining" drains toward empty and answers the question
+   you actually act on: what is left, and what that leaves per day. */
+function ribbon(spent,target,pace,unresolved,mode,dim){
   unresolved = unresolved||0;
   if(!target){
     return '<div class="ribbon"><div class="track"></div><div class="legend">'
       + '<span class="muted">No ceiling set</span><span class="num">'+money(spent)+'</span></div></div>';
   }
   const st=statusOf(spent,target,pace);
+  const cls=st==="over"?"over":st==="hold"?"hold":"";
+  const pacePct=Math.max(0,Math.min(100,pace*100));
+
+  if(mode==="remaining"){
+    const left=target-spent;
+    const pct=Math.max(0,Math.min(100,left/target*100));
+    /* held money is the tip of the tank: not spent, but already spoken for */
+    const upct=Math.max(0,Math.min(pct,unresolved/target*100));
+    const paceMark=Math.max(0,Math.min(100,(1-pace)*100));
+    const days=dim||30;
+    const dayNo=pace>=1?days:Math.max(1,Math.round(pace*days));
+    const daysLeft=Math.max(0,days-dayNo);
+    let right;
+    if(left<0) right='<span class="overc num">'+money(-left)+' over</span>';
+    else if(daysLeft<=0) right='<span class="pathc num">'+money(left)+' unspent</span>';
+    else{
+      const perDay=left/daysLeft, planDay=target/days;
+      right='<span class="'+(perDay>=planDay?"pathc":"holdc")+' num">'
+        + money2(perDay)+'/day \u00b7 '+daysLeft+(daysLeft===1?' day':' days')+'</span>';
+    }
+    return '<div class="ribbon '+cls+'"><div class="track">'
+      + '<div class="fill" style="width:'+pct.toFixed(1)+'%"></div>'
+      + (upct>0.3?'<div class="unres" style="left:'+Math.max(0,pct-upct).toFixed(1)+'%;width:'+upct.toFixed(1)+'%"></div>':'')
+      + (pace>0&&pace<1?'<div class="pace" style="left:'+paceMark.toFixed(1)+'%"></div>':'')
+      + '<div class="cap"></div></div>'
+      + '<div class="legend"><span class="num muted">'+money(Math.max(0,left))
+      +   ' left of '+money(target)+'</span>'+right+'</div></div>';
+  }
+
   const pct=Math.max(0,Math.min(100,spent/target*100));
   const upct=Math.max(0,Math.min(100-pct,unresolved/target*100));
-  const pacePct=Math.max(0,Math.min(100,pace*100));
   const delta=spent-target*pace;
-  const cls=st==="over"?"over":st==="hold"?"hold":"";
   let right;
   if(st==="over") right='<span class="overc num">'+money(spent-target)+' over</span>';
   else if(pace>=1) right='<span class="pathc num">'+money(target-spent)+' under</span>';
@@ -1684,15 +1752,30 @@ function renderDash(){
         + '<span class="num '+(proj>=obj?"pathc":"overc")+'">'+(proj*100).toFixed(0)+'%</span></div>':'');
   }
 
-  /* the four ceilings */
-  const list=TC().map(c=>{
-    const held=d.held.filter(t=>t.category===c||!TC().includes(t.category))
-      .reduce((a,t)=>a+0,0);
-    return { cat:c, spent:d.byCat[c]||0, target:Number(S.settings.targets[c]||0) };
-  });
-  document.getElementById("catCard").innerHTML='<div class="eyebrow">Your four ceilings</div>'
+  /* the ceilings — readable two ways */
+  const list=TC().map(c=>({
+    cat:c,
+    spent:d.byCat[c]||0,
+    target:Number(S.settings.targets[c]||0),
+    /* Money held against THIS ceiling, so the tank can show what is at risk.
+       Only holds whose category is already settled count — a new or ambiguous
+       merchant defaults to Flex/Buffer in makeTxn, and pinning it there would
+       be exactly the silent guess the review queue exists to prevent. */
+    held:d.held.filter(t=>t.category===c && CAT_KNOWN_HOLDS.has(t.reason))
+               .reduce((a,t)=>a+Math.abs(t.amount),0)
+  }));
+  const cm=S.settings.catMode==="remaining"?"remaining":"pace";
+  const catEl=document.getElementById("catCard");
+  catEl.innerHTML='<div class="spread"><span class="eyebrow">'
+    + (TC().length===4?"Your four ceilings":"Your ceilings")+'</span>'
+    + '<div class="miniseg" id="catMode" role="group" aria-label="Ceiling view">'
+    +   '<button data-c="pace" aria-pressed="'+(cm==="pace")+'">Pace</button>'
+    +   '<button data-c="remaining" aria-pressed="'+(cm==="remaining")+'">Left</button></div></div>'
     + list.map(x=>'<div style="margin-top:14px"><div class="spread"><strong>'+esc(x.cat)+'</strong></div>'
-      + ribbon(x.spent,x.target,pace)+'</div>').join("");
+      + ribbon(x.spent,x.target,pace,x.held,cm,dim)+'</div>').join("");
+  catEl.querySelectorAll("#catMode button").forEach(b=>b.onclick=()=>{
+    S.settings.catMode=b.dataset.c; save(); renderDash();
+  });
 
   const ppl=Object.keys(d.byPerson);
   document.getElementById("peopleCard").innerHTML='<div class="eyebrow">By person</div>'
@@ -2128,7 +2211,7 @@ function save(){
 async function load(){
   const raw=await Store.get(KEY);
   if(!raw) return;
-  try{ const p=JSON.parse(raw); S.txns=p.txns||[]; Object.assign(S.settings,DEFAULTS,p.settings||{}); migrate(); }
+  try{ const p=JSON.parse(raw); S.txns=p.txns||[]; S.settings=Object.assign(freshSettings(),p.settings||{}); migrate(); }
   catch(e){ toast("Saved data unreadable \u2014 starting fresh"); }
 }
 
@@ -2192,8 +2275,14 @@ document.getElementById("csvFile").onchange=e=>{
     try{
       const parts=parseAny(r.result,importAccount,f.name);
       if(!parts.length){ toast("No transactions found in that file"); return; }
+      const lp=LAST_PARSE;
       const res=ingest(parts); save(); renderAll();
-      toast(res.added+" filed"+(res.held?" \u00b7 "+res.held+" need your call":""));
+      /* Say out loud when the file overruled the account label. A silent flip
+         turns a paycheck into spending and every total downstream is wrong. */
+      const note = lp && lp.convSource==="file"
+        ? " \u00b7 read as "+(lp.conv==="debit-negative"?"debits negative":"charges positive")+" from the file, not the account"
+        : "";
+      toast(res.added+" filed"+(res.held?" \u00b7 "+res.held+" need your call":"")+note);
       if(res.held) go("review");
     }catch(err){ toast("Could not read that CSV"); }
   };
@@ -2255,7 +2344,7 @@ document.getElementById("jsonFile").onchange=e=>{
   r.onload=()=>{
     try{
       const p=JSON.parse(r.result); if(!p.txns) throw 0;
-      S.txns=p.txns; Object.assign(S.settings,DEFAULTS,p.settings||{}); migrate();
+      S.txns=p.txns; S.settings=Object.assign(freshSettings(),p.settings||{}); migrate();
       save(); renderAll(); toast("Restored "+p.txns.length+" transactions");
     }catch(err){ toast("That file isn't an Approach backup"); }
   };
@@ -2263,7 +2352,7 @@ document.getElementById("jsonFile").onchange=e=>{
 };
 document.getElementById("doClear").onclick=()=>{
   if(!confirm("Erase everything? Export a backup first if you want to keep it.")) return;
-  S.txns=[]; S.settings={...DEFAULTS}; save(); renderAll(); toast("Erased");
+  S.txns=[]; S.settings=freshSettings(); save(); renderAll(); toast("Erased");
 };
 
 (async()=>{
