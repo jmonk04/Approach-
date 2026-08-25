@@ -135,6 +135,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .vwhy .r{display:flex;align-items:baseline;gap:9px;font-size:12.5px;color:var(--quiet)}
 .vwhy .r .num{color:var(--ink)}
 .vwhy .r button{margin-left:auto}
+.daycount{opacity:.55}
 .fold{margin:0 0 12px}
 .fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;
   padding:12px 14px;background:var(--card);border:1px solid var(--rule);border-radius:12px;
@@ -256,9 +257,9 @@ label{display:block;margin-bottom:10px}
   </header>
 
   <section id="v-dash" class="on">
-    <div class="card verdict" id="verdictCard"></div>
     <div class="card" id="gsCard"></div>
     <div class="card" id="catCard"></div>
+    <div class="card" id="outlookCard"></div>
     <details class="fold" id="foldRest">
       <summary><span class="eyebrow">The rest of the month</span>
         <span class="chev" aria-hidden="true">&#8250;</span></summary>
@@ -527,6 +528,7 @@ const DEFAULTS = {
   targets: {},          // cat -> monthly ceiling
   rules: {},            // normalized merchant -> category (learned)
   ambiguous: [],
+  cash: null,           // {amount, date} you typed, for when imports carry no balance
   resolved: {},         // merchant -> true once taught
   lastBackup: null      // ISO date of the last export or clipboard copy
 };
@@ -910,7 +912,8 @@ function monthData(ym){
   const live = S.txns.filter(t=>!t.pending && monthOf(t)===ym);
   const held = S.txns.filter(t=> t.pending && monthOf(t)===ym);
   const byCat={}, byPerson={};
-  let discretionary=0, fixed=0, refunds=0, transfers=0, extraIncome=0, savings=0;
+  let discretionary=0, fixed=0, refunds=0, refundsDisc=0, refundsFixed=0,
+      transfers=0, extraIncome=0, savings=0;
   for (const t of live){
     if (t.type==="transfer"){ transfers+=Math.abs(t.amount); continue; }
     if (t.type==="income"){ extraIncome+=Math.abs(t.amount); continue; }
@@ -921,13 +924,21 @@ function monthData(ym){
       : t.category;
     byCat[cat]=(byCat[cat]||0)+signed;
     const who=personOf(t); byPerson[who]=(byPerson[who]||0)+signed;
-    if (t.type==="refund") refunds+=Math.abs(t.amount);
+    if (t.type==="refund"){
+      refunds+=Math.abs(t.amount);
+      /* A refund against a Bills or Housing charge was never part of the
+         discretionary total, so netting it off that total understated spend.
+         Keep the two apart: discNet is the one figure everything reads. */
+      if (FIXED_CATS.includes(cat)) refundsFixed+=Math.abs(t.amount);
+      else refundsDisc+=Math.abs(t.amount);
+    }
     else if (FIXED_CATS.includes(cat)) fixed+=t.amount;
     else discretionary+=t.amount;
   }
   const heldAmt = held.filter(t=>t.type!=="transfer")
                       .reduce((a,t)=>a+Math.abs(t.amount),0);
   const net = discretionary + fixed - refunds;
+  const discNet = discretionary - refundsDisc;
   /* Deposits found in the bank export and the take-home figure you typed are
      two views of the same money. Take the larger: a partial month shows only
      part of the pay, while a bonus month shows more than the standing figure. */
@@ -935,7 +946,8 @@ function monthData(ym){
   const income = Math.max(stated, extraIncome);
   const incomeSource = extraIncome>stated ? "bank" : stated>0 ? "stated" : "none";
   return { ym, live, held, heldAmt, byCat, byPerson, incomeSource, deposits: extraIncome,
-           discretionary, fixed, refunds, transfers, savings, net, income,
+           discretionary, discNet, fixed, refunds, refundsDisc, refundsFixed,
+           transfers, savings, net, income,
            saveRate: income>0 ? (income-net)/income : null };
 }
 function monthsWithData(){
@@ -1047,7 +1059,7 @@ function glideslope(ym){
 function verdict(ym){
   const d=monthData(ym), g=glideslope(ym), b=billsThisMonth(ym);
   const target=targetTotal(), pace=paceOf(ym);
-  const spent=d.discretionary-d.refunds;
+  const spent=d.discNet;
   const closed=pace>=1;
 
   if(!target){
@@ -1111,6 +1123,95 @@ function verdict(ym){
 
   return { state, word, figure, label, sub, why:why.slice(0,3),
            spent, target, landing, slack, held, closed };
+}
+
+
+/* ============================================================
+   OUTLOOK — where the cash account lands by the last day of the month.
+   Separate question from the ceilings: you can be inside every ceiling and
+   still run the account down, and the ceilings alone will never tell you.
+   ============================================================ */
+function cashOnHand(){
+  /* Two sources: a balance read off an imported statement, and one you typed.
+     Newest wins, because the typed one exists precisely for when the import
+     path has no balance column (QIF) or you're between imports. */
+  const detected=currentCash();
+  const manual=S.settings.cash && S.settings.cash.amount!=null ? S.settings.cash : null;
+  if(detected && manual) return manual.date>=detected.date
+    ? {...manual, source:"entered"} : {...detected, source:"statement"};
+  if(manual) return {...manual, source:"entered"};
+  if(detected) return {...detected, source:"statement"};
+  return null;
+}
+
+function outlook(ym){
+  const d=monthData(ym), b=billsThisMonth(ym);
+  const dim=daysIn(ym), pace=paceOf(ym), closed=pace>=1;
+  const cash=cashOnHand();
+  if(!cash) return { cash:null, landing:null, notes:[], lines:[] };
+
+  /* Everything before the balance date is already inside that balance. Only what
+     lands after it moves the number. */
+  const asOfDay = cash.date.slice(0,7)===ym
+    ? Math.min(dim, Math.max(1, Number(cash.date.slice(8,10))||1))
+    : (cash.date.slice(0,7)<ym ? 0 : dim);
+  const daysLeft = Math.max(0, dim - asOfDay);
+  const notes=[];
+
+  /* The card payment does not need estimating as a bill — it IS the sum of what
+     is on the card. Charges dated up to the balance date have not left the cash
+     account yet, so they are money already committed. Charges after it are
+     covered by the projection below. Both leave when you pay the card. */
+  const cardOutstanding = d.live.filter(t=>t.account==="amex" && t.type!=="transfer"
+                            && t.date.slice(8,10)<=String(asOfDay).padStart(2,"0"))
+    .reduce((a,t)=>a + (t.type==="refund" ? -Math.abs(t.amount) : t.amount), 0);
+
+  /* Everything discretionary still expected between the balance date and month
+     end, on either account — under this ledger's convention a charge counts
+     against the month it was made, not the month the card gets paid.
+     Derived as "projected month total minus what was already spent by the
+     balance date", so a balance dated before the month still projects the
+     whole month rather than nothing. */
+  const g=glideslope(ym);
+  const dayStr=String(asOfDay).padStart(2,"0");
+  const discBy = d.live.filter(t=>TC().includes(t.category)
+                   && (t.type==="spend"||t.type==="refund")
+                   && t.date.slice(8,10)<=dayStr)
+    .reduce((a,t)=>a + (t.type==="refund" ? -Math.abs(t.amount) : t.amount), 0);
+  const monthTotal = closed ? d.discNet : Math.max(g.landing, d.discNet);
+  const discToCome = Math.max(0, monthTotal - discBy);
+
+  /* Bills whose expected day is still ahead of the balance date. */
+  const pending=(b.pending||[]).filter(r=>r.day>asOfDay);
+  const billsToCome=pending.reduce((a,r)=>a+r.estimate,0);
+
+  /* Pay is only counted when deposits actually show up in the account. With an
+     Amex-only import there are none, and assuming a month of take-home is still
+     to come turns silence into thousands of dollars. */
+  const stated=Number(S.settings.income||0);
+  let incomeToCome=0;
+  if(d.deposits>0 && stated>0){
+    incomeToCome=Math.max(0, stated-d.deposits);
+    if(incomeToCome>0)
+      notes.push("Assumes the rest of your take-home arrives after "+cash.date
+        +". If it already landed, it's in the balance and this double-counts it.");
+  }
+  else if(stated>0 && !closed)
+    notes.push("No deposits found in the cash account this month, so no incoming pay is counted. This is a floor, not a forecast.");
+  if(cardOutstanding>0)
+    notes.push("The card balance is the payment that leaves at the start of next month. Utilities and bills charged to the card are in it too.");
+  if(d.heldAmt>0)
+    notes.push(money(d.heldAmt)+" held for review is not counted.");
+
+  const landing = cash.amount + incomeToCome - billsToCome - discToCome - cardOutstanding;
+
+  return { cash, landing, closed, asOfDay, daysLeft, cardOutstanding, notes,
+           lines:[
+             { label:"Pay still expected",            amt:incomeToCome,     dir:"in"  },
+             { label:"Owed on the card",              amt:cardOutstanding,  dir:"out" },
+             { label:"Bills still to come",           amt:billsToCome,      dir:"out" },
+             { label:"Spending at this rate",         amt:discToCome,       dir:"out" }
+           ].filter(l=>l.amt>=0.5) };
 }
 
 
@@ -1939,7 +2040,9 @@ function renderGlideslope(){
   const headline=rem?g.target-g.run:g.run;
   const leftAtEnd=g.target-g.landing;
 
-  el.innerHTML='<div class="spread"><span class="eyebrow">Glideslope</span>'
+  el.innerHTML='<div class="spread"><span class="eyebrow">Glideslope<span class="daycount">'
+    + ' \u00b7 day '+(paceOf(cursor)>=1?g.dim:Math.max(1,Math.round(paceOf(cursor)*g.dim)))
+    + ' of '+g.dim+'</span></span>'
     + '<div class="miniseg" id="gsMode">'
     +   '<button data-g="spent" aria-pressed="'+(!rem)+'">Spent</button>'
     +   '<button data-g="remaining" aria-pressed="'+rem+'">Left</button></div></div>'
@@ -2018,41 +2121,6 @@ function renderBillsGlance(){
   el.querySelectorAll("[data-goto]").forEach(x=>x.onclick=()=>go(x.dataset.goto));
 }
 
-/* ---------- THE VERDICT ---------- */
-function renderVerdict(){
-  const v=verdict(cursor), pace=paceOf(cursor), dim=daysIn(cursor);
-  const dayNo=pace>=1?dim:Math.max(1,Math.round(pace*dim));
-  const col=v.state==="ok"?"pathc":v.state==="tight"?"holdc":v.state==="over"?"overc":"muted";
-  const el=document.getElementById("verdictCard");
-  el.className="card verdict "+v.state;
-
-  if(v.state==="unset"){
-    el.innerHTML='<div class="spread"><span class="vword muted">'+esc(v.word)+'</span>'
-      + '<span class="eyebrow">Day '+dayNo+' of '+dim+'</span></div>'
-      + '<div class="vsub" style="margin-top:10px">'+esc(v.sub)+'</div>'
-      + '<div class="vwhy"><div class="r"><span>Set your four ceilings</span>'
-      + '<button class="link" data-goto="plan">Plan</button></div></div>';
-    el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
-    return;
-  }
-
-  el.innerHTML='<div class="spread"><span class="vword '+col+'">'+esc(v.word)+'</span>'
-    + '<span class="eyebrow">Day '+dayNo+' of '+dim+'</span></div>'
-    + '<div class="display '+col+'">'+money(v.figure)+'</div>'
-    + '<div class="vsub"><strong style="font-weight:600;color:var(--ink)">'+esc(v.label)+'</strong>'
-    +   ' \u00b7 '+esc(v.sub)+'</div>'
-    /* the total ribbon lives here now: it is the evidence for the word above it */
-    + ribbon(v.spent,v.target,pace,v.held,S.settings.catMode==="remaining"?"remaining":"pace",dim)
-    + (v.why.length
-       ? '<div class="vwhy">'+v.why.map(w=>'<div class="r">'
-           + '<span class="num mid" style="font-size:14px">'+money(w.figure)+'</span>'
-           + '<span>'+esc(w.text)+'</span>'
-           + (w.goto?'<button class="link" data-goto="'+esc(w.goto)+'">Open</button>':'')
-           + '</div>').join("")+'</div>'
-       : '');
-  el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
-}
-
 /* ---------- fold summary: enough to decide whether to open it ---------- */
 function renderFoldSummary(){
   const d=monthData(cursor), b=billsThisMonth(cursor);
@@ -2066,13 +2134,65 @@ function renderFoldSummary(){
     : "The rest of the month";
 }
 
+/* ---------- OUTLOOK ---------- */
+function renderOutlook(){
+  const o=outlook(cursor), el=document.getElementById("outlookCard");
+  const dim=daysIn(cursor);
+
+  const entry='<div class="row" style="gap:8px;margin-top:12px">'
+    + '<label style="flex:1;margin:0"><span class="lt">Cash on hand</span>'
+    +   '<input type="number" id="cashAmt" inputmode="decimal" step="0.01" placeholder="0.00"'
+    +   ' value="'+(S.settings.cash&&S.settings.cash.amount!=null?S.settings.cash.amount:"")+'"></label>'
+    + '<label style="flex:1;margin:0"><span class="lt">As of</span>'
+    +   '<input type="date" id="cashDate" value="'
+    +   ((S.settings.cash&&S.settings.cash.date)||todayISO())+'"></label>'
+    + '</div><button class="btn ghost" id="saveCash">Save balance</button>';
+
+  if(!o.cash){
+    el.innerHTML='<div class="eyebrow">Outlook</div>'
+      + '<h2 style="margin:4px 0 6px">Where the account lands</h2>'
+      + '<p class="hint">Needs a starting balance. Statements with a running-balance column '
+      + 'fill this in on import; OFX carries it in the ledger record. QIF has none, so type it.</p>'
+      + entry;
+  } else {
+    const neg=o.landing<0;
+    el.innerHTML='<div class="spread"><span class="eyebrow">Outlook</span>'
+      + '<span class="eyebrow">'+(o.closed?"month closed":"by "+dim+" "+ymLabel(cursor).split(" ")[0])+'</span></div>'
+      + '<div class="mid num '+(neg?"overc":"pathc")+'" style="font-size:34px;margin:8px 0 2px">'
+      +   money(o.landing)+'</div>'
+      + '<div class="sm muted">projected in the cash account at month end</div>'
+      + '<div class="vwhy" style="margin-top:12px">'
+      +   '<div class="r"><span class="num mid" style="font-size:14px">'+money(o.cash.amount)+'</span>'
+      +     '<span>on hand '+(o.cash.source==="entered"?"as entered":"from your statement")
+      +     ' \u00b7 '+o.cash.date+'</span></div>'
+      +   o.lines.map(l=>'<div class="r">'
+      +     '<span class="num mid '+(l.dir==="in"?"pathc":"")+'" style="font-size:14px">'
+      +     (l.dir==="in"?"+":"\u2212")+money(l.amt).replace("$","$")+'</span>'
+      +     '<span>'+esc(l.label)+'</span></div>').join("")
+      + '</div>'
+      + (o.notes.length
+          ? '<div class="sm muted" style="margin-top:10px;line-height:1.45">'
+            + o.notes.map(n=>'<div style="margin-top:5px">'+esc(n)+'</div>').join("")
+            + '</div>'
+          : '')
+      + entry;
+  }
+  document.getElementById("saveCash").onclick=()=>{
+    const a=Number(document.getElementById("cashAmt").value);
+    const dt=document.getElementById("cashDate").value||todayISO();
+    if(!isFinite(a)){ toast("Enter a balance first"); return; }
+    S.settings.cash={amount:a,date:dt};
+    save(); renderAll(); toast("Balance saved");
+  };
+}
+
 function renderDash(){
   const d=monthData(cursor), pace=paceOf(cursor), tt=targetTotal();
   const dim=daysIn(cursor);
-  const disc=d.discretionary-d.refunds;
+  const disc=d.discNet;
 
-  renderVerdict();
   renderGlideslope();
+  renderOutlook();
   renderIncome();
   renderBillsGlance();
   renderFlow();
@@ -2121,7 +2241,7 @@ function renderDash(){
   const cm=S.settings.catMode==="remaining"?"remaining":"pace";
   const catEl=document.getElementById("catCard");
   catEl.innerHTML='<div class="spread"><span class="eyebrow">'
-    + (TC().length===4?"Your four ceilings":"Your ceilings")+'</span>'
+    + 'Pillars</span>'
     + '<div class="miniseg" id="catMode" role="group" aria-label="Ceiling view">'
     +   '<button data-c="pace" aria-pressed="'+(cm==="pace")+'">Pace</button>'
     +   '<button data-c="remaining" aria-pressed="'+(cm==="remaining")+'">Left</button></div></div>'
