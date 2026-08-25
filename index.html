@@ -107,6 +107,9 @@ header{position:sticky;top:0;z-index:20;background:var(--paper);padding:14px 0 1
 .rulerow .rn .meta{font-size:11px;color:var(--quiet);font-family:var(--mono)}
 .rulerow select{width:auto;max-width:132px;padding:6px 7px;font-size:12px}
 .rulerow .x{border:0;background:none;color:var(--quiet);font-size:18px;padding:2px 4px;cursor:pointer;flex:none}
+.tick{width:20px;height:20px;flex:none;border-radius:10px;border:1.5px solid var(--rule);
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--onaccent)}
+.tick.on{background:var(--path);border-color:var(--path)}
 nav{position:fixed;left:0;right:0;bottom:0;z-index:30;height:calc(var(--rail) + env(safe-area-inset-bottom));
   padding-bottom:env(safe-area-inset-bottom);background:var(--navbg);
   -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--rule);
@@ -311,6 +314,7 @@ label{display:block;margin-bottom:10px}
   </header>
 
   <section id="v-dash" class="on">
+    <div class="card" id="setupCard" hidden></div>
     <div class="card" id="gsCard"></div>
     <div class="card" id="catCard"></div>
     <div class="card" id="outlookCard"></div>
@@ -341,9 +345,17 @@ label{display:block;margin-bottom:10px}
     <div class="card" id="commitCal"></div>
     <div class="card">
       <div class="eyebrow">Add</div>
-      <h2 style="margin:4px 0 4px">A bill we haven't seen</h2>
+      <h2 style="margin:4px 0 4px">Something we can't detect</h2>
       <p class="hint">Counts immediately. If a matching charge shows up later it takes over,
         so nothing is counted twice.</p>
+      <label><span class="lt">Type</span>
+        <select id="bKind">
+          <option value="bill">Bill out</option>
+          <option value="pay">Paycheck in</option>
+          <option value="offset">Reimbursement in</option>
+        </select></label>
+      <p class="hint" id="bKindHint">A recurring debit the app can't see — rent, an
+        autopay it hasn't learned yet.</p>
       <label><span class="lt">Name</span><input type="text" id="bName" placeholder="Cox Communications"></label>
       <div class="row" style="gap:8px;margin-bottom:10px">
         <label style="flex:1;margin:0"><span class="lt">Amount</span>
@@ -520,12 +532,12 @@ label{display:block;margin-bottom:10px}
     <div class="setpane" id="pane-import" hidden>
     <div class="card">
       <div class="eyebrow">Importing into</div>
-      <div class="filters" id="acctPick" style="padding-top:8px">
-        <button class="chip" data-acct="amex" aria-pressed="true">Amex</button>
-        <button class="chip" data-acct="nfcu">Navy Federal</button>
-      </div>
-      <p class="hint">CSV, OFX, QFX or QIF. The format and the sign convention are both
-        read from the file, so card charges and bank debits land correctly either way.</p>
+      <div class="card" id="previewCard" hidden style="margin:0 0 12px;padding:14px"></div>
+      <div class="filters" id="acctPick" style="padding-top:8px"></div>
+      <p class="hint">CSV, OFX, QFX or QIF. The column layout is read from the file, so
+        any bank's export works without special handling. What the file can't always tell
+        us is the sign convention &mdash; Chase writes purchases negative, Amex writes them
+        positive &mdash; so that's set per account below.</p>
       <input type="file" id="csvFile" accept=".csv,.ofx,.qfx,.qif,.txt,text/csv,text/plain">
     </div>
     <div class="card">
@@ -553,6 +565,29 @@ label{display:block;margin-bottom:10px}
       </div>
       <button class="btn" id="doManual">Add transaction</button>
     </div>
+    </div>
+
+      <div class="card">
+        <div class="eyebrow">Accounts</div>
+        <h2 style="margin:4px 0 6px">Where money comes from</h2>
+        <p class="hint">Add any bank or card. <strong>Card</strong> accounts count toward
+          &ldquo;owed on the card&rdquo; in Outlook; <strong>cash</strong> accounts are the
+          ones a balance is read from.</p>
+        <div id="acctList"></div>
+        <hr>
+        <div class="lt">Add an account</div>
+        <div class="row" style="gap:8px;margin-bottom:8px">
+          <input type="text" id="acName" placeholder="Chase Sapphire" style="flex:1">
+          <select id="acKind" style="width:88px">
+            <option value="card">Card</option><option value="cash">Cash</option></select>
+        </div>
+        <label><span class="lt">Purchases in its export appear as</span>
+          <select id="acSign">
+            <option value="charge-positive">Positive &mdash; Amex, most bank debits</option>
+            <option value="debit-negative">Negative &mdash; Chase, Citi, most banks</option>
+          </select></label>
+        <button class="btn" id="addAcct">Add account</button>
+      </div>
     </div>
 
     <div class="setpane" id="pane-people" hidden>
@@ -585,10 +620,12 @@ label{display:block;margin-bottom:10px}
       <input type="file" id="jsonFile" accept=".json,application/json" style="display:none">
       <hr>
       <div class="eyebrow">Seed</div>
-      <p class="hint">Your rules, ceilings and declared bills as one line to paste into
-        <code>index.html</code>. A wiped device rebuilds its own brain on first load and
-        imports arrive already categorized. Carries merchant names &mdash; no transactions,
-        balances or account numbers.</p>
+      <p class="hint">Your merchant rules and account definitions as one line to paste into
+        <code>index.html</code>. Anyone installing from the repo &mdash; or this phone after
+        iOS clears it &mdash; starts with imports already categorized and every account&rsquo;s
+        sign convention correct. <strong>No budget rides along:</strong> ceilings, take-home,
+        declared bills and balances stay personal to each phone. Carries merchant names, so
+        judge that against a public repo.</p>
       <button class="btn ghost" id="doSeed">Copy seed line</button>
       <hr>
       <button class="btn danger" id="doClear">Erase everything</button>
@@ -630,10 +667,24 @@ function TC(){ return BASE_TARGET_CATS.concat(S.settings.customCats||[]); }
 const SYS_CATS    = ["Transfer","Income","Savings"];
 function ALL_CATS(){ return [...TC(), ...FIXED_CATS, ...SYS_CATS]; }
 
-const ACCOUNTS = {
-  amex: { name:"Amex",         sign:"charge-positive" },
-  nfcu: { name:"Navy Federal", sign:"debit-negative"  }
-};
+/* Accounts are user-defined. There is no per-bank parser anywhere in this file
+   and there should never be one: CSV shape is sniffed from the header row. What
+   a bank DOES need declaring is its sign convention, because Chase writes
+   purchases negative and Amex writes them positive, and no amount of column
+   matching can tell you which you're holding. These two are only seeds. */
+const ACCOUNT_SEED = [
+  { id:"amex", name:"Amex",         kind:"card", sign:"charge-positive" },
+  { id:"nfcu", name:"Navy Federal", kind:"cash", sign:"debit-negative"  }
+];
+function accounts(){
+  const a=(S.settings||{}).accounts;
+  return (Array.isArray(a)&&a.length) ? a : ACCOUNT_SEED;
+}
+function acct(id){
+  return accounts().find(a=>a.id===id)
+      || { id, name:id||"Unknown", kind:"card", sign:"charge-positive" };
+}
+function isCard(id){ return acct(id).kind==="card"; }
 
 const DEFAULTS = {
   income: 0,
@@ -651,6 +702,7 @@ const DEFAULTS = {
   profile: { name:"", theme:"system", cycleStart:1, appName:"", mainTab:"",
              initials:"", accent:"ink", blur:false, launch:"dash", defaultPerson:"" },
   catIcons: {},         // pillar -> one glyph
+  accounts: null,       // user-defined; null falls back to ACCOUNT_SEED
   cash: null,           // {amount, date} you typed, for when imports carry no balance
   resolved: {},         // merchant -> true once taught
   lastBackup: null      // ISO date of the last export or clipboard copy
@@ -674,9 +726,13 @@ let S = { txns: [], settings: freshSettings() };
    before you paste it in. */
 const SEED = null;
 
-/* the expensive half of the state: what you taught it, not what you imported */
-const BRAIN_KEYS = ["rules","aliases","targets","bills","customCats",
-                    "ambiguous","notRecurring","people","income","objective"];
+/* What the seed carries: household knowledge, never one person's budget.
+   Two people install from the same repo, so ceilings, income, declared bills
+   and cash balances must NOT ride along — Maja opening the app should not
+   inherit Joe's numbers. Merchant rules and account definitions she should
+   inherit: same stores, same shared card, and getting a sign convention
+   wrong is the one mistake that silently inverts a whole import. */
+const BRAIN_KEYS = ["rules","aliases","ambiguous","notRecurring","catIcons","accounts"];
 function brainOut(){
   const o={}; for(const k of BRAIN_KEYS) if(S.settings[k]!=null) o[k]=S.settings[k];
   return o;
@@ -939,15 +995,20 @@ function monthOf(t){
 
 /* ---------- ingest ---------- */
 function ingest(parts){
+  /* Every import is a batch, so it can be taken back whole. Without this the
+     only way out of a bad file is discarding rows one at a time. */
+  const batch = "b"+uid();
   const fresh=[];
   for(const p of parts){
     const t=makeTxn(p);
+    t.batch=batch;
     markCrossAccount(t);
     fresh.push(t);
   }
   /* a posted charge supersedes its own pending placeholder first, so it is
      never then mistaken for a duplicate of the row it replaced */
-  const superseded = reconcileProvisional(fresh);
+  const displaced=[];
+  const superseded = reconcileProvisional(fresh, displaced);
 
   const known=new Map(S.txns.map(t=>[t.hash,t.id]));
   const seen=new Set();
@@ -966,7 +1027,35 @@ function ingest(parts){
   S.txns = pool;
   S.txns.sort((a,b)=> a.date<b.date?1 : a.date>b.date?-1 : 0);
   const held = fresh.filter(t=>t.pending).length;
-  return { added: fresh.length-held, held, superseded };
+  S.lastBatch = { id:batch, count:fresh.length, held, superseded,
+                  at:new Date().toISOString(), displaced };
+  return { added: fresh.length-held, held, superseded, batch };
+}
+
+/* Undo the last import: drop everything it added, put back anything it
+   superseded. Learned rules are untouched — resolving happens in Review, not
+   on import, so there is nothing taught here to unteach. */
+function undoBatch(){
+  const b=S.lastBatch;
+  if(!b) return 0;
+  const before=S.txns.length;
+  S.txns=S.txns.filter(t=>t.batch!==b.id);
+  const removed=before-S.txns.length;
+  if(b.displaced && b.displaced.length){
+    const have=new Set(S.txns.map(t=>t.id));
+    for(const t of b.displaced) if(!have.has(t.id)) S.txns.push(t);
+  }
+  S.txns.sort((a,b)=> a.date<b.date?1 : a.date>b.date?-1 : 0);
+  S.lastBatch=null;
+  return removed;
+}
+
+/* Re-imported overlapping statements arrive as a wall of duplicates. Clearing
+   them one tap at a time is how a backfill gets abandoned halfway. */
+function discardDuplicates(){
+  const doomed=S.txns.filter(t=>t.pending && (t.reason==="duplicate"||t.reason==="near-duplicate"));
+  S.txns=S.txns.filter(t=>!doomed.includes(t));
+  return doomed.length;
 }
 
 /* teaching: resolving one transaction settles the merchant for good,
@@ -1105,8 +1194,12 @@ function monthData(ym){
      two views of the same money. Take the larger: a partial month shows only
      part of the pay, while a bonus month shows more than the standing figure. */
   const stated = Number(S.settings.income||0);
-  const income = Math.max(stated, extraIncome);
-  const incomeSource = extraIncome>stated ? "bank" : stated>0 ? "stated" : "none";
+  /* Salary is a fixed number you typed. A statement never overrides it — the
+     old max() let an unusually large deposit month silently raise your income
+     and flatter every rate built on it. Deposits are kept only for timing the
+     cash forecast. */
+  const income = stated>0 ? stated : extraIncome;
+  const incomeSource = stated>0 ? "stated" : extraIncome>0 ? "bank" : "none";
   return { ym, live, held, heldAmt, byCat, byPerson, incomeSource, deposits: extraIncome,
            discretionary, discNet, fixed, refunds, refundsDisc, refundsFixed,
            transfers, savings, net, income,
@@ -1167,16 +1260,37 @@ function incomeView(ym){
    ============================================================ */
 function billsThisMonth(ym){
   const d=monthData(ym);
-  const posted=FIXED_CATS.reduce((a,c)=>a+(d.byCat[c]||0),0);
+  const posted=FIXED_CATS.reduce((a,c)=>a+(d.byCat[c]||0),0) - d.refundsFixed;
   const seen=new Set(d.live.filter(t=>FIXED_CATS.includes(t.category)).map(t=>t.merchant));
-  const known=billRows().filter(r=>r.origin==="detected");
+  const rows=billRows();
+
+  /* Outgoing bills: detected plus declared. Declared rows used to be excluded
+     here, so anything typed in Bills reached no forecast at all — and a cash
+     account you cannot import never produces the three occurrences detection
+     needs, so declared is the ONLY source for those. */
+  const known=rows.filter(r=>r.kind==="bill");
   const pending=known.filter(r=>!seen.has(r.name))
     .map(r=>({...r, estimate: r.varies?r.latest:r.amount}))
     .sort((a,b)=>a.day-b.day);
   const toCome=pending.reduce((a,r)=>a+r.estimate,0);
+
+  /* Expected for the whole cycle, against which actuals get measured. */
+  const expected=known.reduce((a,r)=>a+(r.varies?r.latest:r.amount),0);
+
+  /* Reimbursements reduce your share of the bills. They are not income:
+     counting a rent split as earnings would inflate every rate built on it. */
+  const offsets=rows.filter(r=>r.kind==="offset");
+  const offsetTotal=offsets.reduce((a,r)=>a+r.amount,0);
+
+  /* Scheduled paychecks — timing for the cash forecast only. */
+  const pays=rows.filter(r=>r.kind==="pay");
+
   const dim=daysIn(ym);
   const today=paceOf(ym)>=1?dim:dayIndex(todayISO(),ym);
-  return { posted, toCome, total:posted+toCome, pending,
+  return { posted, toCome, total:posted+toCome, pending, expected,
+           offsets, offsetTotal, pays, known,
+           net: posted+toCome-offsetTotal,
+           variance: (posted+toCome)-expected,
            next:pending[0]||null, postedCount:seen.size, today, dim,
            anyKnown: known.length>0 };
 }
@@ -1227,7 +1341,7 @@ function verdict(ym){
   if(!target){
     return { state:"unset", word:"No ceilings set", figure:null, label:"",
              sub:"Approach can't answer anything until it knows your limits.",
-             why:[{ text:"Set your four ceilings in Plan", goto:"plan" }] };
+             why:[{ text:"Set your pillars in Profile", goto:"settings" }] };
   }
 
   /* At today's rate, where does discretionary spending finish? */
@@ -1307,72 +1421,115 @@ function cashOnHand(){
 }
 
 function outlook(ym){
-  const d=monthData(ym), b=billsThisMonth(ym);
-  const dim=daysIn(ym), pace=paceOf(ym), closed=pace>=1;
-  const cash=cashOnHand();
-  if(!cash) return { cash:null, landing:null, notes:[], lines:[] };
-
-  /* Everything before the balance date is already inside that balance. Only what
-     lands after it moves the number. */
-  const asOfDay = cycleOf(cash.date)===ym
-    ? Math.min(dim, Math.max(1, dayIndex(cash.date,ym)))
-    : (cycleOf(cash.date)<ym ? 0 : dim);
-  const daysLeft = Math.max(0, dim - asOfDay);
+  const d=monthData(ym), b=billsThisMonth(ym), g=glideslope(ym);
+  const dim=daysIn(ym), closed=paceOf(ym)>=1;
+  const stated=Number(S.settings.income||0);
+  const objPct=Number(S.settings.objective||0);
   const notes=[];
 
-  /* The card payment does not need estimating as a bill — it IS the sum of what
-     is on the card. Charges dated up to the balance date have not left the cash
-     account yet, so they are money already committed. Charges after it are
-     covered by the projection below. Both leave when you pay the card. */
-  const cardOutstanding = d.live.filter(t=>t.account==="amex" && t.type!=="transfer"
-                            && dayIndex(t.date,ym)<=asOfDay)
-    .reduce((a,t)=>a + (t.type==="refund" ? -Math.abs(t.amount) : t.amount), 0);
+  /* ---- 1. SURPLUS: a full-cycle P&L, not a bank balance. Take-home minus
+     everything that will have gone out by the last day. Discretionary is
+     PROJECTED, not spend-to-date, or the surplus flatters you every day of the
+     cycle until the last one. */
+  const discProj  = closed ? d.discNet : Math.max(g.landing, d.discNet);
+  /* Your share of non-discretionary: what has posted, plus what is still
+     expected, MINUS what Maja reimburses. A rent split is not income. */
+  const fixedGross = (d.fixed - d.refundsFixed) + b.toCome;
+  const fixedProj  = fixedGross - b.offsetTotal;
+  const surplus   = stated>0 ? stated - discProj - fixedProj : null;
+  const rate      = stated>0 ? surplus/stated : null;
+  const target    = stated>0 && objPct>0 ? stated*objPct/100 : null;
+  const vsTarget  = target!=null ? surplus-target : null;
 
-  /* Everything discretionary still expected between the balance date and month
-     end, on either account — under this ledger's convention a charge counts
-     against the month it was made, not the month the card gets paid.
-     Derived as "projected month total minus what was already spent by the
-     balance date", so a balance dated before the month still projects the
-     whole month rather than nothing. */
-  const g=glideslope(ym);
-  const discBy = d.live.filter(t=>TC().includes(t.category)
-                   && (t.type==="spend"||t.type==="refund")
-                   && dayIndex(t.date,ym)<=asOfDay)
-    .reduce((a,t)=>a + (t.type==="refund" ? -Math.abs(t.amount) : t.amount), 0);
-  const monthTotal = closed ? d.discNet : Math.max(g.landing, d.discNet);
-  const discToCome = Math.max(0, monthTotal - discBy);
+  /* ---- 2. CASH ON THE LAST DAY: the literal bank balance, rolled forward from
+     the balance you typed. Everything before that date is already inside it, so
+     only what is still to happen moves the number. Card charges are NOT
+     subtracted — they leave when the card is paid, next cycle. */
+  const cash=cashOnHand();
+  let cashEOM=null, bankEOM=null, cardOwed=0, asOfDay=0, lines=[];
+  if(cash){
+    asOfDay = cycleOf(cash.date)===ym
+      ? Math.min(dim, Math.max(1, dayIndex(cash.date,ym)))
+      : (cycleOf(cash.date)<ym ? 0 : dim);
 
-  /* Bills whose expected day is still ahead of the balance date. */
-  const pending=(b.pending||[]).filter(r=>r.day>asOfDay);
-  const billsToCome=pending.reduce((a,r)=>a+r.estimate,0);
+    /* only the share of discretionary that comes off a cash account */
+    const cashSpend = d.live.filter(t=>TC().includes(t.category) && !isCard(t.account)
+                        && t.type==="spend").reduce((a,t)=>a+t.amount,0);
+    const cashShare = d.discNet>0 ? cashSpend/d.discNet : 0;
+    const cashDiscBy = d.live.filter(t=>TC().includes(t.category) && !isCard(t.account)
+                         && (t.type==="spend"||t.type==="refund")
+                         && dayIndex(t.date,ym)<=asOfDay)
+      .reduce((a,t)=>a + (t.type==="refund" ? -Math.abs(t.amount) : t.amount), 0);
+    const cashDiscToCome = Math.max(0, discProj*cashShare - cashDiscBy);
 
-  /* Pay is only counted when deposits actually show up in the account. With an
-     Amex-only import there are none, and assuming a month of take-home is still
-     to come turns silence into thousands of dollars. */
-  const stated=Number(S.settings.income||0);
-  let incomeToCome=0;
-  if(d.deposits>0 && stated>0){
-    incomeToCome=Math.max(0, stated-d.deposits);
-    if(incomeToCome>0)
-      notes.push("Assumes the rest of your take-home arrives after "+cash.date
-        +". If it already landed, it's in the balance and this double-counts it.");
+    /* bills still ahead, minus any that are charged to a card */
+    const pending=(b.pending||[]).filter(r=>{
+      if(r.day<=asOfDay) return false;
+      const last=S.txns.find(t=>t.merchant===r.name);
+      return !last || !isCard(last.account);
+    });
+    const billsToCome=pending.reduce((a,r)=>a+r.estimate,0);
+
+    /* Incoming money still to land. Scheduled paychecks are user input and
+       beat detection outright — the whole reason they exist is that this cash
+       account cannot be imported. Fall back to detected deposits only when
+       nothing is scheduled. */
+    let incomeToCome=0;
+    const payAhead=(b.pays||[]).filter(r=>r.day>asOfDay).reduce((a,r)=>a+r.amount,0);
+    if((b.pays||[]).length){
+      incomeToCome=payAhead;
+      const sched=(b.pays||[]).reduce((a,r)=>a+r.amount,0);
+      if(stated>0 && Math.abs(sched-stated)>Math.max(50,stated*0.02))
+        notes.push("Scheduled pay totals "+money(sched)+" against the "+money(stated)
+          +" take-home in your profile. One of them is out of date.");
+    } else if(d.deposits>0 && stated>0){
+      incomeToCome=Math.max(0, stated-d.deposits);
+      if(incomeToCome>0)
+        notes.push("Assumes the rest of your take-home arrives after "+cash.date+".");
+    } else if(stated>0 && !closed){
+      notes.push("No paychecks scheduled and no deposits found, so no incoming pay is counted in the cash figure. Add them in Bills.");
+    }
+    const offsetAhead=(b.offsets||[]).filter(r=>r.day>asOfDay).reduce((a,r)=>a+r.amount,0);
+
+    bankEOM = cash.amount + incomeToCome + offsetAhead - billsToCome - cashDiscToCome;
+
+    /* What this cycle will owe the card by its last day. PROJECTED, not
+       posted — this is what makes the figure move with the discretionary rate.
+       With nearly all spending on the card, a literal bank balance cannot
+       respond to the thing you are actually steering. */
+    const cardFixedPosted = d.live.filter(t=>FIXED_CATS.includes(t.category) && isCard(t.account))
+      .reduce((a,t)=>a + (t.type==="refund" ? -Math.abs(t.amount) : t.amount), 0);
+    const cardBillsAhead = (b.pending||[]).filter(r=>{
+      if(r.day<=asOfDay) return false;
+      const last=S.txns.find(t=>t.merchant===r.name);
+      return last && isCard(last.account);
+    }).reduce((a,r)=>a+r.estimate,0);
+    cardOwed = Math.max(0, discProj*(1-cashShare)) + cardFixedPosted + cardBillsAhead;
+
+    cashEOM = bankEOM - cardOwed;
+    lines=[
+      { label:"Pay still expected",        amt:incomeToCome,   dir:"in"  },
+      { label:"Reimbursements due in",     amt:offsetAhead,    dir:"in"  },
+      { label:"Bills still to come",       amt:billsToCome,    dir:"out" },
+      { label:"Account spending to come",  amt:cashDiscToCome, dir:"out" },
+      { label:"Owed on the card by then",  amt:cardOwed,       dir:"out" }
+    ].filter(l=>l.amt>=0.5);
+    if(cardOwed>0)
+      notes.push("The card figure is projected to the last day at your current rate, so this number moves as you spend. It clears when you pay the card next cycle.");
   }
-  else if(stated>0 && !closed)
-    notes.push("No deposits found in the cash account this month, so no incoming pay is counted. This is a floor, not a forecast.");
-  if(cardOutstanding>0)
-    notes.push("The card balance is the payment that leaves at the start of next month. Utilities and bills charged to the card are in it too.");
-  if(d.heldAmt>0)
-    notes.push(money(d.heldAmt)+" held for review is not counted.");
 
-  const landing = cash.amount + incomeToCome - billsToCome - discToCome - cardOutstanding;
+  if(stated<=0) notes.push("No take-home set, so there is no surplus to compute. Add it in Profile.");
+  if(d.heldAmt>0) notes.push(money(d.heldAmt)+" held for review is in neither figure.");
 
-  return { cash, landing, closed, asOfDay, daysLeft, cardOutstanding, notes,
-           lines:[
-             { label:"Pay still expected",            amt:incomeToCome,     dir:"in"  },
-             { label:"Owed on the card",              amt:cardOutstanding,  dir:"out" },
-             { label:"Bills still to come",           amt:billsToCome,      dir:"out" },
-             { label:"Spending at this rate",         amt:discToCome,       dir:"out" }
-           ].filter(l=>l.amt>=0.5) };
+  return { surplus, rate, target, vsTarget, stated, discProj, fixedProj, fixedGross,
+           offsetTotal:b.offsetTotal,
+           cash, cashEOM, bankEOM, cardOwed, asOfDay, lines, notes, closed, objPct,
+           breakdown:[
+             { label:"Take-home",                    amt:stated,    dir:"in"  },
+             { label:closed?"Discretionary":"Discretionary at this rate", amt:discProj, dir:"out" },
+             { label:"Bills, utilities and housing", amt:fixedGross, dir:"out" }
+           ].concat(b.offsetTotal>0
+             ? [{ label:"Reimbursed to you", amt:b.offsetTotal, dir:"in" }] : []) };
 }
 
 
@@ -1703,15 +1860,18 @@ function billRows(){
              day:Number(r.next.slice(8,10)), amount:r.amount, lo, hi, hist, varies,
              cadence:r.cadence, monthly:r.monthly, latest:r.latest,
              missed:r.missed, changed:r.changed, changePct:r.changePct,
-             origin:"detected",
+             origin:"detected", kind:"bill",
              trend: amts.length>=3 ? (amts[amts.length-1]-amts[0])/Math.max(1,amts[0]) : 0 };
   });
-  /* declared bills only appear if nothing real matched them */
+  /* Declared rows. A declared item has a kind: an outgoing bill, a paycheck
+     (timing for the cash forecast, never counted as spending), or a
+     reimbursement that reduces your share of a bill rather than adding income. */
   for(const b of billStatus()){
-    if(b.detected) continue;
+    if(b.detected && (b.kind||"bill")==="bill") continue;
     const per = b.cadence==="annual"?12 : b.cadence==="quarterly"?3
               : b.cadence==="weekly"?(1/4.33) : 1;
     rows.push({ key:b.id, id:b.id, name:b.name, category:b.category, day:Number(b.day)||1,
+                kind:b.kind||"bill",
                 amount:Number(b.amount||0), lo:Number(b.amount||0), hi:Number(b.amount||0),
                 hist:[], varies:false, cadence:b.cadence, monthly:Number(b.amount||0)/per,
                 latest:Number(b.amount||0), missed:!b.seenThisMonth, changed:null,
@@ -1854,7 +2014,7 @@ function parseBlocks(text, account, opts){
 
 /* A pending charge and the posted version of it are the same purchase.
    When the real one arrives, the placeholder steps aside. */
-function reconcileProvisional(fresh){
+function reconcileProvisional(fresh, removed){
   let replaced=0;
   for(const t of fresh){
     if(t.provisional) continue;
@@ -1868,6 +2028,8 @@ function reconcileProvisional(fresh){
               at the same merchant. */
            || (Math.abs(x.amount)<=2 && t.amount>Math.abs(x.amount)) ));
     if(match){
+      /* keep a copy: undoing this import has to put it back */
+      if(removed) removed.push(match);
       S.txns=S.txns.filter(x=>x.id!==match.id);
       replaced++;
     }
@@ -1942,7 +2104,7 @@ function parseStatement(text, account){
      The account label is the default. The file only overrides it on a clear
      supermajority — a bare 60% count flipped every sign in a short or
      paycheck-heavy export, turning a deposit into spending. */
-  const declared = (ACCOUNTS[account]||{}).sign || "charge-positive";
+  const declared = acct(account).sign || "charge-positive";
   let conv = declared, convSource = "account";
   const neg = raw.filter(r=>r.amount<0).length;
   const pos = raw.length - neg;
@@ -1992,7 +2154,7 @@ const KEY="approach:v2";
 
 let cursor = cycleOf(todayISO());
 let ledgerFilter = "all";
-let importAccount = "amex";
+let importAccount = accounts()[0].id;
 
 function money(n){
   const neg=n<0, s=Math.abs(n).toLocaleString(undefined,{maximumFractionDigits:0});
@@ -2100,7 +2262,7 @@ function renderIncome(){
        : '')
     + (v.source && v.stated>0 && Math.abs(v.source.monthly-v.stated)/Math.max(1,v.stated)>0.12
        ? '<div class="sm muted" style="margin-top:9px">Deposits average '+money(v.source.monthly)
-         + '/mo, against the '+money(v.stated)+' you entered. Worth updating in Plan.</div>'
+         + '/mo, against the '+money(v.stated)+' you entered. Worth updating in Profile.</div>'
        : '');
 }
 
@@ -2170,7 +2332,7 @@ function renderGlideslope(){
   const el=document.getElementById("gsCard");
   if(!g.target){
     el.innerHTML='<div class="eyebrow">Glideslope</div>'
-      + '<div class="empty">Set your ceilings in Plan and the slope appears here.</div>';
+      + '<div class="empty">Set your pillars in Profile and the slope appears here.</div>';
     return;
   }
   const rem=(S.settings.gsMode||"spent")==="remaining";
@@ -2298,10 +2460,9 @@ function renderFoldSummary(){
 /* ---------- OUTLOOK ---------- */
 function renderOutlook(){
   const o=outlook(cursor), el=document.getElementById("outlookCard");
-  const dim=daysIn(cursor);
 
   const entry='<div class="row" style="gap:8px;margin-top:12px">'
-    + '<label style="flex:1;margin:0"><span class="lt">Cash on hand</span>'
+    + '<label style="flex:1;margin:0"><span class="lt">Cash on hand today</span>'
     +   '<input type="number" id="cashAmt" inputmode="decimal" step="0.01" placeholder="0.00"'
     +   ' value="'+(S.settings.cash&&S.settings.cash.amount!=null?S.settings.cash.amount:"")+'"></label>'
     + '<label style="flex:1;margin:0"><span class="lt">As of</span>'
@@ -2309,35 +2470,60 @@ function renderOutlook(){
     +   ((S.settings.cash&&S.settings.cash.date)||todayISO())+'"></label>'
     + '</div><button class="btn ghost" id="saveCash">Save balance</button>';
 
-  if(!o.cash){
-    el.innerHTML='<div class="eyebrow">Outlook</div>'
-      + '<h2 style="margin:4px 0 6px">Where the account lands</h2>'
-      + '<p class="hint">Needs a starting balance. Statements with a running-balance column '
-      + 'fill this in on import; OFX carries it in the ledger record. QIF has none, so type it.</p>'
-      + entry;
+  const row=(l,pre)=>'<div class="r">'
+    + '<span class="num mid '+(l.dir==="in"?"pathc":"")+'" style="font-size:14px;min-width:74px">'
+    + (pre?(l.dir==="in"?"+":"\u2212"):"")+money(Math.abs(l.amt))+'</span>'
+    + '<span>'+esc(l.label)+'</span></div>';
+
+  let html='<div class="spread"><span class="eyebrow">Outlook</span>'
+    + '<span class="eyebrow">'+(o.closed?"cycle closed":"by day "+daysIn(cursor))+'</span></div>';
+
+  /* ---- surplus leads: it is the number the objective is set against ---- */
+  if(o.surplus==null){
+    html+='<h2 style="margin:5px 0 4px">Projected surplus</h2>'
+      + '<div class="empty">Add your monthly take-home in Profile and this fills in.</div>';
   } else {
-    const neg=o.landing<0;
-    el.innerHTML='<div class="spread"><span class="eyebrow">Outlook</span>'
-      + '<span class="eyebrow">'+(o.closed?"month closed":"by "+dim+" "+ymLabel(cursor).split(" ")[0])+'</span></div>'
-      + '<div class="mid num '+(neg?"overc":"pathc")+'" style="font-size:34px;margin:8px 0 2px">'
-      +   money(o.landing)+'</div>'
-      + '<div class="sm muted">projected in the cash account at month end</div>'
+    const good=o.surplus>=0;
+    html+='<div class="mid num '+(good?"pathc":"overc")+'" style="font-size:34px;margin:8px 0 2px">'
+      +   money(o.surplus)+'</div>'
+      + '<div class="sm muted">projected surplus \u00b7 '
+      +   (o.rate!=null?Math.round(o.rate*100)+"% of take-home":"")+'</div>'
+      + (o.target!=null
+          ? '<div class="sm '+(o.vsTarget>=0?"pathc":"overc")+'" style="margin-top:4px">'
+            + (o.vsTarget>=0?"Ahead of":"Short of")+' your '+o.objPct+'% objective by '
+            + money(Math.abs(o.vsTarget))+' \u00b7 target '+money(o.target)+'</div>'
+          : '<div class="sm muted" style="margin-top:4px">Set a savings objective in Profile '
+            + 'to measure this against something.</div>')
       + '<div class="vwhy" style="margin-top:12px">'
-      +   '<div class="r"><span class="num mid" style="font-size:14px">'+money(o.cash.amount)+'</span>'
-      +     '<span>on hand '+(o.cash.source==="entered"?"as entered":"from your statement")
-      +     ' \u00b7 '+o.cash.date+'</span></div>'
-      +   o.lines.map(l=>'<div class="r">'
-      +     '<span class="num mid '+(l.dir==="in"?"pathc":"")+'" style="font-size:14px">'
-      +     (l.dir==="in"?"+":"\u2212")+money(l.amt).replace("$","$")+'</span>'
-      +     '<span>'+esc(l.label)+'</span></div>').join("")
-      + '</div>'
-      + (o.notes.length
-          ? '<div class="sm muted" style="margin-top:10px;line-height:1.45">'
-            + o.notes.map(n=>'<div style="margin-top:5px">'+esc(n)+'</div>').join("")
-            + '</div>'
-          : '')
-      + entry;
+      +   o.breakdown.map(l=>row(l,true)).join("")+'</div>';
   }
+
+  /* ---- then the bank balance, which is a different question ---- */
+  html+='<hr>';
+  if(!o.cash){
+    html+='<h2 style="margin:0 0 4px;font-size:16px">Cash at the end of the cycle</h2>'
+      + '<p class="hint">Needs today\u2019s balance. Statements with a running-balance column '
+      + 'fill this in on import, and OFX carries it in the ledger record. QIF has none, so type it.</p>';
+  } else {
+    const neg=o.cashEOM<0;
+    html+='<div class="spread"><span class="eyebrow">Free cash at the end of the cycle</span></div>'
+      + '<div class="mid num '+(neg?"overc":"")+'" style="font-size:26px;margin:6px 0 2px">'
+      +   money(o.cashEOM)+'</div>'
+      + '<div class="sm muted">after this cycle\u2019s card balance clears</div>'
+      + '<div class="vwhy" style="margin-top:10px">'
+      +   row({label:"On hand "+(o.cash.source==="entered"?"as entered":"from your statement")
+                 +" \u00b7 "+o.cash.date, amt:o.cash.amount, dir:"in"}, false)
+      +   o.lines.map(l=>row(l,true)).join("")
+      + '</div>';
+  }
+
+  html+=(o.notes.length
+      ? '<div class="sm muted" style="margin-top:10px;line-height:1.45">'
+        + o.notes.map(n=>'<div style="margin-top:5px">'+esc(n)+'</div>').join("")+'</div>'
+      : '')
+    + entry;
+
+  el.innerHTML=html;
   document.getElementById("saveCash").onclick=()=>{
     const a=Number(document.getElementById("cashAmt").value);
     const dt=document.getElementById("cashDate").value||todayISO();
@@ -2347,11 +2533,80 @@ function renderOutlook(){
   };
 }
 
+/* ---------- FIRST RUN ----------
+   A fresh phone opens on an empty glideslope with no clue what to do. This is
+   a checklist rather than a wizard: nothing is blocked, order is yours, and it
+   disappears for good once the last box is ticked. */
+function setupSteps(){
+  const p=pro();
+  const cash=accounts().filter(a=>a.kind==="cash").length;
+  return [
+    { key:"name",   done:!!(p.name||"").trim(),
+      label:"Tell it your name",
+      why:"Attributes your charges on a shared card",
+      pane:"profile" },
+    { key:"pillars",done:targetTotal()>0,
+      label:"Set your pillars",
+      why:"The ceilings this month stands on",
+      pane:"profile" },
+    { key:"income", done:Number(S.settings.income||0)>0,
+      label:"Add your monthly take-home",
+      why:"Optional \u2014 powers save rate and the cash outlook",
+      pane:"profile", optional:true },
+    { key:"account",done:accounts().some(a=>S.txns.some(t=>t.account===a.id)) || accounts().length>ACCOUNT_SEED.length,
+      label:"Add your card or bank",
+      why:"Tell it which way that bank signs purchases",
+      pane:"import" },
+    { key:"import", done:S.txns.length>0,
+      label:"Import your first statement",
+      why:"CSV, OFX, QFX or QIF \u2014 you see it before it lands",
+      pane:"import" }
+  ];
+}
+
+function renderSetup(){
+  const el=document.getElementById("setupCard");
+  const steps=setupSteps();
+  const required=steps.filter(s=>!s.optional);
+  if(required.every(s=>s.done)){ el.hidden=true; el.innerHTML=""; return; }
+  const doneN=steps.filter(s=>s.done).length;
+
+  el.hidden=false;
+  const standalone = window.navigator.standalone===true
+    || (typeof window.matchMedia==="function"
+        && window.matchMedia("(display-mode: standalone)").matches);
+  el.innerHTML='<div class="spread"><span class="eyebrow">Getting started</span>'
+    + '<span class="eyebrow">'+doneN+' of '+steps.length+'</span></div>'
+    + '<h2 style="margin:5px 0 3px">Set up '+esc(appName())+'</h2>'
+    /* Setting up in Safari and then adding the icon starts you over from
+       nothing, because the two keep separate storage. Say so before she
+       spends twenty minutes on it, not after. */
+    + (standalone ? '' :
+       '<div class="warn" style="margin:8px 0 10px"><strong>Add to Home Screen first.</strong> '
+       + 'Share \u2192 Add to Home Screen. Safari and the Home Screen app keep separate data, '
+       + 'so anything you set up here will not be there when you open the icon.</div>')
+    + '<p class="hint" style="margin-bottom:4px">Nothing here is locked \u2014 do these in any '
+    +   'order. This card goes away once you are set up.</p>'
+    + steps.map(s=>'<div class="rulerow" data-step="'+s.key+'">'
+      + '<span class="tick'+(s.done?" on":"")+'" aria-hidden="true">'+(s.done?"\u2713":"")+'</span>'
+      + '<div class="rn"><strong'+(s.done?' style="opacity:.5"':'')+'>'+esc(s.label)+'</strong>'
+      +   '<span class="meta">'+esc(s.why)+'</span></div>'
+      + (s.done?'':'<button class="link" data-role="go">Open</button>')
+      + '</div>').join("");
+
+  el.querySelectorAll("[data-role=go]").forEach(b=>b.onclick=()=>{
+    const key=b.closest("[data-step]").dataset.step;
+    const step=setupSteps().find(x=>x.key===key);
+    go("settings"); setGo(step.pane);
+  });
+}
+
 function renderDash(){
   const d=monthData(cursor), pace=paceOf(cursor), tt=targetTotal();
   const dim=daysIn(cursor);
   const disc=d.discNet;
 
+  renderSetup();
   renderGlideslope();
   renderOutlook();
   renderIncome();
@@ -2374,7 +2629,7 @@ function renderDash(){
   /* save rate */
   const sc=document.getElementById("saveCard"), obj=Number(S.settings.objective||0)/100;
   if(!d.income){
-    sc.innerHTML='<div class="eyebrow">Save rate</div><div class="empty">Add monthly take-home in Plan.</div>';
+    sc.innerHTML='<div class="eyebrow">Save rate</div><div class="empty">Add monthly take-home in Profile.</div>';
   } else {
     const sr=d.saveRate;
     const proj=pace>0&&pace<1?(d.income-(d.fixed+disc/pace))/d.income:sr;
@@ -2435,16 +2690,27 @@ function renderReview(){
     return;
   }
   const total=held.filter(t=>t.type!=="transfer").reduce((a,t)=>a+Math.abs(t.amount),0);
+  const dupes=held.filter(t=>t.reason==="duplicate"||t.reason==="near-duplicate");
+  const lb=S.lastBatch;
   el.innerHTML='<div class="card tight"><div class="spread">'
     + '<span class="eyebrow">Held out of every total</span>'
-    + '<span class="num mid">'+money(total)+'</span></div></div>'
+    + '<span class="num mid">'+money(total)+'</span></div>'
+    /* Six overlapping statements produce a wall of duplicates. One tap each is
+       how a backfill gets abandoned halfway through. */
+    + (dupes.length>1
+        ? '<button class="btn ghost" id="dropDupes" style="margin-top:10px">Discard '
+          + dupes.length+' duplicates</button>' : '')
+    + (lb && lb.count
+        ? '<button class="btn ghost" id="undoBatchBtn" style="margin-top:8px">Undo last import ('
+          + lb.count+' rows)</button>' : '')
+    + '</div>'
     + held.map(t=>{
       const cats=[...TC(),...FIXED_CATS];
       return '<div class="card review" data-id="'+t.id+'">'
         + '<div class="spread"><span class="eyebrow overc">'+esc(REASON_TEXT[t.reason]||"Needs a decision")+'</span></div>'
         + '<div class="spread" style="margin:6px 0 2px"><strong>'+esc(t.merchant)+'</strong>'
         +   '<span class="num mid">'+money2(t.amount)+'</span></div>'
-        + '<div class="meta">'+t.date+' \u00b7 '+esc(personOf(t))+' \u00b7 '+esc((ACCOUNTS[t.account]||{}).name||t.account)+'</div>'
+        + '<div class="meta">'+t.date+' \u00b7 '+esc(personOf(t))+' \u00b7 '+esc(acct(t.account).name)+'</div>'
         + '<div class="rawd num">'+esc(t.rawDesc)+'</div>'
         + '<div class="catgrid">'+cats.map(c=>
             '<button class="catbtn" data-cat="'+esc(c)+'">'+esc(c)+'</button>').join("")+'</div>'
@@ -2458,6 +2724,17 @@ function renderReview(){
         + '</div>';
     }).join("");
 
+  const dd=document.getElementById("dropDupes");
+  if(dd) dd.onclick=()=>{
+    const n=discardDuplicates();
+    save(); renderAll(); toast(n+" duplicates discarded");
+  };
+  const ub=document.getElementById("undoBatchBtn");
+  if(ub) ub.onclick=()=>{
+    if(!confirm("Remove all "+S.lastBatch.count+" rows from the last import?")) return;
+    const n=undoBatch();
+    save(); renderAll(); toast(n+" rows removed");
+  };
   el.querySelectorAll(".review").forEach(card=>{
     const id=card.dataset.id;
     card.querySelectorAll(".catbtn").forEach(b=>b.onclick=()=>{
@@ -2546,14 +2823,36 @@ function renderCommitted(){
   const steady=rows.filter(r=>!r.varies).reduce((a,r)=>a+r.monthly,0);
   const moves=total-steady;
 
+  /* The point of this tab: how much non-discretionary I have this cycle, and
+     how it compares with what I expected. */
+  const b=billsThisMonth(cursor);
+  const v=b.variance, over=v>0.5, under=v<-0.5;
   document.getElementById("commitTop").innerHTML=
-    '<div class="eyebrow">Bills</div>'
-    + '<p class="hint" style="margin:6px 0 10px">Everything that leaves the cash account on a '
-    + 'schedule \u2014 rent, utilities, insurance, loans. These come out before your four '
-    + 'ceilings, not against them.</p>'
-    + '<div class="big num" style="margin:8px 0 4px">'+money(total)+'</div>'
-    + '<div class="sm muted">'+money(steady)+' fixed'
-    + (moves>0?' \u00b7 <span class="holdc">'+money(moves)+' varies</span>':'')+'</div>';
+    '<div class="spread"><span class="eyebrow">Non-discretionary</span>'
+    +   '<span class="eyebrow">'+esc(cycleLabel(cursor))+'</span></div>'
+    + '<div class="big num" style="margin:8px 0 2px">'+money(b.posted+b.toCome)+'</div>'
+    + '<div class="sm muted">expected '+money(b.expected)
+    +   (Math.abs(v)>=0.5
+        ? ' \u00b7 <span class="'+(over?"overc":"pathc")+'">'+money(Math.abs(v))
+          + (over?" over":" under")+'</span>'
+        : ' \u00b7 on expectation')+'</div>'
+    + '<div class="vwhy" style="margin-top:12px">'
+    +   '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+    +     money(b.posted)+'</span><span>posted so far</span></div>'
+    +   (b.toCome>0.5?'<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+    +     money(b.toCome)+'</span><span>still expected \u00b7 '+b.pending.length+' item'
+    +     (b.pending.length===1?"":"s")+'</span></div>':'')
+    +   (b.offsetTotal>0?'<div class="r"><span class="num mid pathc" style="font-size:14px;min-width:74px">'
+    +     '\u2212'+money(b.offsetTotal)+'</span><span>reimbursed to you</span></div>':'')
+    + '</div>'
+    + (b.offsetTotal>0
+        ? '<div class="spread" style="margin-top:12px;border-top:1px solid var(--rule);padding-top:10px">'
+          + '<span class="lt" style="margin:0">Your share</span>'
+          + '<span class="num mid">'+money(b.net)+'</span></div>'
+        : '')
+    + '<p class="hint" style="margin:10px 0 0">Non-discretionary comes out before your '
+    + 'pillars, never against them. '+money(steady)+' of the schedule is fixed'
+    + (moves>0?', '+money(moves)+' varies':'')+'.</p>';
 
   const list=document.getElementById("billList");
   if(!rows.length){
@@ -2808,9 +3107,108 @@ function renderAliases(){
 /* ============================================================
    DATA
    ============================================================ */
+/* ---------- IMPORT PREVIEW ----------
+   Nothing reaches the ledger until it has been looked at. The sign convention
+   is the thing to check: a flipped file reads as perfectly plausible income,
+   and by the time a total looks wrong the rows are already filed. */
+let staged=null;
+
+function stage(parts, label, lp){
+  staged={parts, label, lp};
+  renderPreview();
+  document.getElementById("previewCard").scrollIntoView({block:"nearest"});
+}
+
+function renderPreview(){
+  const el=document.getElementById("previewCard");
+  if(!staged){ el.hidden=true; el.innerHTML=""; return; }
+  const {parts,label,lp}=staged;
+  const out=parts.filter(p=>p.amount>0).reduce((a,p)=>a+p.amount,0);
+  const inn=parts.filter(p=>p.amount<0).reduce((a,p)=>a+Math.abs(p.amount),0);
+  const dates=parts.map(p=>p.date).sort();
+  const flipped = lp && lp.convSource==="file";
+  const rows=parts.slice().sort((a,b)=>a.date<b.date?1:-1).slice(0,6);
+
+  el.hidden=false;
+  el.innerHTML='<div class="spread"><span class="eyebrow">Before it lands</span>'
+    + '<span class="eyebrow">'+esc(acct(importAccount).name)+'</span></div>'
+    + '<div class="mid" style="margin:8px 0 2px">'+parts.length+' rows \u00b7 '
+    +   esc(dates[0]||"?")+' to '+esc(dates[dates.length-1]||"?")+'</div>'
+    + '<div class="sm muted">'+money(out)+' out \u00b7 '+money(inn)+' in \u00b7 from '+esc(label)+'</div>'
+    + (flipped
+       ? '<div class="warn" style="margin-top:10px"><strong>Signs were read from the file, '
+         + 'not from the account.</strong> It looked '
+         + (lp.conv==="debit-negative"?"debit-negative":"charge-positive")
+         + '. If that is wrong, cancel and fix the account\u2019s convention in Accounts below.</div>'
+       : '')
+    + '<div class="vwhy" style="margin-top:10px">'
+    +   rows.map(r=>'<div class="r"><span class="num mid" style="font-size:13px;min-width:66px">'
+    +     (r.amount<0?"+":"\u2212")+money(Math.abs(r.amount)).replace("$","$")+'</span>'
+    +     '<span>'+esc(r.date)+' \u00b7 '+esc(String(r.rawDesc||"").slice(0,30))+'</span></div>').join("")
+    + (parts.length>6?'<div class="r"><span class="num" style="min-width:66px">\u2026</span><span>'
+        +(parts.length-6)+' more</span></div>':'')
+    + '</div>'
+    + '<div class="sm muted" style="margin-top:8px">Positive is money leaving. '
+    +   'If your purchases show a + here, the convention is backwards.</div>'
+    + '<div class="btn2" style="margin-top:12px">'
+    +   '<button class="btn" id="commitImport">Import '+parts.length+'</button>'
+    +   '<button class="btn ghost" id="cancelImport">Cancel</button></div>';
+
+  document.getElementById("commitImport").onclick=()=>{
+    const res=ingest(staged.parts);
+    staged=null; save(); renderAll();
+    toast(res.added+" filed"
+      +(res.superseded?" \u00b7 "+res.superseded+" pending replaced":"")
+      +(res.held?" \u00b7 "+res.held+" need your call":""));
+    if(res.held) go("review");
+  };
+  document.getElementById("cancelImport").onclick=()=>{
+    staged=null; renderPreview(); toast("Discarded \u2014 nothing was imported");
+  };
+}
+
+function renderAccounts(){
+  const list=accounts();
+  /* the import picker is now data, not markup */
+  const pick=document.getElementById("acctPick");
+  if(!list.some(a=>a.id===importAccount)) importAccount=list[0].id;
+  pick.innerHTML=list.map(a=>'<button class="chip" data-acct="'+esc(a.id)+'"'
+    + (a.id===importAccount?' aria-pressed="true"':'')+'>'+esc(a.name)+'</button>').join("");
+  pick.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    importAccount=b.dataset.acct; renderData();
+  });
+
+  const used=id=>S.txns.filter(t=>t.account===id).length;
+  document.getElementById("acctList").innerHTML=list.map(a=>{
+    const n=used(a.id);
+    return '<div class="rulerow" data-acct="'+esc(a.id)+'">'
+      + '<div class="rn"><strong>'+esc(a.name)+'</strong><span class="meta">'
+      +   a.kind+" \u00b7 purchases "+(a.sign==="debit-negative"?"negative":"positive")
+      +   " \u00b7 "+n+(n===1?" transaction":" transactions")+'</span></div>'
+      + '<select data-role="sign">'
+      +   '<option value="charge-positive"'+(a.sign==="charge-positive"?" selected":"")+'>Positive</option>'
+      +   '<option value="debit-negative"'+(a.sign==="debit-negative"?" selected":"")+'>Negative</option>'
+      + '</select>'
+      + (n===0 && list.length>1
+          ? '<button class="x" data-role="del" aria-label="Remove account">&times;</button>' : '')
+      + '</div>';
+  }).join("");
+
+  document.querySelectorAll("#acctList [data-role=sign]").forEach(sel=>sel.onchange=()=>{
+    const id=sel.closest("[data-acct]").dataset.acct;
+    S.settings.accounts=accounts().map(a=>a.id===id?{...a,sign:sel.value}:a);
+    save(); renderAll();
+    toast("Future imports only \u2014 already-imported rows keep their signs");
+  });
+  document.querySelectorAll("#acctList [data-role=del]").forEach(b=>b.onclick=()=>{
+    const id=b.closest("[data-acct]").dataset.acct;
+    S.settings.accounts=accounts().filter(a=>a.id!==id);
+    save(); renderAll(); toast("Account removed");
+  });
+}
+
 function renderData(){
-  document.querySelectorAll("#acctPick button").forEach(b=>
-    b.setAttribute("aria-pressed", b.dataset.acct===importAccount));
+  renderAccounts();
   const live=S.txns.filter(t=>!t.pending);
 
   /* Backup age is the number that matters here, so it leads. */
@@ -3104,6 +3502,19 @@ document.getElementById("saveNaming").onclick=()=>{
     mainTab: document.getElementById("pMainTab").value.trim() };
   save(); applyNames(); renderAll(); toast("Names saved");
 };
+document.getElementById("addAcct").onclick=()=>{
+  const name=document.getElementById("acName").value.trim();
+  if(!name){ toast("Name the account first"); return; }
+  const base=name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"acct";
+  let id=base, n=2;
+  while(accounts().some(a=>a.id===id)) id=base+"-"+(n++);
+  S.settings.accounts=[...accounts(), { id, name,
+    kind:document.getElementById("acKind").value,
+    sign:document.getElementById("acSign").value }];
+  document.getElementById("acName").value="";
+  importAccount=id;
+  save(); renderAll(); toast(name+" added — selected for import");
+};
 document.getElementById("addAsk").onclick=()=>{
   const v=document.getElementById("newAsk").value.trim();
   if(!v){ toast("Name the merchant first"); return; }
@@ -3150,23 +3561,31 @@ document.getElementById("addBill").onclick=()=>{
   const amount=parseFloat(document.getElementById("bAmt").value);
   const day=parseInt(document.getElementById("bDay").value,10);
   if(!name||!isFinite(amount)){ toast("A name and an amount are needed"); return; }
+  const kind=document.getElementById("bKind").value;
   S.settings.bills=[...(S.settings.bills||[]),{
-    id:uid(), name, amount,
+    id:uid(), name, amount:Math.abs(amount), kind,
     day: isFinite(day)?Math.min(31,Math.max(1,day)):1,
-    category: document.getElementById("bCat").value,
+    category: kind==="bill" ? document.getElementById("bCat").value
+            : kind==="pay" ? "Income" : "Reimbursement",
     cadence: document.getElementById("bCad").value
   }];
   document.getElementById("bName").value=""; document.getElementById("bAmt").value="";
-  save(); renderAll(); toast("Bill added");
+  save(); renderAll();
+  toast(kind==="pay"?"Paycheck scheduled":kind==="offset"?"Reimbursement added":"Bill added");
+};
+document.getElementById("bKind").onchange=()=>{
+  const k=document.getElementById("bKind").value;
+  document.getElementById("bKindHint").textContent =
+    k==="pay" ? "A paycheck. Times the cash forecast — never counted as spending, and it does not change the take-home in your profile."
+  : k==="offset" ? "Money coming back to you, like Maja's half of the rent. Reduces your share of the bills rather than counting as income."
+  : "A recurring debit the app can't see \u2014 rent, an autopay it hasn't learned yet.";
+  document.getElementById("bCat").closest("label").style.display = k==="bill" ? "" : "none";
 };
 document.querySelectorAll("#projMode button").forEach(b=>b.onclick=()=>{
   projMode=b.dataset.m; renderProject();
 });
 ["projDate","projGoal"].forEach(id=>{
   document.getElementById(id).addEventListener("input",renderProject);
-});
-document.querySelectorAll("#acctPick button").forEach(b=>b.onclick=()=>{
-  importAccount=b.dataset.acct; renderData();
 });
 document.getElementById("csvFile").onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
@@ -3175,15 +3594,7 @@ document.getElementById("csvFile").onchange=e=>{
     try{
       const parts=parseAny(r.result,importAccount,f.name);
       if(!parts.length){ toast("No transactions found in that file"); return; }
-      const lp=LAST_PARSE;
-      const res=ingest(parts); save(); renderAll();
-      /* Say out loud when the file overruled the account label. A silent flip
-         turns a paycheck into spending and every total downstream is wrong. */
-      const note = lp && lp.convSource==="file"
-        ? " \u00b7 read as "+(lp.conv==="debit-negative"?"debits negative":"charges positive")+" from the file, not the account"
-        : "";
-      toast(res.added+" filed"+(res.held?" \u00b7 "+res.held+" need your call":"")+note);
-      if(res.held) go("review");
+      stage(parts, f.name, LAST_PARSE);
     }catch(err){ toast("Could not read that CSV"); }
   };
   r.readAsText(f); e.target.value="";
@@ -3214,11 +3625,7 @@ document.getElementById("doPaste").onclick=()=>{
   if(blocks.length>parts.length) parts=blocks;
   if(!parts.length){ toast("Couldn't find a date and an amount to work with"); return; }
   box.value="";
-  const res=ingest(parts); save(); renderAll();
-  toast(res.added+" filed"
-    +(res.superseded?" \u00b7 "+res.superseded+" pending replaced":"")
-    +(res.held?" \u00b7 "+res.held+" need your call":""));
-  if(res.held) go("review");
+  stage(parts, "pasted text", null);
 };
 document.getElementById("doManual").onclick=()=>{
   const date=document.getElementById("mDate").value;
