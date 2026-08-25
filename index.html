@@ -40,15 +40,54 @@ header{position:sticky;top:0;z-index:20;background:var(--paper);padding:14px 0 1
 .monthpick button{border:0;background:none;color:var(--ink);font-size:17px;padding:4px 8px;cursor:pointer;border-radius:6px}
 .monthpick button:disabled{opacity:.25}
 .monthpick .lbl{font-family:var(--mono);font-size:12px;letter-spacing:.06em;min-width:74px;text-align:center}
+.iconbtn{border:0;background:none;color:var(--ink);padding:4px;margin-left:2px;cursor:pointer;
+  display:flex;align-items:center;border-radius:8px;position:relative;flex:none}
+.iconbtn .dotmark{position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:4px;
+  background:var(--over);border:1.5px solid var(--paper)}
+.backrow{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.backrow button{border:0;background:none;color:var(--quiet);font-family:var(--mono);font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase;padding:6px 0;cursor:pointer}
+.subseg{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.subseg button{flex:none;border:1px solid var(--rule);background:#fff;color:var(--quiet);
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  padding:7px 12px;border-radius:20px;cursor:pointer}
+.subseg button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.rulerow{display:flex;align-items:center;gap:9px;padding:11px 0;border-top:1px solid var(--rule)}
+.rulerow:first-of-type{border-top:0}
+.rulerow .rn{flex:1;min-width:0}
+.rulerow .rn strong{display:block;font-size:14px;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.rulerow .rn .meta{font-size:11px;color:var(--quiet);font-family:var(--mono)}
+.rulerow select{width:auto;max-width:132px;padding:6px 7px;font-size:12px}
+.rulerow .x{border:0;background:none;color:var(--quiet);font-size:18px;padding:2px 4px;cursor:pointer;flex:none}
 nav{position:fixed;left:0;right:0;bottom:0;z-index:30;height:calc(var(--rail) + env(safe-area-inset-bottom));
   padding-bottom:env(safe-area-inset-bottom);background:rgba(255,255,255,.94);
-  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--rule);display:flex}
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--rule);
+  display:flex;overflow:visible}
 nav button{flex:1;border:0;background:none;color:var(--quiet);font-family:var(--mono);font-size:8.5px;
   letter-spacing:.06em;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:5px;padding:0;position:relative}
 nav button .dot{width:16px;height:3px;border-radius:2px;background:currentColor;opacity:.35}
 nav button[aria-current="true"]{color:var(--ink)}
 nav button[aria-current="true"] .dot{opacity:1;background:var(--path)}
+
+/* The centre tab is the one you open first and the one you come back to, so it
+   is bigger, raised, and coloured by the verdict — the answer is legible from
+   any screen in the app without opening it. */
+nav button.main{flex:1.18;justify-content:flex-start;padding-top:0;gap:6px}
+nav button.main .pill{width:42px;height:42px;border-radius:22px;margin-top:-15px;
+  background:var(--quiet);border:3px solid #fff;box-shadow:0 3px 10px rgba(22,35,43,.20);
+  display:flex;align-items:center;justify-content:center;position:relative;flex:none;
+  transition:background .3s ease}
+nav button.main .pill::after{content:"";position:absolute;left:11px;right:11px;top:20px;height:2.5px;
+  border-radius:2px;background:#fff;transform:rotate(-18deg);transform-origin:center}
+nav button.main .mlbl{font-size:9px;letter-spacing:.08em}
+nav button.main[aria-current="true"] .pill{box-shadow:0 3px 10px rgba(22,35,43,.28)}
+nav button.main.ok .pill{background:var(--path)}
+nav button.main.tight .pill{background:var(--hold)}
+nav button.main.over .pill{background:var(--over)}
+nav button.main.unknown .pill,nav button.main.unset .pill{background:var(--quiet)}
+@media (prefers-reduced-motion:reduce){nav button.main .pill{transition:none}}
 .badge{position:absolute;top:8px;right:50%;margin-right:-16px;background:var(--over);color:#fff;
   font-size:9px;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;
   justify-content:center;padding:0 4px;letter-spacing:0}
@@ -206,6 +245,14 @@ label{display:block;margin-bottom:10px}
       <span class="lbl num" id="mlbl">&mdash;</span>
       <button id="mnext" aria-label="Next month">&#8250;</button>
     </div>
+    <button class="iconbtn" id="openSettings" aria-label="Settings and data">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor"
+           stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.2"/><circle cx="12" cy="9.6" r="3.1"/>
+        <path d="M5.9 19.4a6.6 6.6 0 0 1 12.2 0"/>
+      </svg>
+      <span class="dotmark" id="setDot" hidden></span>
+    </button>
   </header>
 
   <section id="v-dash" class="on">
@@ -309,16 +356,47 @@ label{display:block;margin-bottom:10px}
       <h2 style="margin:4px 0 2px">Recurring charges</h2>
       <div id="recList"></div>
     </div>
-    <div class="card" id="aliasCard">
-      <div class="eyebrow">Names on the statement</div>
-      <h2 style="margin:4px 0 4px">Who is who</h2>
-      <p class="hint">Statements print full legal names. Every past transaction updates when you map them.</p>
-      <div id="aliasRows"></div>
-      <button class="btn" id="saveAliases">Save names</button>
-    </div>
   </section>
 
-  <section id="v-data">
+  <section id="v-settings">
+    <div class="backrow">
+      <button id="closeSettings">&#8249;&nbsp; Back</button>
+    </div>
+    <div class="subseg" id="setNav">
+      <button data-s="rules" aria-pressed="true">Rules</button>
+      <button data-s="import" aria-pressed="false">Import</button>
+      <button data-s="people" aria-pressed="false">People</button>
+      <button data-s="backup" aria-pressed="false">Backup</button>
+    </div>
+
+    <div class="setpane" id="pane-rules">
+      <div class="card">
+        <div class="eyebrow">Categorization</div>
+        <h2 style="margin:4px 0 6px">Rules</h2>
+        <p class="hint">What the app decides on its own, and what you taught it. Change one
+          and it offers to correct the transactions already filed under it.</p>
+        <div id="rulesLearned"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Built in</div>
+        <h2 style="margin:4px 0 6px">Rules that fired on your data</h2>
+        <p class="hint">Shipped with the app. Override one and it becomes yours.</p>
+        <div id="rulesBuiltin"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Never guess</div>
+        <h2 style="margin:4px 0 6px">Always ask about these</h2>
+        <p class="hint">Merchants that land in a different bucket each time &mdash; Amazon and
+          Target are the usual culprits. Every charge comes to Review instead of being filed.</p>
+        <div id="alwaysAsk" style="margin-bottom:10px"></div>
+        <div class="row" style="gap:8px">
+          <input type="text" id="newAsk" placeholder="Amazon" style="flex:1">
+          <button class="btn" id="addAsk" style="width:auto;padding:11px 16px">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="setpane" id="pane-import" hidden>
     <div class="card">
       <div class="eyebrow">Importing into</div>
       <div class="filters" id="acctPick" style="padding-top:8px">
@@ -354,7 +432,20 @@ label{display:block;margin-bottom:10px}
       </div>
       <button class="btn" id="doManual">Add transaction</button>
     </div>
-    <div class="card">
+    </div>
+
+    <div class="setpane" id="pane-people" hidden>
+    <div class="card" id="aliasCard">
+      <div class="eyebrow">Names on the statement</div>
+      <h2 style="margin:4px 0 4px">Who is who</h2>
+      <p class="hint">Statements print full legal names. Every past transaction updates when you map them.</p>
+      <div id="aliasRows"></div>
+      <button class="btn" id="saveAliases">Save names</button>
+    </div>
+    </div>
+
+    <div class="setpane" id="pane-backup" hidden>
+    <div class="card" id="backupCard">
       <div class="eyebrow">Keeping it</div>
       <h2 style="margin:4px 0 6px">Backup and restore</h2>
       <div id="storageNote" class="hint"></div>
@@ -381,15 +472,18 @@ label{display:block;margin-bottom:10px}
       <hr>
       <button class="btn danger" id="doClear">Erase everything</button>
     </div>
+    </div>
   </section>
 </div>
 <nav>
-  <button data-v="dash" aria-current="true"><span class="dot"></span>Approach</button>
   <button data-v="review"><span class="dot"></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
   <button data-v="ledger"><span class="dot"></span>Ledger</button>
+  <button data-v="dash" class="main" aria-current="true">
+    <span class="pill" id="navPill" aria-hidden="true"></span>
+    <span class="mlbl" id="navMain">Month</span>
+  </button>
   <button data-v="commit"><span class="dot"></span>Bills</button>
   <button data-v="plan"><span class="dot"></span>Plan</button>
-  <button data-v="data"><span class="dot"></span>Data</button>
 </nav>
 <div class="toast" id="toast"></div>
 <script>
@@ -397,6 +491,14 @@ label{display:block;margin-bottom:10px}
    APPROACH v2 — core logic
    ============================================================ */
 "use strict";
+
+/* ---------- names ----------
+   Both live here so renaming is one edit, not a search across the file.
+   APP_NAME is the product. MAIN_TAB is the tab that answers "am I okay this
+   month" — deliberately NOT the same word, because a tab named after the whole
+   app tells you nothing about what's on it. */
+const APP_NAME = "Approach";
+const MAIN_TAB = "Month";
 
 /* ---------- taxonomy ---------- */
 const BASE_TARGET_CATS = ["Groceries/Household","Lifestyle/Personal","Dining/Coffee","Flex/Buffer"];
@@ -511,13 +613,13 @@ const RULES = [
   [/netflix|spotify|hulu|disney|max\.com|apple\.com\/bill|icloud|prime video|youtube ?premium|patreon|substack|audible|adobe|openai|anthropic|chatgpt/i,"","Lifestyle/Personal"],
   [/lululemon|nike|rei|patagonia|athleta|sephora|ulta|barber|salon|spa|nordstrom|zara|h&m|old navy/i,"","Lifestyle/Personal"],
   [/gym|fitness|crossfit|yoga|peloton|24 hour|equinox|orangetheory/i,"","Lifestyle/Personal"],
-  [/shell|chevron|arco|76 |exxon|mobil|circle k|gas station/i,"","Lifestyle/Personal"],
+  [/\bshell\b|chevron|\barco\b|\bunion 76\b|exxon|\bmobil\b|circle k|gas station/i,"","Lifestyle/Personal"],
   [/uber(?! ?eats)|lyft|parking|fastrak|toll/i,"","Lifestyle/Personal"],
   [/airlines|delta air|united air|southwest air|alaska air|marriott|hilton|hyatt|airbnb|expedia/i,"","Lifestyle/Personal"],
   [/petco|petsmart|chewy|veterinar/i,"","Lifestyle/Personal"],
   /* Fixed — normally on the bank side */
-  [/mortgage|rent |property mgmt|hoa |lease|loancare/i,"","Housing"],
-  [/sdge|san diego gas|socal ?gas|edison|water|city of san diego|cox comm|spectrum|at&t|verizon|t.?mobile|xfinity|trash|waste mgmt/i,"","Bills"],
+  [/mortgage|\brent\b|property mgmt|\bhoa\b|lease|loancare/i,"","Housing"],
+  [/sdge|san diego gas|socal ?gas|edison|\bwater (dept|district|utility|authority|bill)|city of san diego|cox comm|spectrum|at&t|verizon|t.?mobile|xfinity|trash|waste mgmt/i,"","Bills"],
   [/usaa|geico|state farm|progressive|allstate|insurance|navy mutual|sgli/i,"","Bills"],
   [/loan|student ln|nelnet|sallie|navient/i,"","Bills"]
 ];
@@ -736,6 +838,59 @@ function migrate(){
   for(const k of Object.keys(CAT_MIGRATION)) delete tg[k];
   return n;
 }
+
+/* ============================================================
+   RULES — what the app decides on its own, made visible and editable.
+   A wrong rule used to be both sticky and invisible: it kept filing
+   every future charge, and nothing on any screen admitted it existed.
+   ============================================================ */
+function ruleRows(){
+  const learned=[], seen=new Map();
+  const display=new Map();
+  for(const t of S.txns) if(!display.has(ruleKey(t.merchant))) display.set(ruleKey(t.merchant),t.merchant);
+
+  for(const [key,cat] of Object.entries(S.settings.rules||{})){
+    learned.push({ key, cat, kind:"learned",
+      name: display.get(key) || titleCase(key),
+      count: S.txns.filter(t=>ruleKey(t.merchant)===key).length });
+  }
+  /* built-in rules, but only the ones that actually fired on real data */
+  for(const t of S.txns){
+    const k=ruleKey(t.merchant);
+    if((S.settings.rules||{})[k]) continue;
+    if(t.type!=="spend") continue;
+    let cat=null;
+    for(const [rx,,c] of RULES){ if(c && rx.test(t.rawDesc)){ cat=c; break; } }
+    if(!cat) continue;
+    const e=seen.get(k)||{ key:k, cat, kind:"builtin", name:t.merchant, count:0 };
+    e.count++; seen.set(k,e);
+  }
+  return { learned: learned.sort((a,b)=>b.count-a.count),
+           builtin: [...seen.values()].sort((a,b)=>b.count-a.count) };
+}
+
+/* Teaching a rule never used to touch what was already filed, so correcting a
+   merchant fixed one row and left its history wrong. Retro is opt-in because it
+   moves totals in months you have already closed out. */
+function applyRule(key, cat, retro){
+  S.settings.rules[key]=cat;
+  let n=0;
+  if(retro){
+    for(const t of S.txns){
+      if(ruleKey(t.merchant)!==key || t.type!=="spend") continue;
+      if(t.category!==cat){ t.category=cat; n++; }
+      if(t.pending && (t.reason==="new-merchant"||t.reason==="ambiguous-merchant")){
+        t.pending=false; t.reason="";
+      }
+    }
+  }
+  return n;
+}
+function countUnder(key){
+  return S.txns.filter(t=>ruleKey(t.merchant)===key && t.type==="spend").length;
+}
+function dropRule(key){ delete (S.settings.rules||{})[key]; }
+
 
 /* ---------- cash on hand, straight from the bank's own running balance ---------- */
 function currentCash(){
@@ -2409,13 +2564,101 @@ function renderData(){
 }
 
 /* ============================================================
-   SHELL
+   SETTINGS
    ============================================================ */
+let setPane="rules";
+
+function catOptions(sel){
+  return [...TC(),...FIXED_CATS].map(c=>
+    '<option'+(c===sel?' selected':'')+'>'+esc(c)+'</option>').join("");
+}
+function ruleRowHTML(r){
+  return '<div class="rulerow" data-key="'+esc(r.key)+'">'
+    + '<div class="rn"><strong>'+esc(r.name)+'</strong>'
+    +   '<span class="meta">'+r.count+(r.count===1?" charge":" charges")
+    +   (r.kind==="builtin"?" \u00b7 built in":"")+'</span></div>'
+    + '<select data-role="cat">'+catOptions(r.cat)+'</select>'
+    + (r.kind==="learned"
+        ? '<button class="x" data-role="drop" aria-label="Forget this rule">&times;</button>'
+        : '')
+    + '</div>';
+}
+function wireRuleRows(el){
+  el.querySelectorAll(".rulerow").forEach(row=>{
+    const key=row.dataset.key;
+    const sel=row.querySelector("[data-role=cat]");
+    sel.onchange=()=>{
+      const cat=sel.value, n=countUnder(key);
+      const retro = n>0 && confirm("Also re-file "+n+" past "
+        +(n===1?"transaction":"transactions")+" from this merchant as "+cat+"?\n\n"
+        +"This changes totals in months already closed.");
+      const changed=applyRule(key,cat,retro);
+      save(); renderAll();
+      toast(retro?changed+" re-filed to "+cat:"Rule set \u2014 future charges only");
+    };
+    const drop=row.querySelector("[data-role=drop]");
+    if(drop) drop.onclick=()=>{
+      dropRule(key); save(); renderAll(); toast("Rule forgotten \u2014 it will ask again");
+    };
+  });
+}
+
+function renderRules(){
+  const {learned,builtin}=ruleRows();
+  const le=document.getElementById("rulesLearned");
+  le.innerHTML = learned.length
+    ? learned.map(ruleRowHTML).join("")
+    : '<div class="empty">Nothing taught yet. Every decision you make in Review lands here.</div>';
+  wireRuleRows(le);
+
+  const be=document.getElementById("rulesBuiltin");
+  be.innerHTML = builtin.length
+    ? builtin.map(ruleRowHTML).join("")
+    : '<div class="empty">Import some transactions and the rules that fired show up here.</div>';
+  wireRuleRows(be);
+
+  const aa=document.getElementById("alwaysAsk");
+  const list=S.settings.ambiguous||[];
+  aa.innerHTML = list.length
+    ? list.map(m=>'<div class="rulerow" data-ask="'+esc(m)+'">'
+        + '<div class="rn"><strong>'+esc(m)+'</strong>'
+        + '<span class="meta">every charge goes to Review</span></div>'
+        + '<button class="x" data-role="unask" aria-label="Stop always asking">&times;</button></div>').join("")
+    : '<div class="empty">Nothing on the always-ask list.</div>';
+  aa.querySelectorAll("[data-role=unask]").forEach(b=>b.onclick=()=>{
+    const m=b.closest("[data-ask]").dataset.ask;
+    S.settings.ambiguous=(S.settings.ambiguous||[]).filter(x=>x!==m);
+    save(); renderAll(); toast("Removed \u2014 "+m+" can be filed automatically again");
+  });
+}
+
+function setGo(p){
+  setPane=p;
+  document.querySelectorAll("#setNav button").forEach(b=>
+    b.setAttribute("aria-pressed", b.dataset.s===p));
+  document.querySelectorAll(".setpane").forEach(el=>
+    el.hidden = el.id!=="pane-"+p);
+  window.scrollTo({top:0,behavior:"instant"});
+}
+
+
 function renderHeader(){
   document.getElementById("mlbl").textContent=ymLabel(cursor);
   document.getElementById("mnext").disabled=cursor>=ymOf(new Date());
+  /* a stale backup is the one thing behind the icon worth a dot on it */
+  const live=S.txns.filter(t=>!t.pending).length;
+  const lb=S.settings.lastBackup;
+  const days=lb?(Date.now()-new Date(lb).getTime())/86400000:Infinity;
+  document.getElementById("setDot").hidden = !(live>0 && days>=7);
+
+  /* the centre tab wears the verdict, so the answer is readable from any screen */
+  const btn=document.querySelector("nav button.main");
+  const v=verdict(cursor);
+  btn.className="main "+v.state;
+  btn.setAttribute("aria-label", MAIN_TAB+" \u2014 "+v.word);
 }
-function renderAll(){ renderHeader(); renderDash(); renderReview(); renderLedger(); renderCommitted(); renderPlan(); renderData(); }
+function renderAll(){ renderHeader(); renderDash(); renderReview(); renderLedger();
+  renderCommitted(); renderPlan(); renderRules(); renderData(); }
 function go(v){
   document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-current",x.dataset.v===v));
   document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));
@@ -2429,6 +2672,18 @@ function save(){
     if(!await Store.set(KEY,JSON.stringify(S))) toast("Could not save \u2014 export a backup");
   },120);
 }
+/* iOS can kill the JS context the moment the app backgrounds, taking a debounced
+   write with it — which reads exactly like the app forgetting your last decisions.
+   Flush on the way out. localStorage writes synchronously, so this lands. */
+function flushSave(){
+  clearTimeout(saveT);
+  try{ Store.set(KEY,JSON.stringify(S)); }catch(e){}
+}
+window.addEventListener("pagehide",flushSave);
+window.addEventListener("beforeunload",flushSave);
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="hidden") flushSave();
+});
 async function load(){
   const raw=await Store.get(KEY);
   if(!raw){
@@ -2442,7 +2697,23 @@ async function load(){
 let wipedFromSeed=false;
 
 /* ---------- wiring ---------- */
-document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>go(b.dataset.v));
+let lastView="dash";
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{ lastView=b.dataset.v; go(b.dataset.v); });
+document.getElementById("openSettings").onclick=()=>{ go("settings"); setGo(setPane); };
+document.getElementById("closeSettings").onclick=()=>go(lastView);
+document.querySelectorAll("#setNav button").forEach(b=>b.onclick=()=>setGo(b.dataset.s));
+document.getElementById("addAsk").onclick=()=>{
+  const v=document.getElementById("newAsk").value.trim();
+  if(!v){ toast("Name the merchant first"); return; }
+  const list=S.settings.ambiguous||[];
+  if(list.some(x=>x.toLowerCase()===v.toLowerCase())){ toast("Already on the list"); return; }
+  S.settings.ambiguous=[...list,v];
+  /* an always-ask merchant can't also have a standing rule */
+  for(const k of Object.keys(S.settings.rules||{}))
+    if(k.includes(v.toLowerCase())||v.toLowerCase().includes(k)) dropRule(k);
+  document.getElementById("newAsk").value="";
+  save(); renderAll(); toast("Every "+v+" charge will come to Review");
+};
 document.getElementById("mprev").onclick=()=>{ cursor=ymShift(cursor,-1); renderAll(); };
 document.getElementById("mnext").onclick=()=>{ cursor=ymShift(cursor,1); renderAll(); };
 
@@ -2618,7 +2889,14 @@ document.getElementById("doClear").onclick=()=>{
 
 (async()=>{
   await load();
+  /* names come from the two constants at the top of the script */
+  document.querySelector("header h1").textContent=APP_NAME;
+  document.title=APP_NAME;
+  document.getElementById("navMain").textContent=MAIN_TAB;
   document.getElementById("mDate").value=todayISO();
+  /* the main tab is always where a launch lands */
+  cursor=ymOf(new Date());
+  go("dash"); lastView="dash";
   renderAll();
   if(wipedFromSeed)
     toast("Storage was empty \u2014 rules and ceilings rebuilt from the seed");
