@@ -1441,89 +1441,41 @@ function outlook(ym){
   const target    = stated>0 && objPct>0 ? stated*objPct/100 : null;
   const vsTarget  = target!=null ? surplus-target : null;
 
-  /* ---- 2. CASH ON THE LAST DAY: the literal bank balance, rolled forward from
-     the balance you typed. Everything before that date is already inside it, so
-     only what is still to happen moves the number. Card charges are NOT
-     subtracted — they leave when the card is paid, next cycle. */
+  /* ---- 2. CASH AT THE LAST DAY: starting balance plus the cycle's surplus.
+     Nothing else. The surplus above already contains every inflow and outflow
+     the cycle has — adding a separate card or bills adjustment here would be
+     counting the same money twice. Because the surplus re-evaluates as the
+     discretionary rate and the bills total move, so does this. */
   const cash=cashOnHand();
-  let cashEOM=null, bankEOM=null, cardOwed=0, asOfDay=0, lines=[];
+  let cashEOM=null, asOfDay=0, lines=[];
   if(cash){
     asOfDay = cycleOf(cash.date)===ym
       ? Math.min(dim, Math.max(1, dayIndex(cash.date,ym)))
       : (cycleOf(cash.date)<ym ? 0 : dim);
-
-    /* only the share of discretionary that comes off a cash account */
-    const cashSpend = d.live.filter(t=>TC().includes(t.category) && !isCard(t.account)
-                        && t.type==="spend").reduce((a,t)=>a+t.amount,0);
-    const cashShare = d.discNet>0 ? cashSpend/d.discNet : 0;
-    const cashDiscBy = d.live.filter(t=>TC().includes(t.category) && !isCard(t.account)
-                         && (t.type==="spend"||t.type==="refund")
-                         && dayIndex(t.date,ym)<=asOfDay)
-      .reduce((a,t)=>a + (t.type==="refund" ? -Math.abs(t.amount) : t.amount), 0);
-    const cashDiscToCome = Math.max(0, discProj*cashShare - cashDiscBy);
-
-    /* bills still ahead, minus any that are charged to a card */
-    const pending=(b.pending||[]).filter(r=>{
-      if(r.day<=asOfDay) return false;
-      const last=S.txns.find(t=>t.merchant===r.name);
-      return !last || !isCard(last.account);
-    });
-    const billsToCome=pending.reduce((a,r)=>a+r.estimate,0);
-
-    /* Incoming money still to land. Scheduled paychecks are user input and
-       beat detection outright — the whole reason they exist is that this cash
-       account cannot be imported. Fall back to detected deposits only when
-       nothing is scheduled. */
-    let incomeToCome=0;
-    const payAhead=(b.pays||[]).filter(r=>r.day>asOfDay).reduce((a,r)=>a+r.amount,0);
-    if((b.pays||[]).length){
-      incomeToCome=payAhead;
-      const sched=(b.pays||[]).reduce((a,r)=>a+r.amount,0);
-      if(stated>0 && Math.abs(sched-stated)>Math.max(50,stated*0.02))
-        notes.push("Scheduled pay totals "+money(sched)+" against the "+money(stated)
-          +" take-home in your profile. One of them is out of date.");
-    } else if(d.deposits>0 && stated>0){
-      incomeToCome=Math.max(0, stated-d.deposits);
-      if(incomeToCome>0)
-        notes.push("Assumes the rest of your take-home arrives after "+cash.date+".");
-    } else if(stated>0 && !closed){
-      notes.push("No paychecks scheduled and no deposits found, so no incoming pay is counted in the cash figure. Add them in Bills.");
+    if(surplus!=null){
+      cashEOM = cash.amount + surplus;
+      lines=[
+        { label:"Starting cash",           amt:cash.amount, dir:"in" },
+        { label:"Surplus over the cycle",  amt:surplus,     dir:surplus>=0?"in":"out" }
+      ];
+      /* The whole cycle's surplus is added to the balance you gave. If that
+         balance is mid-cycle it already contains part of it. */
+      if(asOfDay>1)
+        notes.push("This adds the full cycle surplus to a balance dated day "+asOfDay
+          +". If that balance already reflects spending and pay from this cycle, enter it as of day 1 instead.");
     }
-    const offsetAhead=(b.offsets||[]).filter(r=>r.day>asOfDay).reduce((a,r)=>a+r.amount,0);
-
-    bankEOM = cash.amount + incomeToCome + offsetAhead - billsToCome - cashDiscToCome;
-
-    /* What this cycle will owe the card by its last day. PROJECTED, not
-       posted — this is what makes the figure move with the discretionary rate.
-       With nearly all spending on the card, a literal bank balance cannot
-       respond to the thing you are actually steering. */
-    const cardFixedPosted = d.live.filter(t=>FIXED_CATS.includes(t.category) && isCard(t.account))
-      .reduce((a,t)=>a + (t.type==="refund" ? -Math.abs(t.amount) : t.amount), 0);
-    const cardBillsAhead = (b.pending||[]).filter(r=>{
-      if(r.day<=asOfDay) return false;
-      const last=S.txns.find(t=>t.merchant===r.name);
-      return last && isCard(last.account);
-    }).reduce((a,r)=>a+r.estimate,0);
-    cardOwed = Math.max(0, discProj*(1-cashShare)) + cardFixedPosted + cardBillsAhead;
-
-    cashEOM = bankEOM - cardOwed;
-    lines=[
-      { label:"Pay still expected",        amt:incomeToCome,   dir:"in"  },
-      { label:"Reimbursements due in",     amt:offsetAhead,    dir:"in"  },
-      { label:"Bills still to come",       amt:billsToCome,    dir:"out" },
-      { label:"Account spending to come",  amt:cashDiscToCome, dir:"out" },
-      { label:"Owed on the card by then",  amt:cardOwed,       dir:"out" }
-    ].filter(l=>l.amt>=0.5);
-    if(cardOwed>0)
-      notes.push("The card figure is projected to the last day at your current rate, so this number moves as you spend. It clears when you pay the card next cycle.");
+    const scheduledPay=(b.pays||[]).reduce((a,r)=>a+r.amount,0);
+    if(scheduledPay>0 && stated>0
+       && Math.abs(scheduledPay-stated)>Math.max(50,stated*0.02))
+      notes.push("Scheduled paychecks total "+money(scheduledPay)+" against the "
+        +money(stated)+" take-home in your profile. One of them is out of date.");
   }
-
   if(stated<=0) notes.push("No take-home set, so there is no surplus to compute. Add it in Profile.");
   if(d.heldAmt>0) notes.push(money(d.heldAmt)+" held for review is in neither figure.");
 
   return { surplus, rate, target, vsTarget, stated, discProj, fixedProj, fixedGross,
            offsetTotal:b.offsetTotal,
-           cash, cashEOM, bankEOM, cardOwed, asOfDay, lines, notes, closed, objPct,
+           cash, cashEOM, asOfDay, lines, notes, closed, objPct,
            breakdown:[
              { label:"Take-home",                    amt:stated,    dir:"in"  },
              { label:closed?"Discretionary":"Discretionary at this rate", amt:discProj, dir:"out" },
@@ -2506,14 +2458,15 @@ function renderOutlook(){
       + 'fill this in on import, and OFX carries it in the ledger record. QIF has none, so type it.</p>';
   } else {
     const neg=o.cashEOM<0;
-    html+='<div class="spread"><span class="eyebrow">Free cash at the end of the cycle</span></div>'
+    html+='<div class="spread"><span class="eyebrow">Cash at the end of the cycle</span></div>'
       + '<div class="mid num '+(neg?"overc":"")+'" style="font-size:26px;margin:6px 0 2px">'
       +   money(o.cashEOM)+'</div>'
-      + '<div class="sm muted">after this cycle\u2019s card balance clears</div>'
+      + '<div class="sm muted">starting cash plus this cycle\u2019s surplus</div>'
       + '<div class="vwhy" style="margin-top:10px">'
-      +   row({label:"On hand "+(o.cash.source==="entered"?"as entered":"from your statement")
-                 +" \u00b7 "+o.cash.date, amt:o.cash.amount, dir:"in"}, false)
       +   o.lines.map(l=>row(l,true)).join("")
+      +   '<div class="r"><span class="num" style="font-size:11px;min-width:74px">&nbsp;</span>'
+      +     '<span class="muted">balance '+(o.cash.source==="entered"?"as entered":"from your statement")
+      +     ' \u00b7 '+esc(o.cash.date)+'</span></div>'
       + '</div>';
   }
 
