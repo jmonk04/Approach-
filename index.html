@@ -106,6 +106,7 @@ header{position:sticky;top:0;z-index:20;background:var(--paper);padding:14px 0 1
   overflow:hidden;text-overflow:ellipsis}
 .rulerow .rn .meta{font-size:11px;color:var(--quiet);font-family:var(--mono)}
 .rulerow select{width:auto;max-width:132px;padding:6px 7px;font-size:12px}
+.splitbtn{margin-top:6px;padding:0;font-size:11px}
 .rulerow .x{border:0;background:none;color:var(--quiet);font-size:18px;padding:2px 4px;cursor:pointer;flex:none}
 .tick{width:20px;height:20px;flex:none;border-radius:10px;border:1.5px solid var(--rule);
   display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--onaccent)}
@@ -343,6 +344,20 @@ label{display:block;margin-bottom:10px}
     <div class="card" id="commitTop"></div>
     <div class="card" id="billList"></div>
     <div class="card" id="commitCal"></div>
+    <div class="card">
+      <div class="eyebrow">Cost sharing</div>
+      <h2 style="margin:4px 0 4px">Your split</h2>
+      <p class="hint">The percentage of a shared bill that is yours. Mark individual
+        bills as split in the list above &mdash; rent and the utilities you share, not
+        insurance or loans. Their share is worked out from what each bill actually
+        came to, so a utility that swings takes their share with it.</p>
+      <div class="row" style="gap:8px;align-items:flex-end">
+        <label style="flex:1;margin:0"><span class="lt">You pay %</span>
+          <input type="number" id="splitPct" inputmode="numeric" min="1" max="100" step="1"></label>
+        <button class="btn" id="saveSplit" style="width:auto;padding:11px 16px">Save</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="eyebrow">Add</div>
       <h2 style="margin:4px 0 4px">Something we can't detect</h2>
@@ -702,6 +717,8 @@ const DEFAULTS = {
   profile: { name:"", theme:"system", cycleStart:1, appName:"", mainTab:"",
              initials:"", accent:"ink", blur:false, launch:"dash", defaultPerson:"" },
   catIcons: {},         // pillar -> one glyph
+  splitPct: 60,         // percent of a shared bill that is yours
+  shared: {},           // bill name -> true when that bill is split
   accounts: null,       // user-defined; null falls back to ACCOUNT_SEED
   cash: null,           // {amount, date} you typed, for when imports carry no balance
   resolved: {},         // merchant -> true once taught
@@ -1258,6 +1275,22 @@ function incomeView(ym){
    BILLS THIS MONTH — what has posted, what is still coming.
    Only counts bills we have actually watched post before.
    ============================================================ */
+/* ---------- cost sharing ----------
+   Rent and some utilities are split with a housemate; insurance and loans are
+   not. And the split items are the VARIABLE ones — SDGE and Spectrum move every
+   month, so a single fixed reimbursement figure is wrong by construction. The
+   split is therefore a property of each bill, applied to whatever that bill
+   actually came to. */
+function splitKey(name){ return String(name||"").toLowerCase().trim(); }
+function myPct(){
+  const v=Number((S.settings||{}).splitPct);
+  return isFinite(v)&&v>0&&v<=100 ? v : 100;
+}
+function isShared(name){ return !!((S.settings||{}).shared||{})[splitKey(name)]; }
+function theirShare(amount,name){
+  return isShared(name) ? amount*(1-myPct()/100) : 0;
+}
+
 function billsThisMonth(ym){
   const d=monthData(ym);
   const posted=FIXED_CATS.reduce((a,c)=>a+(d.byCat[c]||0),0) - d.refundsFixed;
@@ -1278,9 +1311,18 @@ function billsThisMonth(ym){
   const expected=known.reduce((a,r)=>a+(r.varies?r.latest:r.amount),0);
 
   /* Reimbursements reduce your share of the bills. They are not income:
-     counting a rent split as earnings would inflate every rate built on it. */
+     counting a rent split as earnings would inflate every rate built on it.
+     Most of it is derived rather than declared — the other party's percentage
+     of whatever each shared bill ACTUALLY came to, so a utility that swings
+     $215 to $302 moves her share with it. */
+  const postedShared = d.live.filter(t=>FIXED_CATS.includes(t.category) && t.type==="spend")
+    .reduce((a,t)=>a+theirShare(t.amount,t.merchant),0);
+  const aheadShared  = pending.reduce((a,r)=>a+theirShare(r.estimate,r.name),0);
+  const derived = postedShared + aheadShared;
   const offsets=rows.filter(r=>r.kind==="offset");
-  const offsetTotal=offsets.reduce((a,r)=>a+r.amount,0);
+  const declaredOffsets=offsets.reduce((a,r)=>a+r.amount,0);
+  const offsetTotal=derived+declaredOffsets;
+  const sharedItems=known.filter(r=>isShared(r.name));
 
   /* Scheduled paychecks — timing for the cash forecast only. */
   const pays=rows.filter(r=>r.kind==="pay");
@@ -1288,7 +1330,7 @@ function billsThisMonth(ym){
   const dim=daysIn(ym);
   const today=paceOf(ym)>=1?dim:dayIndex(todayISO(),ym);
   return { posted, toCome, total:posted+toCome, pending, expected,
-           offsets, offsetTotal, pays, known,
+           offsets, offsetTotal, derived, declaredOffsets, sharedItems, pays, known,
            net: posted+toCome-offsetTotal,
            variance: (posted+toCome)-expected,
            next:pending[0]||null, postedCount:seen.size, today, dim,
@@ -2780,6 +2822,8 @@ function renderCommitted(){
      how it compares with what I expected. */
   const b=billsThisMonth(cursor);
   const v=b.variance, over=v>0.5, under=v<-0.5;
+  const sp=document.getElementById("splitPct");
+  if(sp && document.activeElement!==sp) sp.value=myPct();
   document.getElementById("commitTop").innerHTML=
     '<div class="spread"><span class="eyebrow">Non-discretionary</span>'
     +   '<span class="eyebrow">'+esc(cycleLabel(cursor))+'</span></div>'
@@ -2796,7 +2840,9 @@ function renderCommitted(){
     +     money(b.toCome)+'</span><span>still expected \u00b7 '+b.pending.length+' item'
     +     (b.pending.length===1?"":"s")+'</span></div>':'')
     +   (b.offsetTotal>0?'<div class="r"><span class="num mid pathc" style="font-size:14px;min-width:74px">'
-    +     '\u2212'+money(b.offsetTotal)+'</span><span>reimbursed to you</span></div>':'')
+    +     '\u2212'+money(b.offsetTotal)+'</span><span>reimbursed to you'
+    +     (b.sharedItems.length?' \u00b7 '+b.sharedItems.length+' split '+myPct()+'/'+(100-myPct()):'')
+    +     '</span></div>':'')
     + '</div>'
     + (b.offsetTotal>0
         ? '<div class="spread" style="margin-top:12px;border-top:1px solid var(--rule);padding-top:10px">'
@@ -2821,15 +2867,21 @@ function renderCommitted(){
           : '';
         const flags=(r.missed?'<span class="tag dup">not seen yet</span>':'')
           + (r.origin==="declared"?'<span class="tag">you added</span>':'')
+          + (isShared(r.name)?'<span class="tag ref">split '+myPct()+'/'+(100-myPct())+'</span>':'')
           + (r.changed?'<span class="tag one">'+(r.changed==="up"?"\u2191":"\u2193")
               +Math.abs(r.changePct*100).toFixed(0)+'%</span>':'');
+        const amt=r.varies?r.latest:r.amount;
         return '<div class="bill'+(r.origin==="declared"?' declared" data-bid="'+r.id:'')+'">'
           + '<div class="bday num">'+r.day+'</div>'
           + '<div class="body"><div class="name">'+esc(r.name)+flags+'</div>'
           +   '<div class="meta">'+esc(r.category)
           +   (r.cadence!=="monthly"?' \u00b7 '+r.cadence:'')+'</div>'
-          + (r.varies?sparkbar(r.hist,r.lo,r.hi):'')+'</div>'
-          + '<div class="bamt"><div class="amt">'+money2(r.varies?r.latest:r.amount)+'</div>'
+          + (r.varies?sparkbar(r.hist,r.lo,r.hi):'')
+          + '<button class="link splitbtn" data-split="'+esc(r.name)+'">'
+          +   (isShared(r.name)?"Not split":"Mark split")+'</button></div>'
+          + '<div class="bamt"><div class="amt">'+money2(amt)+'</div>'
+          + (isShared(r.name)
+             ? '<div class="meta pathc">yours '+money(amt*myPct()/100)+'</div>' : '')
           + (range?'<div class="meta">'+range+'</div>':'')
           + (r.varies&&Math.abs(r.trend)>0.12
              ? '<div class="meta '+(r.trend>0?"overc":"pathc")+'">'
@@ -2840,6 +2892,13 @@ function renderCommitted(){
         + 'six-month history. Budget against the high figure, not the average.</p>':'')
       + (rows.some(r=>r.origin==="declared")
         ? '<p class="hint">Tap a bill you added to remove it.</p>':'');
+    list.querySelectorAll("[data-split]").forEach(b=>b.onclick=(e)=>{
+      e.stopPropagation();
+      const k=splitKey(b.dataset.split), sh={...(S.settings.shared||{})};
+      if(sh[k]) delete sh[k]; else sh[k]=true;
+      S.settings.shared=sh; save(); renderAll();
+      toast(sh[k]?b.dataset.split+" split "+myPct()+"/"+(100-myPct()):b.dataset.split+" is all yours");
+    });
     list.querySelectorAll("[data-bid]").forEach(r=>r.onclick=()=>{
       S.settings.bills=(S.settings.bills||[]).filter(b=>b.id!==r.dataset.bid);
       save(); renderAll(); toast("Removed");
@@ -3525,6 +3584,12 @@ document.getElementById("addBill").onclick=()=>{
   document.getElementById("bName").value=""; document.getElementById("bAmt").value="";
   save(); renderAll();
   toast(kind==="pay"?"Paycheck scheduled":kind==="offset"?"Reimbursement added":"Bill added");
+};
+document.getElementById("saveSplit").onclick=()=>{
+  const v=Math.round(Number(document.getElementById("splitPct").value));
+  if(!isFinite(v)||v<1||v>100){ toast("A percentage between 1 and 100"); return; }
+  S.settings.splitPct=v; save(); renderAll();
+  toast("Shared bills split "+v+"/"+(100-v));
 };
 document.getElementById("bKind").onchange=()=>{
   const k=document.getElementById("bKind").value;
