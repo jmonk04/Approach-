@@ -3,15 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F2F4F3">
-<title>Approach</title>
+<meta name="theme-color" content="#F6F6F4">
+<title>Path</title>
 <style>
 :root{
-  --paper:#F2F4F3; --card:#FFFFFF; --ink:#16232B; --quiet:#7A8A8C; --rule:#D8DEDD;
-  --path:#2F6F6B; --hold:#B5842A; --over:#A93A2C; --track:#E4E9E8;
+  --paper:#F6F6F4; --card:#FFFFFF; --ink:#12263A; --quiet:#5F717B; --rule:#DFE2DE;
+  --path:#0B7A70; --hold:#93690F; --over:#A93A2C; --track:#E6E8E4;
+  /* --path-line is the brand teal. It is used for strokes and fills only,
+     never for text: it is 3.6:1 on white and would fail at body size. --path
+     is the same hue darkened to 5.2:1 so the words "on plan" stay legible. */
+  --path-line:#00978A; --mint:#B3E4CD;
   --onink:#FFFFFF;          /* text ON an ink-filled surface */
-  --accent:#16232B; --onaccent:#FFFFFF;   /* colorway: chrome only, never status */
-  --navbg:rgba(255,255,255,.94); --wide:#E9EDEC;
+  --accent:#12263A; --onaccent:#FFFFFF;   /* colorway: chrome only, never status */
+  --navbg:rgba(255,255,255,.94); --wide:#E7E9E4;
   --warnbg:#FBF1EF; --warnrule:#E8CFC9;
   --tag-x-bg:#E6EDF2; --tag-x-fg:#3A5A72; --tag-r-bg:#E7F1EC;
   --tag-d-bg:#F7E9E6; --tag-o-bg:#F5EFE0; --tag-f-bg:#ECEEF0; --tag-f-fg:#5A6B75;
@@ -19,17 +23,22 @@
   --shadow:0 1px 2px rgba(22,35,43,.06),0 4px 14px rgba(22,35,43,.05);
   --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  /* The wordmark only. Futura ships on iOS and macOS, which is the whole
+     install base, and the fallbacks are geometric enough to hold the shape.
+     No webfont: the network this runs on blocks the CDN it would come from. */
+  --display:Futura,"Futura PT","Century Gothic","Avenir Next",var(--sans);
   --rail:64px;
 }
 
 /* Dark is a real palette, not an inversion: the status colours are lifted so
    green/amber/red stay distinguishable against a dark surface. */
 html[data-theme="dark"]{
-  --accent:#E7EDEB; --onaccent:#11171A;
-  --paper:#11171A; --card:#192126; --ink:#E7EDEB; --quiet:#8B9C9E; --rule:#2A363B;
-  --path:#5AAEA2; --hold:#D8A951; --over:#DE7361; --track:#232E34;
-  --onink:#11171A;
-  --navbg:rgba(25,33,38,.94); --wide:#0C1113;
+  --accent:#E4EBEF; --onaccent:#0D151B;
+  --paper:#0D151B; --card:#16202A; --ink:#E9EEEC; --quiet:#93A5AF; --rule:#28343E;
+  --path:#4FC3B0; --hold:#D8A951; --over:#E07C69; --track:#202C36;
+  --path-line:#3FBFAE; --mint:#2A4A45;
+  --onink:#0D151B;
+  --navbg:rgba(22,32,42,.94); --wide:#070C10;
   --warnbg:#2C1F1D; --warnrule:#4A312C;
   --tag-x-bg:#1E2C36; --tag-x-fg:#8FB3CC; --tag-r-bg:#1B2E2A;
   --tag-d-bg:#33221F; --tag-o-bg:#312A1B; --tag-f-bg:#232B30; --tag-f-fg:#93A4AE;
@@ -39,7 +48,7 @@ html[data-theme="dark"]{
 
 /* Colorways touch chrome only — buttons, toggles, the mark. Green, amber and
    red are load-bearing and stay put, or "over" stops meaning over. */
-html[data-accent="navy"]  {--accent:#1D3A5F; --onaccent:#FFFFFF}
+html[data-accent="navy"]  {--accent:#0F202E; --onaccent:#FFFFFF}
 html[data-accent="oxblood"]{--accent:#5E2A2A; --onaccent:#FFFFFF}
 html[data-accent="slate"] {--accent:#3B474E; --onaccent:#FFFFFF}
 html[data-accent="moss"]  {--accent:#3A4A32; --onaccent:#FFFFFF}
@@ -56,8 +65,7 @@ html[data-blur="on"][data-reveal="1"] .num,html[data-blur="on"][data-reveal="1"]
 html[data-blur="on"][data-reveal="1"] .big,html[data-blur="on"][data-reveal="1"] .mid{filter:none}
 .mono-txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.02em;color:var(--onaccent)}
-.mark.has-mono::after{display:none}
-nav button.main .pill.has-mono::after{display:none}
+nav button.main .pill.has-mono svg{display:none}
 nav button.main .pill .mono-txt{font-size:13px;letter-spacing:.01em}
 @media (prefers-reduced-motion:reduce){
   html[data-blur="on"] .num,html[data-blur="on"] .display{transition:none}}
@@ -68,9 +76,13 @@ body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:
 #app{max-width:460px;margin:0 auto;padding:0 16px}
 @media (min-width:520px){body{background:var(--wide)}
   #app{background:var(--paper);min-height:100vh;box-shadow:0 0 40px rgba(22,35,43,.07)}}
-.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--quiet)}
+/* Mono is now reserved for figures — balances, amounts, dates, percentages.
+   Labels and chrome are set in the system sans, which is what stops the app
+   reading as an instrument panel. */
+.eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--quiet)}
 h1,h2{margin:0;font-weight:600}
-h1{font-family:var(--mono);font-size:15px;letter-spacing:.08em;text-transform:uppercase}
+h1{font-family:var(--display);font-size:18px;font-weight:500;letter-spacing:.2em;
+  text-transform:uppercase;padding-left:1px}
 h2{font-size:17px;letter-spacing:-.01em}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .big{font-size:34px;font-weight:600;line-height:1}
@@ -80,9 +92,17 @@ h2{font-size:17px;letter-spacing:-.01em}
 .pathc{color:var(--path)}.holdc{color:var(--hold)}.overc{color:var(--over)}
 header{position:sticky;top:0;z-index:20;background:var(--paper);padding:14px 0 10px;
   border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:10px}
-.mark{width:22px;height:22px;flex:none;border-radius:5px;background:var(--accent);position:relative}
-.mark::after{content:"";position:absolute;left:4px;right:4px;top:12px;height:2px;background:var(--paper);
-  transform:rotate(-18deg);transform-origin:left center}
+/* The mark is SVG geometry, never type: a Futura P is a stem and a bowl, and
+   drawing it as paths means it renders identically everywhere and can never
+   fall back to a substitute face. The road under it is the same gesture as the
+   trajectory chart, so the logo is the app's own output rather than decoration.
+   In the header it runs without its navy field and cropped to its own bounding
+   box — at 22px the field costs about 40% of the mark's height and the road
+   stops being legible. */
+.mark{height:23px;flex:none;display:flex;align-items:center;position:relative;color:var(--accent)}
+.mark svg{height:23px;width:auto;display:block}
+.mark.has-mono{width:23px;border-radius:5px;background:var(--accent)}
+.mark.has-mono svg{display:none}
 .monthpick{margin-left:auto;display:flex;align-items:center;gap:2px}
 .monthpick button{border:0;background:none;color:var(--ink);font-size:17px;padding:4px 8px;cursor:pointer;border-radius:6px}
 .monthpick button:disabled{opacity:.25}
@@ -92,12 +112,12 @@ header{position:sticky;top:0;z-index:20;background:var(--paper);padding:14px 0 1
 .iconbtn .dotmark{position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:4px;
   background:var(--over);border:1.5px solid var(--paper)}
 .backrow{display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.backrow button{border:0;background:none;color:var(--quiet);font-family:var(--mono);font-size:10px;
-  letter-spacing:.14em;text-transform:uppercase;padding:6px 0;cursor:pointer}
+.backrow button{border:0;background:none;color:var(--quiet);font-size:10.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;padding:6px 0;cursor:pointer}
 .subseg{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .subseg button{flex:none;border:1px solid var(--rule);background:var(--card);color:var(--quiet);
-  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
-  padding:7px 12px;border-radius:20px;cursor:pointer}
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  padding:7px 13px;border-radius:20px;cursor:pointer}
 .subseg button[aria-pressed="true"]{background:var(--accent);color:var(--onaccent);border-color:var(--accent)}
 .rulerow{display:flex;align-items:center;gap:9px;padding:11px 0;border-top:1px solid var(--rule)}
 .rulerow:first-of-type{border-top:0}
@@ -115,8 +135,8 @@ nav{position:fixed;left:0;right:0;bottom:0;z-index:30;height:calc(var(--rail) + 
   padding-bottom:env(safe-area-inset-bottom);background:var(--navbg);
   -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--rule);
   display:flex;overflow:visible}
-nav button{flex:1;border:0;background:none;color:var(--quiet);font-family:var(--mono);font-size:8.5px;
-  letter-spacing:.06em;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;
+nav button{flex:1;border:0;background:none;color:var(--quiet);font-size:9.5px;font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:5px;padding:0;position:relative}
 nav button .dot{width:16px;height:3px;border-radius:2px;background:currentColor;opacity:.35}
 nav button[aria-current="true"]{color:var(--ink)}
@@ -130,9 +150,8 @@ nav button.main .pill{width:42px;height:42px;border-radius:22px;margin-top:-15px
   background:var(--quiet);border:3px solid var(--card);box-shadow:0 3px 10px rgba(22,35,43,.20);
   display:flex;align-items:center;justify-content:center;position:relative;flex:none;
   transition:background .3s ease}
-nav button.main .pill::after{content:"";position:absolute;left:11px;right:11px;top:20px;height:2.5px;
-  border-radius:2px;background:var(--onink);transform:rotate(-18deg);transform-origin:center}
-nav button.main .mlbl{font-size:9px;letter-spacing:.08em}
+nav button.main .pill svg{width:100%;height:100%;display:block;color:var(--onink)}
+nav button.main .mlbl{font-size:9.5px;letter-spacing:.06em}
 nav button.main[aria-current="true"] .pill{box-shadow:0 3px 10px rgba(22,35,43,.28)}
 nav button.main.ok .pill{background:var(--path)}
 nav button.main.tight .pill{background:var(--hold)}
@@ -172,12 +191,14 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
    inside the verdict card. Everything else steps down from there. The fold
    holds the supporting cards and strips them of card-weight so they read as
    a list, not as nine competing panels. */
-.verdict{border-top:3px solid var(--rule);padding:16px 16px 15px}
+.band{margin:20px 2px 9px}
+.band .eyebrow{color:var(--quiet)}
+.verdict{border-top:3px solid var(--rule);padding:17px 16px 15px}
 .verdict.ok{border-top-color:var(--path)}
 .verdict.tight{border-top-color:var(--hold)}
 .verdict.over{border-top-color:var(--over)}
 .verdict.unknown{border-top-color:var(--quiet)}
-.vword{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:600}
+.vword{font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:700}
 .display{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:clamp(40px,13vw,54px);
   font-weight:600;line-height:1;letter-spacing:-.035em;margin:9px 0 3px}
 .vsub{font-size:13.5px;color:var(--quiet);line-height:1.35}
@@ -187,6 +208,15 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .vwhy .r .num{color:var(--ink)}
 .vwhy .r button{margin-left:auto}
 .daycount{opacity:.55}
+/* "See the calculation" — the answer is the card; the accounting behind it is
+   available, not imposed. */
+.reveal{margin-top:12px}
+.reveal>summary{list-style:none;cursor:pointer;font-size:12.5px;font-weight:600;
+  color:var(--quiet);padding:2px 0;display:flex;align-items:center;gap:6px}
+.reveal>summary::-webkit-details-marker{display:none}
+.reveal>summary::after{content:"\203A";font-size:15px;transition:transform .18s ease}
+.reveal[open]>summary::after{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.reveal>summary::after{transition:none}}
 .fold{margin:0 0 12px}
 .fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;
   padding:12px 14px;background:var(--card);border:1px solid var(--rule);border-radius:12px;
@@ -291,7 +321,7 @@ label{display:block;margin-bottom:10px}
 <body>
 <div id="app">
   <header>
-    <div class="mark" aria-hidden="true"></div><h1>Approach</h1>
+    <div class="mark" aria-hidden="true"><svg viewBox="8.4 11.6 45.4 40.3" fill="currentColor" aria-hidden="true"><path d="M53.4,29.4L20.6,50.8L8.8,51.5C19,47 40,38 53.4,29.4Z"/><rect x="18.6" y="12" width="4" height="35"/><path d="M20.6,14H29.5A7.5,7.5 0 0 1 29.5,29H20.6" fill="none" stroke="currentColor" stroke-width="4"/></svg></div><h1>Path</h1>
     <div class="monthpick">
       <button id="mprev" aria-label="Previous month">&#8249;</button>
       <span class="lbl num" id="mlbl">&mdash;</span>
@@ -316,9 +346,19 @@ label{display:block;margin-bottom:10px}
 
   <section id="v-dash" class="on">
     <div class="card" id="setupCard" hidden></div>
-    <div class="card" id="gsCard"></div>
+
+    <div class="card verdict" id="verdictCard"></div>
+
+    <div class="band"><span class="eyebrow">Where you are</span></div>
     <div class="card" id="catCard"></div>
+
+    <div class="band"><span class="eyebrow">Where you’re headed</span></div>
+    <div class="card" id="trajCard"></div>
     <div class="card" id="outlookCard"></div>
+
+    <div class="band"><span class="eyebrow">Where you want to be</span></div>
+    <div class="card" id="saveCard"></div>
+
     <details class="fold" id="foldRest">
       <summary><span class="eyebrow">The rest of the month</span>
         <span class="chev" aria-hidden="true">&#8250;</span></summary>
@@ -327,7 +367,6 @@ label{display:block;margin-bottom:10px}
         <div class="card" id="billsCard"></div>
         <div class="card" id="flowCard"></div>
         <div class="card" id="splitCard"></div>
-        <div class="card" id="saveCard"></div>
         <div class="card" id="peopleCard"></div>
       </div>
     </details>
@@ -485,7 +524,7 @@ label{display:block;margin-bottom:10px}
         <p class="hint">On a shared card, rows with no card member are attributed here.</p>
         <label style="margin-top:12px"><span class="lt">Month starts on day</span>
           <input type="number" id="pCycle" inputmode="numeric" min="1" max="28" step="1"></label>
-        <p class="hint" id="cycleHint">Set this to your statement close date and the glideslope
+        <p class="hint" id="cycleHint">Set this to your statement close date and the trajectory
           lines up with the bill you actually pay. 1 means the calendar month.</p>
         <button class="btn" id="saveBehaviour">Save</button>
       </div>
@@ -494,19 +533,19 @@ label{display:block;margin-bottom:10px}
         <div class="eyebrow">Naming</div>
         <h2 style="margin:4px 0 10px">What things are called</h2>
         <label><span class="lt">App name</span>
-          <input type="text" id="pAppName" maxlength="18" placeholder="Approach"></label>
+          <input type="text" id="pAppName" maxlength="18" placeholder="Path"></label>
         <label style="margin-top:12px"><span class="lt">Main tab</span>
           <input type="text" id="pMainTab" maxlength="12" placeholder="Month"></label>
         <button class="btn" id="saveNaming">Save names</button>
       </div>
 
       <div class="card">
-        <div class="eyebrow">Your pillars</div>
+        <div class="eyebrow">Your spending limits</div>
         <h2 style="margin:4px 0 6px">Monthly ceilings</h2>
         <p class="hint">The categories this month stands on, and what each is allowed to
           be. Yours need not match anyone else's.</p>
         <div id="targetInputs"></div>
-        <button class="btn" id="saveTargets">Save pillars</button>
+        <button class="btn" id="saveTargets">Save limits</button>
         <hr>
         <div class="eyebrow">Your own categories</div>
         <div id="customList" style="margin:8px 0 12px"></div>
@@ -652,7 +691,7 @@ label{display:block;margin-bottom:10px}
   <button data-v="review"><span class="dot"></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
   <button data-v="ledger"><span class="dot"></span>Ledger</button>
   <button data-v="dash" class="main" aria-current="true">
-    <span class="pill" id="navPill" aria-hidden="true"></span>
+    <span class="pill" id="navPill" aria-hidden="true"><svg viewBox="0 0 64 64" fill="currentColor" aria-hidden="true"><g transform="translate(32 32) scale(.84) translate(-32 -32)"><path d="M50,32L22.5,48.6L11,50.6C20.5,46.6 38,39.5 50,32Z"/><rect x="18.6" y="12" width="4" height="35"/><path d="M20.6,14H29.5A7.5,7.5 0 0 1 29.5,29H20.6" fill="none" stroke="currentColor" stroke-width="4.4"/></g></svg></span>
     <span class="mlbl" id="navMain">Month</span>
   </button>
   <button data-v="commit"><span class="dot"></span>Bills</button>
@@ -661,7 +700,7 @@ label{display:block;margin-bottom:10px}
 <div class="toast" id="toast"></div>
 <script>
 /* ============================================================
-   APPROACH v2 — core logic
+   PATH — core logic
    ============================================================ */
 "use strict";
 
@@ -670,7 +709,7 @@ label{display:block;margin-bottom:10px}
    APP_NAME is the product. MAIN_TAB is the tab that answers "am I okay this
    month" — deliberately NOT the same word, because a tab named after the whole
    app tells you nothing about what's on it. */
-const APP_NAME = "Approach";
+const APP_NAME = "Path";
 const MAIN_TAB = "Month";
 
 /* ---------- taxonomy ---------- */
@@ -763,7 +802,7 @@ function brainIn(o){
 /* ---------- date helpers ----------
    A "month" here is a cycle, not necessarily a calendar month. With a cycle
    start of 1 it IS the calendar month and everything below reduces to the
-   obvious. Set it to your Amex close date and the whole app — glideslope,
+   obvious. Set it to your Amex close date and the whole app — trajectory,
    pillars, outlook, bills — lines up with the statement you actually pay.
    A cycle is labelled by the month its FIRST day falls in. */
 function cycleStart(){
@@ -1338,10 +1377,10 @@ function billsThisMonth(ym){
 }
 
 /* ============================================================
-   GLIDESLOPE — cumulative discretionary spend against a linear
+   TRAJECTORY — cumulative discretionary spend against a linear
    burn from zero to the sum of the four ceilings
    ============================================================ */
-function glideslope(ym){
+function trajectory(ym){
   const dim=daysIn(ym), d=monthData(ym), target=targetTotal();
   const cur=cycleOf(todayISO());
   const today = ym<cur ? dim : ym>cur ? 0 : dayIndex(todayISO(),ym);
@@ -1362,7 +1401,7 @@ function glideslope(ym){
   const rate = today>0 ? run/today : 0;
   const requiredNow = target*(today/dim);
   return { ym, dim, today, target, pts, run, rate,
-           landing: rate*dim,
+           headed: rate*dim,
            requiredNow,
            gs: requiredNow>0 ? run/requiredNow : null,
            delta: run-requiredNow,
@@ -1375,20 +1414,20 @@ function glideslope(ym){
    are both lies when enough money is still sitting in the review queue.
    ============================================================ */
 function verdict(ym){
-  const d=monthData(ym), g=glideslope(ym), b=billsThisMonth(ym);
+  const d=monthData(ym), g=trajectory(ym), b=billsThisMonth(ym);
   const target=targetTotal(), pace=paceOf(ym);
   const spent=d.discNet;
   const closed=pace>=1;
 
   if(!target){
     return { state:"unset", word:"No ceilings set", figure:null, label:"",
-             sub:"Approach can't answer anything until it knows your limits.",
-             why:[{ text:"Set your pillars in Profile", goto:"settings" }] };
+             sub:"Path can't answer anything until it knows your limits.",
+             why:[{ text:"Set your spending limits in Profile", goto:"settings" }] };
   }
 
   /* At today's rate, where does discretionary spending finish? */
-  const landing = closed ? spent : g.landing;
-  const slack   = target - landing;
+  const headed = closed ? spent : g.headed;
+  const slack   = target - headed;
   const held    = d.heldAmt;
 
   /* Held money is the thing that can flip the answer. If there is more of it
@@ -1401,7 +1440,7 @@ function verdict(ym){
 
   /* Second test, different failure: the ceilings can be fine while the month
      still doesn't close on the money coming in. */
-  const cashOut  = d.fixed + b.toCome + landing;
+  const cashOut  = d.fixed + b.toCome + headed;
   const cashLeft = d.income>0 ? d.income - cashOut : null;
   if (cashLeft!=null && cashLeft<0 && state==="ok") state="tight";
 
@@ -1418,29 +1457,29 @@ function verdict(ym){
   if (d.refunds>0 && why.length<3)
     why.push({ text:"in refunds applied to this month", figure:d.refunds });
 
-  const word = state==="ok"      ? (closed?"Finished under":"Yes")
+  const word = state==="ok"      ? (closed?"Finished under":"On plan")
              : state==="tight"   ? (closed?"Finished close":"Tight")
-             : state==="over"    ? (closed?"Finished over":"No")
-             :                     "Can't say yet";
+             : state==="over"    ? (closed?"Finished over":"Over plan")
+             :                     "Can\u2019t say yet";
   const figure = state==="unknown" ? held : Math.abs(slack);
   const label  = state==="unknown"
       ? "held for review \u2014 enough to change the answer"
     : state==="over"
-      ? (closed?"over your ceilings":"over your ceilings at this rate")
-      : (closed?"under your ceilings":"spare at this rate");
+      ? (closed?"over your limits":"over your limits at this rate")
+      : (closed?"under your limits":"spare at this rate");
 
   const sub = state==="unknown"
       ? "Clear the queue and the month resolves one way or the other."
     : state==="over"
-      ? "Spending has to slow for the rest of the month to land inside plan."
+      ? "Spending has to slow for the rest of the month to finish inside plan."
     : state==="tight"
       ? (cashLeft!=null && cashLeft<0
-          ? "Inside the ceilings, but the month doesn't close on income."
-          : "Inside the ceilings, with very little room to spare.")
-      : "On plan across all ceilings.";
+          ? "Inside your limits, but the month doesn't close on income."
+          : "Inside your limits, with very little room to spare.")
+      : "On plan across every limit.";
 
   return { state, word, figure, label, sub, why:why.slice(0,3),
-           spent, target, landing, slack, held, closed };
+           spent, target, headed, slack, held, closed };
 }
 
 
@@ -1463,7 +1502,7 @@ function cashOnHand(){
 }
 
 function outlook(ym){
-  const d=monthData(ym), b=billsThisMonth(ym), g=glideslope(ym);
+  const d=monthData(ym), b=billsThisMonth(ym), g=trajectory(ym);
   const dim=daysIn(ym), closed=paceOf(ym)>=1;
   const stated=Number(S.settings.income||0);
   const objPct=Number(S.settings.objective||0);
@@ -1473,7 +1512,7 @@ function outlook(ym){
      everything that will have gone out by the last day. Discretionary is
      PROJECTED, not spend-to-date, or the surplus flatters you every day of the
      cycle until the last one. */
-  const discProj  = closed ? d.discNet : Math.max(g.landing, d.discNet);
+  const discProj  = closed ? d.discNet : Math.max(g.headed, d.discNet);
   /* Your share of non-discretionary: what has posted, plus what is still
      expected, MINUS what Maja reimburses. A rent split is not income. */
   const fixedGross = (d.fixed - d.refundsFixed) + b.toCome;
@@ -2144,6 +2183,9 @@ const Store = (() => {
     }
   };
 })();
+/* NOT renamed with the app. This string is where every existing install's
+   data already lives; changing it would open the app empty on every device
+   that has ever used it and look exactly like the iOS eviction bug. */
 const KEY="approach:v2";
 
 let cursor = cycleOf(todayISO());
@@ -2174,7 +2216,7 @@ function ribbon(spent,target,pace,unresolved,mode,dim){
   unresolved = unresolved||0;
   if(!target){
     return '<div class="ribbon"><div class="track"></div><div class="legend">'
-      + '<span class="muted">No ceiling set</span><span class="num">'+money(spent)+'</span></div></div>';
+      + '<span class="muted">No limit set</span><span class="num">'+money(spent)+'</span></div></div>';
   }
   const st=statusOf(spent,target,pace);
   const cls=st==="over"?"over":st==="hold"?"hold":"";
@@ -2223,7 +2265,7 @@ function ribbon(spent,target,pace,unresolved,mode,dim){
 }
 
 /* ============================================================
-   APPROACH
+   PATH
    ============================================================ */
 
 
@@ -2320,13 +2362,13 @@ function renderFlow(){
   });
 }
 
-/* ---------- GLIDESLOPE ---------- */
-function renderGlideslope(){
-  const g=glideslope(cursor);
-  const el=document.getElementById("gsCard");
+/* ---------- TRAJECTORY ---------- */
+function renderTrajectory(){
+  const g=trajectory(cursor);
+  const el=document.getElementById("trajCard");
   if(!g.target){
-    el.innerHTML='<div class="eyebrow">Glideslope</div>'
-      + '<div class="empty">Set your pillars in Profile and the slope appears here.</div>';
+    el.innerHTML='<div class="eyebrow">Trajectory</div>'
+      + '<div class="empty">Set your spending limits in Profile and the trajectory appears here.</div>';
     return;
   }
   const rem=(S.settings.gsMode||"spent")==="remaining";
@@ -2336,9 +2378,9 @@ function renderGlideslope(){
   const col=hot?"var(--over)":"var(--path)";
   const X=d=>PL+(d/g.dim)*iw;
   const val=v=>rem?g.target-v:v;
-  const endVal=val(g.landing);
+  const endVal=val(g.headed);
   const lo=Math.min(0,endVal,val(g.run));
-  const hi=Math.max(g.target,val(0),val(g.run),val(g.landing))*1.06;
+  const hi=Math.max(g.target,val(0),val(g.run),val(g.headed))*1.06;
   const Y=v=>PT+ih-((v-lo)/Math.max(1,(hi-lo)))*ih;
 
   const actual=g.pts.length
@@ -2355,9 +2397,9 @@ function renderGlideslope(){
     : "";
   const gsPct=g.gs==null?null:Math.round(g.gs*100);
   const headline=rem?g.target-g.run:g.run;
-  const leftAtEnd=g.target-g.landing;
+  const leftAtEnd=g.target-g.headed;
 
-  el.innerHTML='<div class="spread"><span class="eyebrow">Glideslope<span class="daycount">'
+  el.innerHTML='<div class="spread"><span class="eyebrow">Trajectory<span class="daycount">'
     + ' \u00b7 day '+(paceOf(cursor)>=1?g.dim:Math.max(1,Math.round(paceOf(cursor)*g.dim)))
     + ' of '+g.dim+'</span></span>'
     + '<div class="miniseg" id="gsMode">'
@@ -2366,7 +2408,7 @@ function renderGlideslope(){
     + '<div class="row" style="align-items:baseline;gap:10px;margin:9px 0 2px">'
     +   '<span class="mid num '+(rem?(headline<0?"overc":"pathc"):"")+'" style="font-size:26px">'+money(headline)+'</span>'
     +   '<span class="sm '+(hot?"overc":"pathc")+' num">'+(hot?"+":"\u2212")+money(Math.abs(g.delta))+'</span>'
-    +   '<span class="sm muted">vs plan today</span></div>'
+    +   '<span class="sm muted">'+(hot?"ahead of plan":"behind plan")+'</span></div>'
     + (gsPct!=null?'<div class="sm muted">'+gsPct+'% of planned pace</div>':'')
     + '<svg viewBox="0 0 '+W+' '+H+'" class="gs" preserveAspectRatio="none" role="img" '
     +   'aria-label="'+(rem?"Budget remaining":"Cumulative spending")+' against the planned rate">'
@@ -2384,23 +2426,23 @@ function renderGlideslope(){
     + '<text x="'+PL+'" y="'+(H-7)+'" class="ax">1</text>'
     + '<text x="'+(W/2)+'" y="'+(H-7)+'" class="ax" text-anchor="middle">'+Math.round(g.dim/2)+'</text>'
     + '<text x="'+(W-PR)+'" y="'+(H-7)+'" class="ax" text-anchor="end">'+g.dim+'</text>'
-    + '<text x="'+(W-PR)+'" y="'+(Y(g.target)-4).toFixed(1)+'" class="ax" text-anchor="end">ceiling '
+    + '<text x="'+(W-PR)+'" y="'+(Y(g.target)-4).toFixed(1)+'" class="ax" text-anchor="end">limit '
     +   money(g.target)+'</text>'
     + '</svg>'
     + (rem
       ? '<div class="spread" style="margin-top:2px"><span class="sm muted">Ends the month with</span>'
         + '<span class="num '+(leftAtEnd<0?"overc":"pathc")+'">'+money(Math.abs(leftAtEnd))
         + (leftAtEnd<0?' short':' spare')+'</span></div>'
-      : '<div class="spread" style="margin-top:2px"><span class="sm muted">Landing at this rate</span>'
-        + '<span class="num '+(g.landing>g.target?"overc":"pathc")+'">'+money(g.landing)
-        + (g.landing>g.target?' \u00b7 '+money(g.landing-g.target)+' over':'')+'</span></div>')
+      : '<div class="spread" style="margin-top:2px"><span class="sm muted">Headed toward</span>'
+        + '<span class="num '+(g.headed>g.target?"overc":"pathc")+'">'+money(g.headed)
+        + (g.headed>g.target?' \u00b7 '+money(g.headed-g.target)+' over':'')+'</span></div>')
     + (g.heldAmt>0
        ? '<div class="warn"><strong class="num">'+money(g.heldAmt)+'</strong> is held for review and '
          + 'is not on this slope. <button class="link" data-goto="review">Review</button></div>'
        : '');
 
   el.querySelectorAll("#gsMode button").forEach(b=>b.onclick=()=>{
-    S.settings.gsMode=b.dataset.g; save(); renderGlideslope();
+    S.settings.gsMode=b.dataset.g; save(); renderTrajectory();
   });
   el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
 }
@@ -2444,7 +2486,7 @@ function renderFoldSummary(){
   const bits=[];
   if(d.income>0) bits.push(money(d.income)+" in");
   if(b.toCome>0) bits.push(money(b.toCome)+" to come");
-  if(d.income>0 && d.saveRate!=null) bits.push(Math.round(d.saveRate*100)+"% kept");
+  if(b.posted>0) bits.push(money(b.posted)+" in bills");
   const s=document.querySelector("#foldRest > summary .eyebrow");
   if(s) s.textContent = bits.length
     ? "Rest of the month \u00b7 "+bits.slice(0,2).join(" \u00b7 ")
@@ -2472,51 +2514,73 @@ function renderOutlook(){
   let html='<div class="spread"><span class="eyebrow">Outlook</span>'
     + '<span class="eyebrow">'+(o.closed?"cycle closed":"by day "+daysIn(cursor))+'</span></div>';
 
-  /* ---- surplus leads: it is the number the objective is set against ---- */
-  if(o.surplus==null){
+  /* ---- The answer first. Cash at the end of the cycle is the concrete
+     question — what is actually in the account when this cycle closes — so it
+     leads when there is a balance to compute it from. Surplus rides underneath
+     it as the movement, because that is the figure the objective is set
+     against. Both are still here; only the accounting is folded away. */
+  const lead = o.cashEOM!=null;
+
+  if(lead){
+    const neg=o.cashEOM<0, up=o.surplus>=0;
+    html+='<div class="display '+(neg?"overc":"")+'" style="font-size:clamp(34px,10.5vw,44px);margin:10px 0 3px">'
+      +   money(o.cashEOM)+'</div>'
+      + '<div class="sm muted">projected cash when the cycle closes</div>'
+      + '<div class="mid num '+(up?"pathc":"overc")+'" style="font-size:16px;margin-top:8px">'
+      +   (up?"\u2191 ":"\u2193 ")+money(Math.abs(o.surplus))+'</div>'
+      + '<div class="sm muted">'+(up?"surplus":"shortfall")+' this cycle'
+      +   (o.rate!=null?' \u00b7 '+Math.round(o.rate*100)+"% of take-home":"")+'</div>'
+      + (o.target!=null
+          ? '<div class="sm '+(o.vsTarget>=0?"pathc":"overc")+'" style="margin-top:6px">'
+            + (o.vsTarget>=0?"Ahead of":"Short of")+' your '+o.objPct+'% objective by '
+            + money(Math.abs(o.vsTarget))+'</div>'
+          : '');
+  } else if(o.surplus==null){
     html+='<h2 style="margin:5px 0 4px">Projected surplus</h2>'
       + '<div class="empty">Add your monthly take-home in Profile and this fills in.</div>';
   } else {
+    /* No balance yet, so cash at the end of the cycle cannot be computed.
+       Surplus can, and it is the more useful of the two on its own. */
     const good=o.surplus>=0;
-    html+='<div class="mid num '+(good?"pathc":"overc")+'" style="font-size:34px;margin:8px 0 2px">'
+    html+='<div class="display '+(good?"pathc":"overc")+'" style="font-size:clamp(34px,10.5vw,44px);margin:10px 0 3px">'
       +   money(o.surplus)+'</div>'
-      + '<div class="sm muted">projected surplus \u00b7 '
-      +   (o.rate!=null?Math.round(o.rate*100)+"% of take-home":"")+'</div>'
+      + '<div class="sm muted">projected surplus this cycle'
+      +   (o.rate!=null?' \u00b7 '+Math.round(o.rate*100)+"% of take-home":"")+'</div>'
       + (o.target!=null
-          ? '<div class="sm '+(o.vsTarget>=0?"pathc":"overc")+'" style="margin-top:4px">'
+          ? '<div class="sm '+(o.vsTarget>=0?"pathc":"overc")+'" style="margin-top:6px">'
             + (o.vsTarget>=0?"Ahead of":"Short of")+' your '+o.objPct+'% objective by '
-            + money(Math.abs(o.vsTarget))+' \u00b7 target '+money(o.target)+'</div>'
-          : '<div class="sm muted" style="margin-top:4px">Set a savings objective in Profile '
+            + money(Math.abs(o.vsTarget))+'</div>'
+          : '<div class="sm muted" style="margin-top:6px">Set a savings objective in Profile '
             + 'to measure this against something.</div>')
-      + '<div class="vwhy" style="margin-top:12px">'
-      +   o.breakdown.map(l=>row(l,true)).join("")+'</div>';
+      + '<p class="hint" style="margin-top:10px">Cash at the end of the cycle needs today\u2019s '
+      + 'balance. Statements with a running-balance column fill it in on import, and OFX carries '
+      + 'it in the ledger record. QIF has none, so type it below.</p>';
   }
 
-  /* ---- then the bank balance, which is a different question ---- */
-  html+='<hr>';
-  if(!o.cash){
-    html+='<h2 style="margin:0 0 4px;font-size:16px">Cash at the end of the cycle</h2>'
-      + '<p class="hint">Needs today\u2019s balance. Statements with a running-balance column '
-      + 'fill this in on import, and OFX carries it in the ledger record. QIF has none, so type it.</p>';
-  } else {
-    const neg=o.cashEOM<0;
-    html+='<div class="spread"><span class="eyebrow">Cash at the end of the cycle</span></div>'
-      + '<div class="mid num '+(neg?"overc":"")+'" style="font-size:26px;margin:6px 0 2px">'
-      +   money(o.cashEOM)+'</div>'
-      + '<div class="sm muted">starting cash plus this cycle\u2019s surplus</div>'
-      + '<div class="vwhy" style="margin-top:10px">'
-      +   o.lines.map(l=>row(l,true)).join("")
-      +   '<div class="r"><span class="num" style="font-size:11px;min-width:74px">&nbsp;</span>'
-      +     '<span class="muted">balance '+(o.cash.source==="entered"?"as entered":"from your statement")
-      +     ' \u00b7 '+esc(o.cash.date)+'</span></div>'
-      + '</div>';
+  /* ---- the machinery, on request ---- */
+  if(o.surplus!=null){
+    html+='<details class="reveal"><summary>See the calculation</summary>'
+      + '<div class="vwhy" style="margin-top:10px;border-top:0;padding-top:0">'
+      +   o.breakdown.map(l=>row(l,true)).join("")
+      + '</div>'
+      + (lead
+          ? '<hr><div class="vwhy" style="border-top:0;padding-top:0">'
+            + o.lines.map(l=>row(l,true)).join("")
+            + '<div class="r"><span class="num" style="font-size:11px;min-width:74px">&nbsp;</span>'
+            +   '<span class="muted">balance '+(o.cash.source==="entered"?"as entered":"from your statement")
+            +   ' \u00b7 '+esc(o.cash.date)+'</span></div></div>'
+          : '')
+      + (o.notes.length
+          ? '<div class="sm muted" style="margin-top:10px;line-height:1.45">'
+            + o.notes.map(n=>'<div style="margin-top:5px">'+esc(n)+'</div>').join("")+'</div>'
+          : '')
+      + '</details>';
+  } else if(o.notes.length){
+    html+='<div class="sm muted" style="margin-top:10px;line-height:1.45">'
+      + o.notes.map(n=>'<div style="margin-top:5px">'+esc(n)+'</div>').join("")+'</div>';
   }
 
-  html+=(o.notes.length
-      ? '<div class="sm muted" style="margin-top:10px;line-height:1.45">'
-        + o.notes.map(n=>'<div style="margin-top:5px">'+esc(n)+'</div>').join("")+'</div>'
-      : '')
-    + entry;
+  html+=entry;
 
   el.innerHTML=html;
   document.getElementById("saveCash").onclick=()=>{
@@ -2529,7 +2593,7 @@ function renderOutlook(){
 }
 
 /* ---------- FIRST RUN ----------
-   A fresh phone opens on an empty glideslope with no clue what to do. This is
+   A fresh phone opens on an empty trajectory with no clue what to do. This is
    a checklist rather than a wizard: nothing is blocked, order is yours, and it
    disappears for good once the last box is ticked. */
 function setupSteps(){
@@ -2541,7 +2605,7 @@ function setupSteps(){
       why:"Attributes your charges on a shared card",
       pane:"profile" },
     { key:"pillars",done:targetTotal()>0,
-      label:"Set your pillars",
+      label:"Set your spending limits",
       why:"The ceilings this month stands on",
       pane:"profile" },
     { key:"income", done:Number(S.settings.income||0)>0,
@@ -2596,13 +2660,51 @@ function renderSetup(){
   });
 }
 
+/* ---------- THE ANSWER ----------
+   verdict() has always computed this. Until now the only thing that consumed
+   it was the colour of the centre tab, so the app made you assemble the answer
+   out of three charts. The figure and the sentence come straight from the same
+   model the tab colour does — there is no second calculation here to disagree
+   with the first. */
+function renderVerdict(){
+  const v=verdict(cursor), el=document.getElementById("verdictCard");
+  el.className="card verdict "+v.state;
+
+  if(v.state==="unset"){
+    el.innerHTML='<div class="vword muted">'+esc(v.word)+'</div>'
+      + '<div class="vsub" style="margin-top:8px">'+esc(v.sub)+'</div>'
+      + '<div class="vwhy">'+v.why.map(w=>'<div class="r"><span>'+esc(w.text)+'</span>'
+        + '<button class="link" data-goto="'+w.goto+'">Open</button></div>').join("")+'</div>';
+    el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
+    return;
+  }
+
+  const tone = v.state==="ok" ? "pathc" : v.state==="tight" ? "holdc"
+             : v.state==="over" ? "overc" : "muted";
+  el.innerHTML='<div class="spread"><span class="vword '+tone+'">'+esc(v.word)+'</span>'
+    +   '<span class="eyebrow">'+(v.closed?"cycle closed":"day "
+    +   Math.max(1,Math.round(paceOf(cursor)*daysIn(cursor)))+" of "+daysIn(cursor))+'</span></div>'
+    + '<div class="display '+tone+'">'+money(v.figure)+'</div>'
+    + '<div class="sm muted">'+esc(v.label)+'</div>'
+    + '<div class="vsub" style="margin-top:9px">'+esc(v.sub)+'</div>'
+    + (v.why.length
+        ? '<div class="vwhy">'+v.why.map(w=>'<div class="r">'
+            + (w.figure!=null?'<span class="num">'+money(w.figure)+'</span>':'')
+            + '<span>'+esc(w.text)+'</span>'
+            + (w.goto?'<button class="link" data-goto="'+w.goto+'">Open</button>':'')
+            + '</div>').join("")+'</div>'
+        : '');
+  el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
+}
+
 function renderDash(){
   const d=monthData(cursor), pace=paceOf(cursor), tt=targetTotal();
   const dim=daysIn(cursor);
   const disc=d.discNet;
 
   renderSetup();
-  renderGlideslope();
+  renderVerdict();
+  renderTrajectory();
   renderOutlook();
   renderIncome();
   renderBillsGlance();
@@ -2617,7 +2719,7 @@ function renderDash(){
     +   '<div class="sm muted">housing, utilities, insurance</div></div>'
     + '<div><div class="sm muted">Discretionary</div>'
     +   '<div class="mid num">'+money(disc)+'</div>'
-    +   '<div class="sm muted">against your four ceilings</div></div></div>'
+    +   '<div class="sm muted">against your spending limits</div></div></div>'
     + (d.transfers?'<hr><div class="spread sm muted"><span>Card payments netted out</span>'
        + '<span class="num">'+money(d.transfers)+'</span></div>':'');
 
@@ -2652,7 +2754,7 @@ function renderDash(){
   const cm=S.settings.catMode==="remaining"?"remaining":"pace";
   const catEl=document.getElementById("catCard");
   catEl.innerHTML='<div class="spread"><span class="eyebrow">'
-    + 'Pillars</span>'
+    + 'Spending plan</span>'
     + '<div class="miniseg" id="catMode" role="group" aria-label="Ceiling view">'
     +   '<button data-c="pace" aria-pressed="'+(cm==="pace")+'">Pace</button>'
     +   '<button data-c="remaining" aria-pressed="'+(cm==="remaining")+'">Left</button></div></div>'
@@ -2850,7 +2952,7 @@ function renderCommitted(){
           + '<span class="num mid">'+money(b.net)+'</span></div>'
         : '')
     + '<p class="hint" style="margin:10px 0 0">Non-discretionary comes out before your '
-    + 'pillars, never against them. '+money(steady)+' of the schedule is fixed'
+    + 'limits, never against them. '+money(steady)+' of the schedule is fixed'
     + (moves>0?', '+money(moves)+' varies':'')+'.</p>';
 
   const list=document.getElementById("billList");
@@ -2965,7 +3067,7 @@ function renderProject(){
       + '<div class="twocol">'
       +   '<div class="col"><div class="eyebrow">Planned</div>'
       +     '<div class="mid num">'+money(p.planned.end)+'</div>'
-      +     '<div class="sm muted">'+money(p.planned.monthly)+'/mo from your ceilings</div></div>'
+      +     '<div class="sm muted">'+money(p.planned.monthly)+'/mo from your limits</div></div>'
       +   '<div class="col">'+(p.actual
             ? '<div class="eyebrow">Actual</div><div class="mid num">'+money(p.actual.end)+'</div>'
               + '<div class="sm muted">'+money(p.actual.monthly)+'/mo, last '+p.actual.basis+' mo</div>'
@@ -3071,12 +3173,12 @@ function renderPlan(){
       + '<span class="num mid '+(p.rate>=obj?"pathc":"overc")+'">'+(p.rate*100).toFixed(1)+'%</span></div>'
       + '<hr>'
       + (p.rate>=obj
-        ? '<div class="pathc sm">These ceilings clear your '+Math.round(obj*100)
+        ? '<div class="pathc sm">These limits clear your '+Math.round(obj*100)
           +'% objective with '+money(p.savings-need)+' to spare.</div>'
-        : '<div class="overc sm">Hitting every ceiling still misses the objective by '
-          + money(need-p.savings)+' a month. Lower a ceiling, cut a recurring charge, or move the objective.</div>')
+        : '<div class="overc sm">Hitting every limit still misses the objective by '
+          + money(need-p.savings)+' a month. Lower a limit, cut a recurring charge, or move the objective.</div>')
       + (p.insideCeilings>0?'<div class="sm muted" style="margin-top:8px">'
-        + money(p.insideCeilings)+'/mo of recurring charges already sit inside your ceilings and '
+        + money(p.insideCeilings)+'/mo of recurring charges already sit inside your limits and '
         + 'are not double-counted here.</div>':'');
 
   renderCustomCats();
@@ -3691,12 +3793,12 @@ document.getElementById("doSeed").onclick=async()=>{
 document.getElementById("doRestorePaste").onclick=()=>{
   const box=document.getElementById("restoreBox");
   try{ applyBackup(JSON.parse(box.value)); box.value=""; }
-  catch(err){ toast("That text isn't an Approach backup"); }
+  catch(err){ toast("That text isn't a Path backup"); }
 };
 document.getElementById("doExport").onclick=()=>{
   const b=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
   const a=document.createElement("a");
-  a.href=URL.createObjectURL(b); a.download="approach-"+todayISO()+".json"; a.click();
+  a.href=URL.createObjectURL(b); a.download="path-"+todayISO()+".json"; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   markBackedUp(); toast("Backup downloaded");
 };
@@ -3706,7 +3808,7 @@ document.getElementById("jsonFile").onchange=e=>{
   const r=new FileReader();
   r.onload=()=>{
     try{ applyBackup(JSON.parse(r.result)); }
-    catch(err){ toast("That file isn't an Approach backup"); }
+    catch(err){ toast("That file isn't a Path backup"); }
   };
   r.readAsText(f); e.target.value="";
 };
