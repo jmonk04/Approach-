@@ -446,7 +446,53 @@ label{display:block;margin-bottom:10px}
     <div class="card" id="outlookCard"></div>
   </section>
 
-  <section id="v-review"><div id="billSort"></div><div id="reviewList"></div><div id="recSort"></div></section>
+  <section id="v-review">
+    <div id="reviewList"></div>
+    <!-- Import lives on this tab now, not in Settings. Bringing data in is not
+         configuration you set once; it is the thing you come here to do. -->
+    <div class="card">
+      <div class="eyebrow">Importing into</div>
+      <div class="card" id="previewCard" hidden style="margin:0 0 12px;padding:14px"></div>
+      <div class="filters" id="acctPick" style="padding-top:8px"></div>
+      <p class="hint">CSV, OFX, QFX or QIF. The column layout is read from the file, so
+        any bank's export works without special handling. What the file can't always tell
+        us is the sign convention &mdash; Chase writes purchases negative, Amex writes them
+        positive &mdash; so that's set per account below.</p>
+      <input type="file" id="csvFile" accept=".csv,.ofx,.qfx,.qif,.txt,text/csv,text/plain">
+    </div>
+    <div class="card">
+      <div class="eyebrow">Paste</div>
+      <h2 style="margin:4px 0 6px">From a screen or a screenshot</h2>
+      <p class="hint">Comma lines, rows copied off a bank page, or text lifted out of a
+        screenshot &mdash; on iPhone, long-press the screenshot, Select All, Copy.
+        Stacked merchant / date / amount is fine.</p>
+      <textarea id="pasteBox" placeholder="Trader Joe's&#10;Aug 22&#10;$84.21&#10;&#10;or:  2026-08-22, Trader Joes, 84.21, Joe"></textarea>
+      <label class="teach" style="margin:11px 0 12px">
+        <input type="checkbox" id="pastePending">
+        <span>These are pending charges &mdash; replace them when the real ones post</span>
+      </label>
+      <button class="btn" id="doPaste" style="margin-top:10px">Add lines</button>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Single entry</div>
+      <label><span class="lt">Date</span><input type="date" id="mDate"></label>
+      <label><span class="lt">Description</span><input type="text" id="mDesc"></label>
+      <label><span class="lt">Amount &mdash; negative for a refund</span>
+        <input type="number" id="mAmt" inputmode="decimal" step="0.01"></label>
+      <div class="row" style="gap:8px;margin-bottom:10px">
+        <label style="flex:1;margin:0"><span class="lt">Person</span><select id="mPerson"></select></label>
+        <label style="flex:1;margin:0"><span class="lt">Category</span><select id="mCat"></select></label>
+      </div>
+      <!-- Manual entries used to inherit whichever account the file importer
+           had selected, so cash spent out of pocket was silently booked to the
+           Amex. It needs saying explicitly, because the whole point of typing
+           one in by hand is usually that no statement will ever carry it. -->
+      <label><span class="lt">Paid from</span><select id="mAcct"></select></label>
+      <button class="btn" id="doManual">Add transaction</button>
+    </div>
+    <div id="billSort"></div>
+    <div id="recSort"></div>
+  </section>
 
   <section id="v-ledger">
     <div class="filters" id="ledgerFilters"></div>
@@ -525,7 +571,7 @@ label{display:block;margin-bottom:10px}
     <div class="subseg" id="setNav">
       <button data-s="profile" aria-pressed="true">Profile</button>
       <button data-s="rules" aria-pressed="false">Rules</button>
-      <button data-s="import" aria-pressed="false">Import</button>
+      <button data-s="accounts" aria-pressed="false">Accounts</button>
       <button data-s="people" aria-pressed="false">People</button>
       <button data-s="backup" aria-pressed="false">Backup</button>
     </div>
@@ -574,7 +620,7 @@ label{display:block;margin-bottom:10px}
         <label style="margin-top:12px"><span class="lt">Open on</span>
           <select id="pLaunch">
             <option value="dash">Spending</option><option value="saving">Saving</option>
-            <option value="plan">Planning</option><option value="review">Review</option>
+            <option value="plan">Planning</option><option value="review">Data</option>
             <option value="ledger">Ledger</option><option value="bills">Bills</option></select></label>
         <label style="margin-top:12px"><span class="lt">Card member for unlabelled imports</span>
           <input type="text" id="pDefPerson" placeholder="Your name"></label>
@@ -615,44 +661,7 @@ label{display:block;margin-bottom:10px}
       </div>
     </div>
 
-    <div class="setpane" id="pane-import" hidden>
-    <div class="card">
-      <div class="eyebrow">Importing into</div>
-      <div class="card" id="previewCard" hidden style="margin:0 0 12px;padding:14px"></div>
-      <div class="filters" id="acctPick" style="padding-top:8px"></div>
-      <p class="hint">CSV, OFX, QFX or QIF. The column layout is read from the file, so
-        any bank's export works without special handling. What the file can't always tell
-        us is the sign convention &mdash; Chase writes purchases negative, Amex writes them
-        positive &mdash; so that's set per account below.</p>
-      <input type="file" id="csvFile" accept=".csv,.ofx,.qfx,.qif,.txt,text/csv,text/plain">
-    </div>
-    <div class="card">
-      <div class="eyebrow">Paste</div>
-      <h2 style="margin:4px 0 6px">From a screen or a screenshot</h2>
-      <p class="hint">Comma lines, rows copied off a bank page, or text lifted out of a
-        screenshot &mdash; on iPhone, long-press the screenshot, Select All, Copy.
-        Stacked merchant / date / amount is fine.</p>
-      <textarea id="pasteBox" placeholder="Trader Joe's&#10;Aug 22&#10;$84.21&#10;&#10;or:  2026-08-22, Trader Joes, 84.21, Joe"></textarea>
-      <label class="teach" style="margin:11px 0 12px">
-        <input type="checkbox" id="pastePending">
-        <span>These are pending charges &mdash; replace them when the real ones post</span>
-      </label>
-      <button class="btn" id="doPaste" style="margin-top:10px">Add lines</button>
-    </div>
-    <div class="card">
-      <div class="eyebrow">Single entry</div>
-      <label><span class="lt">Date</span><input type="date" id="mDate"></label>
-      <label><span class="lt">Description</span><input type="text" id="mDesc"></label>
-      <label><span class="lt">Amount &mdash; negative for a refund</span>
-        <input type="number" id="mAmt" inputmode="decimal" step="0.01"></label>
-      <div class="row" style="gap:8px;margin-bottom:10px">
-        <label style="flex:1;margin:0"><span class="lt">Person</span><select id="mPerson"></select></label>
-        <label style="flex:1;margin:0"><span class="lt">Category</span><select id="mCat"></select></label>
-      </div>
-      <button class="btn" id="doManual">Add transaction</button>
-    </div>
-    </div>
-
+    <div class="setpane" id="pane-accounts" hidden>
       <div class="card">
         <div class="eyebrow">Accounts</div>
         <h2 style="margin:4px 0 6px">Where money comes from</h2>
@@ -733,7 +742,7 @@ label{display:block;margin-bottom:10px}
       <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Planning</button>
   <button data-v="review">
     <span class="tabmark" aria-hidden="true"><span class="dot"></span>
-      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
+      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Data<span class="badge" id="reviewBadge" style="display:none">0</span></button>
 </nav>
 <div class="toast" id="toast"></div>
 <script>
@@ -798,7 +807,11 @@ function ALL_CATS(){ return [...TC(), ...FC(), ...SYS_CATS]; }
    matching can tell you which you're holding. These two are only seeds. */
 const ACCOUNT_SEED = [
   { id:"amex", name:"Amex",         kind:"card", sign:"charge-positive" },
-  { id:"nfcu", name:"Navy Federal", kind:"cash", sign:"debit-negative"  }
+  { id:"nfcu", name:"Navy Federal", kind:"cash", sign:"debit-negative"  },
+  /* Cash spent out of pocket. No statement will ever carry it, so it exists
+     only to be typed in by hand — and without an account of its own it used to
+     land on whichever card the importer happened to have selected. */
+  { id:"cash", name:"Cash",         kind:"cash", sign:"charge-positive" }
 ];
 function accounts(){
   const a=(S.settings||{}).accounts;
@@ -824,6 +837,7 @@ const DEFAULTS = {
   catScope: "disc",      // spending-plan card: "disc" or "fixed" (non-discretionary)
   fixedCategories: [...FIXED_SEED],  // editable non-discretionary groups
   fixedMigrated: false,  // set once the old two-bucket model has been folded in
+  cashAcctAdded: false,  // set once the Cash account has been backfilled
   billsSorted: [],       // merchants already placed into a group, so Review stops asking
   ceilingMode: "custom", // how ceilings are set: "custom" | "objective" | "history"
   targets: {},          // cat -> monthly ceiling
@@ -1230,6 +1244,17 @@ function resolve(id, cat, teach){
 const CAT_MIGRATION = { "Utilities":"Bills", "Insurance":"Bills", "Debt/Loan":"Bills" };
 function migrate(){
   let n=0;
+  /* Installs that predate the Cash account get one, once. Added rather than
+     assumed because out-of-pocket spending has nowhere else to go, and it is
+     deletable like any other account if it isn't wanted. */
+  if(!S.settings.cashAcctAdded){
+    S.settings.cashAcctAdded=true;
+    if(Array.isArray(S.settings.accounts) && S.settings.accounts.length
+       && !S.settings.accounts.some(a=>a.id==="cash"))
+      S.settings.accounts.push({ id:"cash", name:"Cash", kind:"cash",
+                                 sign:"charge-positive" });
+  }
+
   /* Non-discretionary used to be two hardcoded buckets. Seed the editable list
      and rename the old "Bills" bucket rather than dropping it: every existing
      transaction, rule, bill and split key still says "Bills", and orphaning
@@ -1456,7 +1481,7 @@ function allowance(ym){
     const h=historyAvg(3);
     return { mode, limit: h.months?h.total:null, committed,
              excess: h.months?Math.max(0,committed-h.total):0,
-             basis: h.months?("your average over the last "+h.months+" cycle"
+             basis: h.months?("your average over the last "+h.months+" month"
                +(h.months===1?"":"s")):null, hist:h };
   }
 
@@ -1765,8 +1790,8 @@ function verdict(ym){
     : surplus==null
       ? (closed?"under your limits":"to your limits at this rate")
     : surplus>=0
-      ? (closed?"surplus for the cycle":"surplus by end of month at this rate")
-      : (closed?"deficit for the cycle":"deficit by end of month at this rate");
+      ? (closed?"surplus for the month":"surplus by end of month at this rate")
+      : (closed?"deficit for the month":"deficit by end of month at this rate");
 
   const sub = state==="unknown"
       ? "Clear the queue and the month resolves one way or the other."
@@ -1841,13 +1866,13 @@ function outlook(ym){
       cashEOM = cash.amount + surplus;
       lines=[
         { label:"Starting cash",           amt:cash.amount, dir:"in" },
-        { label:"Surplus over the cycle",  amt:surplus,     dir:surplus>=0?"in":"out" }
+        { label:"Surplus over the month",  amt:surplus,     dir:surplus>=0?"in":"out" }
       ];
       /* The whole cycle's surplus is added to the balance you gave. If that
          balance is mid-cycle it already contains part of it. */
       if(asOfDay>1)
-        notes.push("This adds the full cycle surplus to a balance dated day "+asOfDay
-          +". If that balance already reflects spending and pay from this cycle, enter it as of day 1 instead.");
+        notes.push("This adds the full month's surplus to a balance dated day "+asOfDay
+          +". If that balance already reflects spending and pay from this month, enter it as of day 1 instead.");
     }
     const scheduledPay=(b.pays||[]).reduce((a,r)=>a+r.amount,0);
     if(scheduledPay>0 && stated>0
@@ -2810,7 +2835,7 @@ function renderTrajectory(){
        ? '<div class="warn"><strong class="num">'+money(g.heldAmt)+'</strong> is held for review and '
          + 'is not on this slope'
          + (Math.abs(g.heldAmt)>Math.abs(g.delta)?' \u2014 enough to change which side of pace you are on':'')
-         + '. <button class="link" data-goto="review">Review</button></div>'
+         + '. <button class="link" data-goto="review">Open Data</button></div>'
        : '')
     + ((v.why||[]).some(w=>w.text.indexOf("bills")>-1)
        ? '<div class="vwhy">'+v.why.filter(w=>w.text.indexOf("bills")>-1)
@@ -2860,7 +2885,7 @@ function renderOutlook(){
     + '<span>'+esc(l.label)+'</span></div>';
 
   let html='<div class="spread"><span class="eyebrow">Outlook</span>'
-    + '<span class="eyebrow">'+(o.closed?"cycle closed":"by day "+daysIn(cursor))+'</span></div>';
+    + '<span class="eyebrow">'+(o.closed?"month closed":"by day "+daysIn(cursor))+'</span></div>';
 
   /* ---- Cash at the end of the cycle: where the balance lands, which is a
      different question from how much of the month you kept. The surplus, the
@@ -2873,7 +2898,7 @@ function renderOutlook(){
     const neg=o.cashEOM<0;
     html+='<div class="display '+(neg?"overc":"")+'" style="font-size:clamp(34px,10.5vw,44px);margin:10px 0 3px">'
       +   money(o.cashEOM)+'</div>'
-      + '<div class="sm muted">projected cash when the cycle closes</div>';
+      + '<div class="sm muted">projected cash when the month closes</div>';
   } else if(o.surplus==null){
     html+='<h2 style="margin:5px 0 4px">Projected surplus</h2>'
       + '<div class="empty">Add your monthly take-home in Profile and this fills in.</div>';
@@ -2883,7 +2908,7 @@ function renderOutlook(){
     const good=o.surplus>=0;
     html+='<div class="display '+(good?"pathc":"overc")+'" style="font-size:clamp(34px,10.5vw,44px);margin:10px 0 3px">'
       +   money(o.surplus)+'</div>'
-      + '<div class="sm muted">projected surplus this cycle'
+      + '<div class="sm muted">projected surplus this month'
       +   (o.rate!=null?' \u00b7 '+Math.round(o.rate*100)+"% of take-home":"")+'</div>'
       + (o.target!=null
           ? '<div class="sm '+(o.vsTarget>=0?"pathc":"overc")+'" style="margin-top:6px">'
@@ -2891,7 +2916,7 @@ function renderOutlook(){
             + money(Math.abs(o.vsTarget))+'</div>'
           : '<div class="sm muted" style="margin-top:6px">Set a savings objective on '
             + 'Planning to measure this against something.</div>')
-      + '<p class="hint" style="margin-top:10px">Cash at the end of the cycle needs today\u2019s '
+      + '<p class="hint" style="margin-top:10px">Cash at the end of the month needs today\u2019s '
       + 'balance. Statements with a running-balance column fill it in on import, and OFX carries '
       + 'it in the ledger record. QIF has none, so type it below.</p>';
   }
@@ -2954,11 +2979,11 @@ function setupSteps(){
     { key:"account",done:accounts().some(a=>S.txns.some(t=>t.account===a.id)) || accounts().length>ACCOUNT_SEED.length,
       label:"Add your card or bank",
       why:"Tell it which way that bank signs purchases",
-      pane:"import" },
+      pane:"accounts" },
     { key:"import", done:S.txns.length>0,
       label:"Import your first statement",
       why:"CSV, OFX, QFX or QIF \u2014 you see it before it lands",
-      pane:"import" }
+      view:"review" }
   ];
 }
 
@@ -3052,7 +3077,7 @@ function renderDash(){
     const tone = !up ? "overc" : (obj>0 && rate<obj) ? "holdc" : "pathc";
     sc.className="card verdict "+(!up?"over":(obj>0&&rate<obj)?"tight":"ok");
     sc.innerHTML='<div class="spread"><span class="eyebrow">Saving</span>'
-      + '<span class="eyebrow">'+(ok.closed?"cycle closed":"by day "+daysIn(cursor))+'</span></div>'
+      + '<span class="eyebrow">'+(ok.closed?"month closed":"by day "+daysIn(cursor))+'</span></div>'
       + '<div class="display '+tone+'">'+money(Math.abs(ok.surplus))+'</div>'
       + '<div class="sm muted">'
       +   (ok.closed ? (up?"saved this month":"overspent this month")
@@ -3119,7 +3144,7 @@ function renderDash(){
     + '<p class="hint" style="margin-top:12px">'
     +   (scope==="disc"
         ? 'Tap a category to see its transactions.'
-        : 'Every non-discretionary line for this cycle is below. Bills are not '
+        : 'Every non-discretionary line for this month is below. Bills are not '
           + 'ceilings, so there is nothing to be over.')+'</p>';
   catEl.querySelectorAll("#catScope button").forEach(b=>{
     b.onclick=()=>{ S.settings.catScope=b.dataset.s; save(); renderDash(); };
@@ -3425,7 +3450,7 @@ function renderCommitted(){
         ? (Math.abs(G.delta)<1 ? "level with "+esc(cycleLabel(G.prevYM))
            : '<span class="'+(G.delta>0?"overc":"pathc")+'">'+money(Math.abs(G.delta))
              + (G.delta>0?" more":" less")+'</span> than '+esc(cycleLabel(G.prevYM)))
-        : "no earlier cycle to compare against yet")+'</div>'
+        : "no earlier month to compare against yet")+'</div>'
 
     /* Where the cash goes, largest first. Most rows read "unchanged" every
        cycle by design — that is what makes the one that moved visible. */
@@ -3458,7 +3483,7 @@ function renderCommitted(){
   const lines=fixedLines(cursor);
   if(!lines.length){
     list.innerHTML='<div class="eyebrow">Your bills</div>'
-      + '<div class="empty">Nothing non-discretionary this cycle yet. Anything filed to '
+      + '<div class="empty">Nothing non-discretionary this month yet. Anything filed to '
       + esc(FC().join(" or "))+' lands here, and you can declare what the import '
       + 'can\u2019t see below.</div>';
   } else {
@@ -3498,8 +3523,8 @@ function renderCommitted(){
         }).join("");
       }).join("")
       + '<p class="hint" style="margin-top:12px">Every non-discretionary charge '
-      + 'this cycle &mdash; detected, imported and declared alike, grouped by where '
-      + 'it goes. Marking one split remembers the merchant, so next cycle&rsquo;s '
+      + 'this month &mdash; detected, imported and declared alike, grouped by where '
+      + 'it goes. Marking one split remembers the merchant, so next month&rsquo;s '
       + 'charge arrives already split.</p>'
       + (lines.some(r=>r.origin==="declared")
         ? '<p class="hint">Tap a bill you added to remove it.</p>':'');
@@ -3651,7 +3676,7 @@ function renderAllowance(){
     : a.limit==null
       ? '<div class="empty">'+(mode==="objective"
           ? "Add your monthly take-home in Profile, and a savings objective below, and the allowance appears here."
-          : "No closed cycle to average yet. Import a full month and this fills in.")+'</div>'
+          : "No closed month to average yet. Import a full month and this fills in.")+'</div>'
       : '<div class="spread" style="margin-top:14px"><span class="lt" style="margin:0">'
         + (mode==="objective"?"Discretionary can be":"You normally spend")+'</span>'
         + '<span class="num mid">'+money(a.limit)+'</span></div>'
@@ -3667,7 +3692,7 @@ function renderAllowance(){
              + 'itself is more than the month allows. Trim a ceiling below, or switch '
              + 'modes if this is the wrong yardstick.</p>'
            : '<p class="hint" style="margin:10px 0 0">Set the ceilings below. This figure '
-             + 'moves as non-discretionary lands, so check it late in the cycle too.</p>');
+             + 'moves as non-discretionary lands, so check it late in the month too.</p>');
 
   /* Per-category averages: the descriptive half. Useful in every mode —
      knowing you set $400 against a $612 habit is the point. */
@@ -3685,7 +3710,7 @@ function renderAllowance(){
                : '');
         }).join("")
       + '<p class="hint" style="margin-top:10px">Ceiling / average over the last '
-      + h.months+' closed cycle'+(h.months===1?"":"s")+'. The open cycle is excluded.</p>'
+      + h.months+' closed month'+(h.months===1?"":"s")+'. The open month is excluded.</p>'
       + (mode==="history"
          ? '<button class="btn ghost" id="useAvgs">Copy averages into my ceilings</button>':'')
     : "";
@@ -3972,6 +3997,23 @@ function renderData(){
   const cs=document.getElementById("mCat");
   if(!cs.options.length)
     cs.innerHTML=[...TC(),...FC()].map(c=>'<option>'+esc(c)+'</option>').join("");
+
+  /* Rebuilt whenever the account list changes, and defaulted to a cash account
+     when one exists: a hand-typed transaction is usually one no statement will
+     ever carry, which is exactly what cash is. */
+  const as=document.getElementById("mAcct");
+  if(as){
+    const list=accounts();
+    const sig=list.map(a=>a.id).join(",");
+    if(as.dataset.sig!==sig){
+      const keep=as.value;
+      as.dataset.sig=sig;
+      as.innerHTML=list.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>').join("");
+      const cash=list.find(a=>a.kind==="cash" && /cash/i.test(a.name));
+      as.value = (keep && list.some(a=>a.id===keep)) ? keep
+               : (cash ? cash.id : importAccount);
+    }
+  }
 }
 
 /* ---------- PROFILE ---------- */
@@ -4028,7 +4070,7 @@ function renderProfile(){
     b.setAttribute("aria-pressed", b.dataset.a===(p.accent||"ink")));
   const hint=document.getElementById("cycleHint");
   if(hint && cycleStart()>1)
-    hint.textContent="This cycle runs "+cycleLabel(cursor)+". 1 means the calendar month.";
+    hint.textContent="Months now run "+cycleLabel(cursor)+". 1 means the calendar month.";
 }
 
 /* ============================================================
@@ -4304,7 +4346,7 @@ document.getElementById("addBill").onclick=()=>{
   document.getElementById("bName").value=""; document.getElementById("bAmt").value="";
   save(); renderAll();
   toast(kind==="pay"?"Paycheck scheduled":kind==="offset"?"Reimbursement added"
-    : r&&r.held ? name+" added — needs a look in Review" : name+" added, posted this cycle");
+    : r&&r.held ? name+" added — needs a look in Review" : name+" added, posted this month");
 };
 document.getElementById("saveSplit").onclick=()=>{
   const v=Math.round(Number(document.getElementById("splitPct").value));
@@ -4371,7 +4413,8 @@ document.getElementById("doManual").onclick=()=>{
   const desc=document.getElementById("mDesc").value.trim();
   const amt=parseFloat(document.getElementById("mAmt").value);
   if(!date||!desc||!isFinite(amt)){ toast("Date, description and amount are all needed"); return; }
-  ingest([{date,rawDesc:desc,amount:amt,account:importAccount,
+  ingest([{date,rawDesc:desc,amount:amt,
+           account:document.getElementById("mAcct").value||importAccount,
            person:document.getElementById("mPerson").value,
            category:document.getElementById("mCat").value,source:"manual"}]);
   document.getElementById("mDesc").value=""; document.getElementById("mAmt").value="";
