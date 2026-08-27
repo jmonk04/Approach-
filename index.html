@@ -187,11 +187,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
    a list, not as nine competing panels. */
 .band{margin:20px 2px 9px}
 .band .eyebrow{color:var(--quiet)}
-.verdict{border-top:3px solid var(--rule);padding:17px 16px 15px}
-/* The verdict and the trajectory are one thought, so they sit closer to each
-   other than to anything else on the page — the gap does the work the band
-   label used to do, without splitting them into two sections. */
-.verdict + .card{margin-top:-5px}
+.verdict{border-top:3px solid var(--rule);padding:17px 16px 16px}
 .verdict.ok{border-top-color:var(--path)}
 .verdict.tight{border-top-color:var(--hold)}
 .verdict.over{border-top-color:var(--over)}
@@ -359,12 +355,13 @@ label{display:block;margin-bottom:10px}
   <section id="v-dash" class="on">
     <div class="card" id="setupCard" hidden></div>
 
-    <div class="card verdict" id="verdictCard"></div>
-
-    <!-- No band above this one on purpose: the verdict is the answer and the
-         trajectory is the reason for it, so they run together as one thought.
-         A label between them would make them read as two sections. -->
-    <div class="card" id="trajCard"></div>
+    <!-- One card, not two. The verdict used to sit above this one leading with
+         a surplus figure, which is the last number of the month printed first —
+         it masked the spending data and the slope that produce it. The answer
+         and the evidence are now the same card, reading top to bottom: where
+         you stand, where today's rate lands you, and only then what that
+         leaves in cash. -->
+    <div class="card verdict" id="trajCard"></div>
 
     <div class="band"><span class="eyebrow">Where you are</span></div>
     <div class="card" id="catCard"></div>
@@ -2619,6 +2616,7 @@ function renderTrajectory(){
   const g=trajectory(cursor);
   const el=document.getElementById("trajCard");
   if(!g.target){
+    el.className="card verdict unset";
     el.innerHTML='<div class="eyebrow">Trajectory</div>'
       + '<div class="empty">Set your spending limits in Profile and the trajectory appears here.</div>';
     return;
@@ -2628,6 +2626,8 @@ function renderTrajectory(){
   const iw=W-PL-PR, ih=H-PT-PB;
   const hot=g.delta>0;
   const col=hot?"var(--over)":"var(--path)";
+  /* The card's own top rule follows the one thing the header leads with. */
+  el.className="card verdict "+(hot?"over":"ok");
   const X=d=>PL+(d/g.dim)*iw;
   const val=v=>rem?g.target-v:v;
   const endVal=val(g.headed);
@@ -2651,17 +2651,39 @@ function renderTrajectory(){
   const headline=rem?g.target-g.run:g.run;
   const leftAtEnd=g.target-g.headed;
 
+  /* The header the whole card is built to justify. Read in order: are you on
+     pace, what you have spent against that pace, where today's rate lands the
+     month, and only last what it leaves in cash. Surplus is the consequence of
+     the slope below, so it comes after the slope, not before it. */
+  const v=verdict(cursor);
+  const rate=g.today>0 ? g.run/g.today : 0;
+  const surplus=outlook(cursor).surplus;
+
   el.innerHTML='<div class="spread"><span class="eyebrow">Trajectory<span class="daycount">'
     + ' \u00b7 day '+(paceOf(cursor)>=1?g.dim:Math.max(1,Math.round(paceOf(cursor)*g.dim)))
     + ' of '+g.dim+'</span></span>'
     + '<div class="miniseg" id="gsMode">'
     +   '<button data-g="spent" aria-pressed="'+(!rem)+'">Spent</button>'
     +   '<button data-g="remaining" aria-pressed="'+rem+'">Left</button></div></div>'
-    + '<div class="row" style="align-items:baseline;gap:10px;margin:9px 0 2px">'
-    +   '<span class="mid num '+(rem?(headline<0?"overc":"pathc"):"")+'" style="font-size:26px">'+money(headline)+'</span>'
-    +   '<span class="sm '+(hot?"overc":"pathc")+' num">'+(hot?"+":"\u2212")+money(Math.abs(g.delta))+'</span>'
-    +   '<span class="sm muted">'+(hot?"ahead of plan":"behind plan")+'</span></div>'
-    + (gsPct!=null?'<div class="sm muted">'+gsPct+'% of planned pace</div>':'')
+
+    + '<div class="vword '+(hot?"overc":"pathc")+'" style="margin-top:7px">'
+    +   (hot?"Off path":"On the right path")+'</div>'
+
+    + '<div class="display '+(hot?"overc":"pathc")+'">'+money(g.run)+'</div>'
+    + '<div class="sm muted">spent so far \u00b7 <span class="num '
+    +   (hot?"overc":"pathc")+'">'+money(Math.abs(g.delta))+'</span> '
+    +   (hot?"above":"below")+' pace</div>'
+
+    + '<div class="vwhy" style="margin-top:11px">'
+    +   '<div class="r"><span class="num">'+money(g.headed)+'</span>'
+    +     '<span>projected by day '+g.dim+', at '+money(rate)+'/day</span></div>'
+    +   (surplus!=null
+        ? '<div class="r"><span class="num '+(surplus>=0?"pathc":"overc")+'">'
+          + money(Math.abs(surplus))+'</span><span>projected cash '
+          + (surplus>=0?"surplus":"deficit")+' at month end</span></div>'
+        : '<div class="r"><span>Set your take-home in Profile for the cash figure</span>'
+          + '<button class="link" data-goto="settings">Open</button></div>')
+    + '</div>' 
     + '<svg viewBox="0 0 '+W+' '+H+'" class="gs" preserveAspectRatio="none" role="img" '
     +   'aria-label="'+(rem?"Budget remaining":"Cumulative spending")+' against the planned rate">'
     + (lo<0?'<line x1="'+PL+'" y1="'+Y(0).toFixed(1)+'" x2="'+(W-PR)+'" y2="'+Y(0).toFixed(1)
@@ -2681,18 +2703,37 @@ function renderTrajectory(){
     + '<text x="'+(W-PR)+'" y="'+(Y(g.target)-4).toFixed(1)+'" class="ax" text-anchor="end">limit '
     +   money(g.target)+'</text>'
     + '</svg>'
+    /* "Headed toward" and "Ends the month with" used to live here. Both are in
+       the header now, so repeating them under the chart would be the same
+       number twice on one card. What stays is only what the header cannot
+       say: the caveats that could move it. */
     + (rem
-      ? '<div class="spread" style="margin-top:2px"><span class="sm muted">Ends the month with</span>'
-        + '<span class="num '+(leftAtEnd<0?"overc":"pathc")+'">'+money(Math.abs(leftAtEnd))
-        + (leftAtEnd<0?' short':' spare')+'</span></div>'
-      : '<div class="spread" style="margin-top:2px"><span class="sm muted">Headed toward</span>'
-        + '<span class="num '+(g.headed>g.target?"overc":"pathc")+'">'+money(g.headed)
-        + (g.headed>g.target?' \u00b7 '+money(g.headed-g.target)+' over':'')+'</span></div>')
+      ? '<div class="spread" style="margin-top:2px"><span class="sm muted">Limit left at day '
+        + g.dim+'</span><span class="num '+(leftAtEnd<0?"overc":"pathc")+'">'
+        + money(Math.abs(leftAtEnd))+(leftAtEnd<0?' short':' spare')+'</span></div>'
+      : '')
+    + (v.overcommitted
+       ? '<div class="warn">Your ceilings total <strong class="num">'
+         + money(v.allowance.excess)+'</strong> more than '
+         + (v.allowance.mode==="history"?"you normally spend":"the objective leaves you")
+         + '. The slope is fine; the plan is not. '
+         + '<button class="link" data-goto="plan">Planning</button></div>'
+       : '')
     + (g.heldAmt>0
        ? '<div class="warn"><strong class="num">'+money(g.heldAmt)+'</strong> is held for review and '
-         + 'is not on this slope. <button class="link" data-goto="review">Review</button></div>'
+         + 'is not on this slope'
+         + (Math.abs(g.heldAmt)>Math.abs(g.delta)?' \u2014 enough to change which side of pace you are on':'')
+         + '. <button class="link" data-goto="review">Review</button></div>'
+       : '')
+    + ((v.why||[]).some(w=>w.text.indexOf("bills")>-1)
+       ? '<div class="vwhy">'+v.why.filter(w=>w.text.indexOf("bills")>-1)
+           .map(w=>'<div class="r"><span class="num">'+money(w.figure)+'</span>'
+             + '<span>'+esc(w.text)+'</span>'
+             + '<button class="link" data-goto="'+w.goto+'">Open</button></div>').join("")
+         + '</div>'
        : '');
 
+  el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
   el.querySelectorAll("#gsMode button").forEach(b=>b.onclick=()=>{
     S.settings.gsMode=b.dataset.g; save(); renderTrajectory();
   });
@@ -2886,47 +2927,12 @@ function renderSetup(){
    out of three charts. The figure and the sentence come straight from the same
    model the tab colour does — there is no second calculation here to disagree
    with the first. */
-function renderVerdict(){
-  const v=verdict(cursor), el=document.getElementById("verdictCard");
-  el.className="card verdict "+v.state;
-
-  if(v.state==="unset"){
-    el.innerHTML='<div class="eyebrow">Spending overview</div>'
-      + '<div class="vword muted" style="margin-top:6px">'+esc(v.word)+'</div>'
-      + '<div class="vsub" style="margin-top:8px">'+esc(v.sub)+'</div>'
-      + '<div class="vwhy">'+v.why.map(w=>'<div class="r"><span>'+esc(w.text)+'</span>'
-        + '<button class="link" data-goto="'+w.goto+'">Open</button></div>').join("")+'</div>';
-    el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
-    return;
-  }
-
-  const tone = v.state==="ok" ? "pathc"
-             : v.state==="tight"||v.state==="overcommitted" ? "holdc"
-             : v.state==="over" ? "overc" : "muted";
-  el.innerHTML='<div class="spread"><span class="eyebrow">Spending overview</span>'
-    +   '<span class="eyebrow">'+(v.closed?"cycle closed":"day "
-    +   Math.max(1,Math.round(paceOf(cursor)*daysIn(cursor)))+" of "+daysIn(cursor))+'</span></div>'
-    + '<div class="vword '+tone+'" style="margin-top:6px">'+esc(v.word)+'</div>'
-    + '<div class="display '+tone+'">'+money(v.figure)+'</div>'
-    + '<div class="sm muted">'+esc(v.label)+'</div>'
-    + '<div class="vsub" style="margin-top:9px">'+esc(v.sub)+'</div>'
-    + (v.why.length
-        ? '<div class="vwhy">'+v.why.map(w=>'<div class="r">'
-            + (w.figure!=null?'<span class="num">'+money(w.figure)+'</span>':'')
-            + '<span>'+esc(w.text)+'</span>'
-            + (w.goto?'<button class="link" data-goto="'+w.goto+'">Open</button>':'')
-            + '</div>').join("")+'</div>'
-        : '');
-  el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
-}
-
 function renderDash(){
   const d=monthData(cursor), pace=paceOf(cursor), tt=targetTotal();
   const dim=daysIn(cursor);
   const disc=d.discNet;
 
   renderSetup();
-  renderVerdict();
   renderTrajectory();
   renderOutlook();
   renderIncome();
