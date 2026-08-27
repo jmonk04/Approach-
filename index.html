@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#F6F6F4">
 <title>Path</title>
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=1">
 <style>
 :root{
   --paper:#F6F6F4; --card:#FFFFFF; --ink:#12263A; --quiet:#5F717B; --rule:#DFE2DE;
@@ -65,7 +66,6 @@ html[data-blur="on"][data-reveal="1"] .num,html[data-blur="on"][data-reveal="1"]
 html[data-blur="on"][data-reveal="1"] .big,html[data-blur="on"][data-reveal="1"] .mid{filter:none}
 .mono-txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.02em;color:var(--onaccent)}
-nav button.main .pill.has-mono svg{display:none}
 nav button.main .pill .mono-txt{font-size:13px;letter-spacing:.01em}
 @media (prefers-reduced-motion:reduce){
   html[data-blur="on"] .num,html[data-blur="on"] .display{transition:none}}
@@ -150,7 +150,6 @@ nav button.main .pill{width:42px;height:42px;border-radius:22px;margin-top:-15px
   background:var(--quiet);border:3px solid var(--card);box-shadow:0 3px 10px rgba(22,35,43,.20);
   display:flex;align-items:center;justify-content:center;position:relative;flex:none;
   transition:background .3s ease}
-nav button.main .pill svg{width:100%;height:100%;display:block;color:var(--onink)}
 nav button.main .mlbl{font-size:9.5px;letter-spacing:.06em}
 nav button.main[aria-current="true"] .pill{box-shadow:0 3px 10px rgba(22,35,43,.28)}
 nav button.main.ok .pill{background:var(--path)}
@@ -352,19 +351,68 @@ label{display:block;margin-bottom:10px}
     <div class="band"><span class="eyebrow">Where you are</span></div>
     <div class="card" id="catCard"></div>
 
+    <!-- Bills lives here now, as the second half of the scope toggle above —
+         not its own tab. Hidden whenever Spending scope is showing. -->
+    <div id="billsScope" hidden>
+      <div class="card" id="commitTop"></div>
+      <div class="card" id="billList"></div>
+      <div class="card" id="commitCal"></div>
+      <div class="card">
+        <div class="eyebrow">Cost sharing</div>
+        <h2 style="margin:4px 0 4px">Your split</h2>
+        <p class="hint">The percentage of a shared bill that is yours. Mark individual
+          bills as split in the list above &mdash; rent and the utilities you share, not
+          insurance or loans. Their share is worked out from what each bill actually
+          came to, so a utility that swings takes their share with it.</p>
+        <div class="row" style="gap:8px;align-items:flex-end">
+          <label style="flex:1;margin:0"><span class="lt">You pay %</span>
+            <input type="number" id="splitPct" inputmode="numeric" min="1" max="100" step="1"></label>
+          <button class="btn" id="saveSplit" style="width:auto;padding:11px 16px">Save</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="eyebrow">Add</div>
+        <h2 style="margin:4px 0 4px">Something we can't detect</h2>
+        <p class="hint">Counts immediately. If a matching charge shows up later it takes over,
+          so nothing is counted twice.</p>
+        <label><span class="lt">Type</span>
+          <select id="bKind">
+            <option value="bill">Bill out</option>
+            <option value="pay">Paycheck in</option>
+            <option value="offset">Reimbursement in</option>
+          </select></label>
+        <p class="hint" id="bKindHint">A recurring debit the app can't see \u2014 rent, an
+          autopay it hasn't learned yet.</p>
+        <label><span class="lt">Name</span><input type="text" id="bName" placeholder="Cox Communications"></label>
+        <div class="row" style="gap:8px;margin-bottom:10px">
+          <label style="flex:1;margin:0"><span class="lt">Amount</span>
+            <input type="number" id="bAmt" inputmode="decimal" step="1"></label>
+          <label style="width:88px;margin:0"><span class="lt">Day</span>
+            <input type="number" id="bDay" inputmode="numeric" min="1" max="31" value="1"></label>
+        </div>
+        <div class="row" style="gap:8px;margin-bottom:10px">
+          <label style="flex:1;margin:0"><span class="lt">Category</span><select id="bCat"></select></label>
+          <label style="flex:1;margin:0"><span class="lt">Every</span>
+            <select id="bCad">
+              <option value="monthly">Month</option>
+              <option value="quarterly">Quarter</option>
+              <option value="annual">Year</option>
+              <option value="weekly">Week</option>
+            </select></label>
+        </div>
+        <button class="btn" id="addBill">Add bill</button>
+      </div>
+    </div>
+
     <div class="band"><span class="eyebrow">Where you’re headed</span></div>
     <div class="card" id="trajCard"></div>
-    <div class="card" id="outlookCard"></div>
-
-    <div class="band"><span class="eyebrow">Where you want to be</span></div>
-    <div class="card" id="saveCard"></div>
 
     <details class="fold" id="foldRest">
       <summary><span class="eyebrow">The rest of the month</span>
         <span class="chev" aria-hidden="true">&#8250;</span></summary>
       <div class="inner">
         <div class="card" id="incomeCard"></div>
-        <div class="card" id="billsCard"></div>
         <div class="card" id="flowCard"></div>
         <div class="card" id="splitCard"></div>
         <div class="card" id="peopleCard"></div>
@@ -372,63 +420,16 @@ label{display:block;margin-bottom:10px}
     </details>
   </section>
 
+  <section id="v-saving">
+    <div class="card" id="saveCard"></div>
+    <div class="card" id="outlookCard"></div>
+  </section>
+
   <section id="v-review"><div id="reviewList"></div></section>
 
   <section id="v-ledger">
     <div class="filters" id="ledgerFilters"></div>
     <div class="card" id="ledgerList"></div>
-  </section>
-
-  <section id="v-commit">
-    <div class="card" id="commitTop"></div>
-    <div class="card" id="billList"></div>
-    <div class="card" id="commitCal"></div>
-    <div class="card">
-      <div class="eyebrow">Cost sharing</div>
-      <h2 style="margin:4px 0 4px">Your split</h2>
-      <p class="hint">The percentage of a shared bill that is yours. Mark individual
-        bills as split in the list above &mdash; rent and the utilities you share, not
-        insurance or loans. Their share is worked out from what each bill actually
-        came to, so a utility that swings takes their share with it.</p>
-      <div class="row" style="gap:8px;align-items:flex-end">
-        <label style="flex:1;margin:0"><span class="lt">You pay %</span>
-          <input type="number" id="splitPct" inputmode="numeric" min="1" max="100" step="1"></label>
-        <button class="btn" id="saveSplit" style="width:auto;padding:11px 16px">Save</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="eyebrow">Add</div>
-      <h2 style="margin:4px 0 4px">Something we can't detect</h2>
-      <p class="hint">Counts immediately. If a matching charge shows up later it takes over,
-        so nothing is counted twice.</p>
-      <label><span class="lt">Type</span>
-        <select id="bKind">
-          <option value="bill">Bill out</option>
-          <option value="pay">Paycheck in</option>
-          <option value="offset">Reimbursement in</option>
-        </select></label>
-      <p class="hint" id="bKindHint">A recurring debit the app can't see — rent, an
-        autopay it hasn't learned yet.</p>
-      <label><span class="lt">Name</span><input type="text" id="bName" placeholder="Cox Communications"></label>
-      <div class="row" style="gap:8px;margin-bottom:10px">
-        <label style="flex:1;margin:0"><span class="lt">Amount</span>
-          <input type="number" id="bAmt" inputmode="decimal" step="1"></label>
-        <label style="width:88px;margin:0"><span class="lt">Day</span>
-          <input type="number" id="bDay" inputmode="numeric" min="1" max="31" value="1"></label>
-      </div>
-      <div class="row" style="gap:8px;margin-bottom:10px">
-        <label style="flex:1;margin:0"><span class="lt">Category</span><select id="bCat"></select></label>
-        <label style="flex:1;margin:0"><span class="lt">Every</span>
-          <select id="bCad">
-            <option value="monthly">Month</option>
-            <option value="quarterly">Quarter</option>
-            <option value="annual">Year</option>
-            <option value="weekly">Week</option>
-          </select></label>
-      </div>
-      <button class="btn" id="addBill">Add bill</button>
-    </div>
   </section>
 
   <section id="v-plan">
@@ -516,9 +517,9 @@ label{display:block;margin-bottom:10px}
         <p class="hint">Figures render soft. The eye in the header reveals them for ten seconds.</p>
         <label style="margin-top:12px"><span class="lt">Open on</span>
           <select id="pLaunch">
-            <option value="dash">Main tab</option><option value="review">Review</option>
-            <option value="ledger">Ledger</option><option value="commit">Bills</option>
-            <option value="plan">Plan</option></select></label>
+            <option value="dash">Spending</option><option value="saving">Saving</option>
+            <option value="plan">Planning</option><option value="review">Review</option>
+            <option value="ledger">Ledger</option><option value="bills">Bills</option></select></label>
         <label style="margin-top:12px"><span class="lt">Card member for unlabelled imports</span>
           <input type="text" id="pDefPerson" placeholder="Your name"></label>
         <p class="hint">On a shared card, rows with no card member are attributed here.</p>
@@ -535,24 +536,22 @@ label{display:block;margin-bottom:10px}
         <label><span class="lt">App name</span>
           <input type="text" id="pAppName" maxlength="18" placeholder="Path"></label>
         <label style="margin-top:12px"><span class="lt">Main tab</span>
-          <input type="text" id="pMainTab" maxlength="12" placeholder="Month"></label>
+          <input type="text" id="pMainTab" maxlength="12" placeholder="Spending"></label>
         <button class="btn" id="saveNaming">Save names</button>
       </div>
 
       <div class="card">
         <div class="eyebrow">Your spending limits</div>
         <h2 style="margin:4px 0 6px">Monthly ceilings</h2>
-        <p class="hint">The categories this month stands on, and what each is allowed to
-          be. Yours need not match anyone else's.</p>
+        <p class="hint">Name them what you call them, set what each is allowed to be.
+          Rename or remove any of them \u2014 nothing here is fixed, and Maja's list
+          need not match yours.</p>
         <div id="targetInputs"></div>
-        <button class="btn" id="saveTargets">Save limits</button>
-        <hr>
-        <div class="eyebrow">Your own categories</div>
-        <div id="customList" style="margin:8px 0 12px"></div>
-        <div class="row" style="gap:8px">
-          <input type="text" id="newCat" placeholder="Kids, Travel, Boat fund…" style="flex:1">
+        <div class="row" style="gap:8px;margin-top:2px">
+          <input type="text" id="newCat" placeholder="Kids, Travel, Boat fund\u2026" style="flex:1">
           <button class="btn" id="addCat" style="width:auto;padding:11px 16px">Add</button>
         </div>
+        <button class="btn" id="saveTargets" style="margin-top:12px">Save</button>
       </div>
     </div>
 
@@ -688,14 +687,13 @@ label{display:block;margin-bottom:10px}
   </section>
 </div>
 <nav>
-  <button data-v="review"><span class="dot"></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
-  <button data-v="ledger"><span class="dot"></span>Ledger</button>
   <button data-v="dash" class="main" aria-current="true">
-    <span class="pill" id="navPill" aria-hidden="true"><svg viewBox="0 0 64 64" fill="currentColor" aria-hidden="true"><g transform="translate(32 32) scale(.84) translate(-32 -32)"><path d="M50,32L22.5,48.6L11,50.6C20.5,46.6 38,39.5 50,32Z"/><rect x="18.6" y="12" width="4" height="35"/><path d="M20.6,14H29.5A7.5,7.5 0 0 1 29.5,29H20.6" fill="none" stroke="currentColor" stroke-width="4.4"/></g></svg></span>
-    <span class="mlbl" id="navMain">Month</span>
+    <span class="pill" id="navPill" aria-hidden="true"></span>
+    <span class="mlbl" id="navMain">Spending</span>
   </button>
-  <button data-v="commit"><span class="dot"></span>Bills</button>
-  <button data-v="plan"><span class="dot"></span>Plan</button>
+  <button data-v="saving"><span class="dot"></span>Saving</button>
+  <button data-v="plan"><span class="dot"></span>Planning</button>
+  <button data-v="review"><span class="dot"></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
 </nav>
 <div class="toast" id="toast"></div>
 <script>
@@ -710,14 +708,37 @@ label{display:block;margin-bottom:10px}
    month" — deliberately NOT the same word, because a tab named after the whole
    app tells you nothing about what's on it. */
 const APP_NAME = "Path";
-const MAIN_TAB = "Month";
+const MAIN_TAB = "Spending";
 
-/* ---------- taxonomy ---------- */
-const BASE_TARGET_CATS = ["Groceries/Household","Lifestyle/Personal","Dining/Coffee","Flex/Buffer"];
-/* Bills and utilities are one thing. Rent is the other. */
+/* ---------- taxonomy ----------
+   Categories are fully user-owned: rename, add, or remove any of them,
+   Groceries/Household included. What survives a rename is a stable id, not
+   the name — RULES below fire on that id so "Groceries/Household" can become
+   "Costco Runs" without Amazon charges losing their home. CAT_ROLE_SEED is
+   only the starting set; nothing after first load depends on these names. */
+const CAT_ROLE_SEED = [
+  { id:"groceries", name:"Groceries/Household" },
+  { id:"lifestyle", name:"Lifestyle/Personal" },
+  { id:"dining",    name:"Dining/Coffee" },
+  { id:"flex",      name:"Flex/Buffer" }
+];
+/* Bills and utilities are one thing. Rent is the other. These two stay fixed:
+   the cash forecast and the split-with-a-housemate logic key off them by
+   name, and neither is a "ceiling" a household budgets discretionary spend
+   against. */
 const FIXED_CATS  = ["Housing","Bills"];
-/* your four, plus anything you add */
-function TC(){ return BASE_TARGET_CATS.concat(S.settings.customCats||[]); }
+function TC(){ return (S.settings.categories||CAT_ROLE_SEED).map(c=>c.name); }
+function catById(id){ return (S.settings.categories||[]).find(c=>c.id===id); }
+function catByName(n){ return (S.settings.categories||[]).find(c=>c.name===n); }
+/* The fallback for anything that can't be placed: a role that no longer
+   exists (its category got renamed away from, or deleted), or a fresh
+   transaction nothing matched. Whatever currently holds catchAllId; if that
+   category was itself removed, the first remaining one takes over. */
+function catchAllCat(){
+  const cats=S.settings.categories||CAT_ROLE_SEED;
+  return catById(S.settings.catchAllId) || cats[0];
+}
+function catchAllName(){ return (catchAllCat()||{}).name || "Uncategorized"; }
 const SYS_CATS    = ["Transfer","Income","Savings"];
 function ALL_CATS(){ return [...TC(), ...FIXED_CATS, ...SYS_CATS]; }
 
@@ -747,9 +768,11 @@ const DEFAULTS = {
   aliases: {},
   notRecurring: [],
   bills: [],
-  customCats: [],
+  categories: CAT_ROLE_SEED.map(c=>({...c})),
+  catchAllId: "flex",
   gsMode: "spent",
   catMode: "pace",       // ceilings card: "pace" or "remaining"
+  catScope: "disc",      // spending-plan card: "disc" or "fixed" (bills)
   targets: {},          // cat -> monthly ceiling
   rules: {},            // normalized merchant -> category (learned)
   ambiguous: [],
@@ -870,27 +893,27 @@ const GROCERY_RX = /trader ?joe|whole ?foods|wholefds|ralphs|vons|albertsons|saf
 
 const RULES = [
   /* Standing rules: always Groceries/Household, no questions asked */
-  [/amzn|amazon/i,               "Amazon",         "Groceries/Household"],
-  [/costco/i,                    "Costco",         "Groceries/Household"],
-  [/target\b|tgt\b|supertarget/i, "Target",       "Groceries/Household"],
-  [/wal.?mart|wm supercenter/i,  "Walmart",        "Groceries/Household"],
-  [GROCERY_RX,                   "",               "Groceries/Household"],
+  [/amzn|amazon/i,               "Amazon",         "groceries"],
+  [/costco/i,                    "Costco",         "groceries"],
+  [/target\b|tgt\b|supertarget/i, "Target",       "groceries"],
+  [/wal.?mart|wm supercenter/i,  "Walmart",        "groceries"],
+  [GROCERY_RX,                   "",               "groceries"],
   /* Groceries / Household — the rest */
-  [/cvs|walgreens|rite aid/i,    "",               "Groceries/Household"],
-  [/home depot|lowe'?s|ace hardware|ikea/i, "",    "Groceries/Household"],
+  [/cvs|walgreens|rite aid/i,    "",               "groceries"],
+  [/home depot|lowe'?s|ace hardware|ikea/i, "",    "groceries"],
   /* Dining / Coffee */
-  [/starbucks/i,                 "Starbucks",      "Dining/Coffee"],
-  [/peet'?s|dutch bros|coffee|espresso|roasters|cafe/i, "", "Dining/Coffee"],
-  [/doordash|uber ?eats|grubhub|postmates|caviar/i, "", "Dining/Coffee"],
-  [/chipotle|panera|mcdonald|taco bell|in.?n.?out|shake shack|pizza|sushi|taqueria|cantina|brewing|tavern|restaurant|grill|kitchen|bbq|deli|bakery/i,"","Dining/Coffee"],
+  [/starbucks/i,                 "Starbucks",      "dining"],
+  [/peet'?s|dutch bros|coffee|espresso|roasters|cafe/i, "", "dining"],
+  [/doordash|uber ?eats|grubhub|postmates|caviar/i, "", "dining"],
+  [/chipotle|panera|mcdonald|taco bell|in.?n.?out|shake shack|pizza|sushi|taqueria|cantina|brewing|tavern|restaurant|grill|kitchen|bbq|deli|bakery/i,"","dining"],
   /* Lifestyle / Personal */
-  [/netflix|spotify|hulu|disney|max\.com|apple\.com\/bill|icloud|prime video|youtube ?premium|patreon|substack|audible|adobe|openai|anthropic|chatgpt/i,"","Lifestyle/Personal"],
-  [/lululemon|nike|rei|patagonia|athleta|sephora|ulta|barber|salon|spa|nordstrom|zara|h&m|old navy/i,"","Lifestyle/Personal"],
-  [/gym|fitness|crossfit|yoga|peloton|24 hour|equinox|orangetheory/i,"","Lifestyle/Personal"],
-  [/\bshell\b|chevron|\barco\b|\bunion 76\b|exxon|\bmobil\b|circle k|gas station/i,"","Lifestyle/Personal"],
-  [/uber(?! ?eats)|lyft|parking|fastrak|toll/i,"","Lifestyle/Personal"],
-  [/airlines|delta air|united air|southwest air|alaska air|marriott|hilton|hyatt|airbnb|expedia/i,"","Lifestyle/Personal"],
-  [/petco|petsmart|chewy|veterinar/i,"","Lifestyle/Personal"],
+  [/netflix|spotify|hulu|disney|max\.com|apple\.com\/bill|icloud|prime video|youtube ?premium|patreon|substack|audible|adobe|openai|anthropic|chatgpt/i,"","lifestyle"],
+  [/lululemon|nike|rei|patagonia|athleta|sephora|ulta|barber|salon|spa|nordstrom|zara|h&m|old navy/i,"","lifestyle"],
+  [/gym|fitness|crossfit|yoga|peloton|24 hour|equinox|orangetheory/i,"","lifestyle"],
+  [/\bshell\b|chevron|\barco\b|\bunion 76\b|exxon|\bmobil\b|circle k|gas station/i,"","lifestyle"],
+  [/uber(?! ?eats)|lyft|parking|fastrak|toll/i,"","lifestyle"],
+  [/airlines|delta air|united air|southwest air|alaska air|marriott|hilton|hyatt|airbnb|expedia/i,"","lifestyle"],
+  [/petco|petsmart|chewy|veterinar/i,"","lifestyle"],
   /* Fixed — normally on the bank side */
   [/mortgage|\brent\b|property mgmt|\bhoa\b|lease|loancare/i,"","Housing"],
   [/sdge|san diego gas|socal ?gas|edison|\bwater (dept|district|utility|authority|bill)|city of san diego|cox comm|spectrum|at&t|verizon|t.?mobile|xfinity|trash|waste mgmt/i,"","Bills"],
@@ -922,7 +945,14 @@ function baseType(t){
 function autoCategory(t){
   const learned = S.settings.rules[ruleKey(t.merchant)];
   if (learned) return { cat: learned, why: "learned" };
-  for (const [rx,,cat] of RULES){ if (cat && rx.test(t.rawDesc)) return { cat, why: "rule" }; }
+  for (const [rx,,role] of RULES){
+    if (!role) continue;
+    if (!rx.test(t.rawDesc)) continue;
+    /* Housing/Bills rules still carry a literal name — only the three
+       discretionary buckets were converted to roles above. */
+    const cat = FIXED_CATS.includes(role) ? role : (catById(role)||{}).name;
+    if (cat) return { cat, why: "rule" };
+  }
   return { cat: null, why: "unknown" };
 }
 
@@ -946,6 +976,13 @@ function assess(t, pool){
       && Math.abs(x.amount-t.amount)>0.011
       && Math.abs(x.amount-t.amount)<=Math.max(x.amount,t.amount)*0.30);
     if(twin) return { ok:false, reason:"near-duplicate" };
+  }
+
+  if (t.type==="spend"){
+    const billTxn=pool.find(x=>x.id!==t.id && x.billId && !x.pending
+      && x.category===t.category && monthOf(x)===monthOf(t)
+      && Math.abs(x.amount-t.amount)<=Math.max(x.amount,t.amount,1)*0.15);
+    if (billTxn) return { ok:false, reason:"bill-duplicate", billTxn:billTxn.id };
   }
 
   const amb = (S.settings.ambiguous||[]).some(a =>
@@ -975,7 +1012,7 @@ function assess(t, pool){
 
 /* Hold reasons where the category is settled and only the amount is in doubt.
    Everything else is unattributed and shows on the hero total instead. */
-const CAT_KNOWN_HOLDS = new Set(["amount-outlier","reopened"]);
+const CAT_KNOWN_HOLDS = new Set(["amount-outlier","reopened","bill-duplicate"]);
 
 const REASON_TEXT = {
   "duplicate":          "Matches a transaction already on file",
@@ -983,7 +1020,8 @@ const REASON_TEXT = {
   "unmatched-refund":   "Refund with no charge to attach it to",
   "ambiguous-merchant": "This merchant lands in different buckets each time",
   "new-merchant":       "First time seeing this merchant",
-  "amount-outlier":     "Much larger than usual for this merchant"
+  "amount-outlier":     "Much larger than usual for this merchant",
+  "bill-duplicate":     "May be the bill you already confirmed, arriving from the bank"
 };
 
 /* ---------- build ---------- */
@@ -1006,7 +1044,8 @@ function makeTxn(p){
     linkedTo: null,
     dupeOf: null,
     pending: false,
-    reason: ""
+    reason: "",
+    billId: p.billId||null
   };
   t.merchant = p.merchant || normalizeMerchant(t.rawDesc);
   t.type = p.type || baseType(t);
@@ -1014,7 +1053,7 @@ function makeTxn(p){
   else if (t.type === "transfer") t.category = "Transfer";
   else if (t.type === "income")   t.category = "Income";
   else if (t.type === "savings")  t.category = "Savings";
-  else t.category = autoCategory(t).cat || "Flex/Buffer";
+  else t.category = autoCategory(t).cat || catchAllName();
   t.hash = [t.account,t.date,Math.abs(t.amount).toFixed(2),
             t.rawDesc.toLowerCase().replace(/\s+/g,"").slice(0,28)].join("|");
   return t;
@@ -1079,6 +1118,7 @@ function ingest(parts){
     const a=assess(t,pool);
     t.pending=!a.ok;
     t.reason=a.reason;
+    if(a.billTxn) t.billMatch=a.billTxn;
   }
   S.txns = pool;
   S.txns.sort((a,b)=> a.date<b.date?1 : a.date>b.date?-1 : 0);
@@ -1137,6 +1177,20 @@ function resolve(id, cat, teach){
 const CAT_MIGRATION = { "Utilities":"Bills", "Insurance":"Bills", "Debt/Loan":"Bills" };
 function migrate(){
   let n=0;
+  /* One-time fold-in: installs that predate user-editable categories kept
+     extras in customCats, separate from the fixed four. Same names, so
+     nothing in targets/catIcons/txns needs rekeying — they're just joining
+     the one list that's now editable. */
+  if((S.settings.customCats||[]).length){
+    const cats=S.settings.categories||(S.settings.categories=CAT_ROLE_SEED.map(c=>({...c})));
+    for(const name of S.settings.customCats)
+      if(!cats.some(c=>c.name===name)) cats.push({id:uid(),name});
+    S.settings.customCats=[];
+  }
+  if(!Array.isArray(S.settings.categories) || !S.settings.categories.length)
+    S.settings.categories=CAT_ROLE_SEED.map(c=>({...c}));
+  if(!catById(S.settings.catchAllId))
+    S.settings.catchAllId=(catById("flex")||S.settings.categories[0]).id;
   for(const t of S.txns){
     if(CAT_MIGRATION[t.category]){ t.category=CAT_MIGRATION[t.category]; n++; }
   }
@@ -1320,6 +1374,41 @@ function incomeView(ym){
    month, so a single fixed reimbursement figure is wrong by construction. The
    split is therefore a property of each bill, applied to whatever that bill
    actually came to. */
+/* How many cycles apart two ym labels are — the anchor arithmetic a
+   quarterly or annual bill's due-cycle check runs on. */
+function monthsBetween(a,b){
+  const [ay,am]=a.split("-").map(Number), [by,bm]=b.split("-").map(Number);
+  return (by-ay)*12+(bm-am);
+}
+/* Is this declared bill expected in cycle ym at all? Weekly bills are folded
+   into "every cycle" here — this app has no sub-monthly confirmation surface,
+   and asking someone to confirm a weekly bill four times a month would be
+   worse than the ambiguity it resolves. A bill with no anchor yet (predates
+   this) is always due, which is the conservative default: it shows up for
+   confirmation rather than silently skipping a cycle. */
+function billDueThisCycle(b,ym){
+  const per=b.cadence==="annual"?12:b.cadence==="quarterly"?3:1;
+  if(per<=1) return true;
+  const diff=monthsBetween(b.startYM||ym,ym);
+  return diff>=0 && diff%per===0;
+}
+/* Turns a declared bill into a real transaction for one cycle — the only
+   thing that makes "posted" true anywhere in the app. Runs through the same
+   ingest() pipeline as an import or a manual entry, so it gets a dedup hash,
+   refund linking and the same confidence check as anything else. The rule is
+   taught right before posting because the category was just chosen by hand;
+   making it wait for the new-merchant hold and a second decision would be
+   asking the same question twice. */
+function postBill(bill, ym){
+  if((bill.kind||"bill")!=="bill") return null;
+  S.settings.rules[ruleKey(bill.name)]=bill.category;
+  return ingest([{
+    date: dateOfDay(ym, Math.min(31,Math.max(1,Number(bill.day)||1))),
+    rawDesc: bill.name, amount: Math.abs(Number(bill.amount)||0), category: bill.category,
+    account: importAccount, source: "bill", billId: bill.id
+  }]);
+}
+
 function splitKey(name){ return String(name||"").toLowerCase().trim(); }
 function myPct(){
   const v=Number((S.settings||{}).splitPct);
@@ -1334,14 +1423,16 @@ function billsThisMonth(ym){
   const d=monthData(ym);
   const posted=FIXED_CATS.reduce((a,c)=>a+(d.byCat[c]||0),0) - d.refundsFixed;
   const seen=new Set(d.live.filter(t=>FIXED_CATS.includes(t.category)).map(t=>t.merchant));
-  const rows=billRows();
+  const rows=billRows(ym);
 
-  /* Outgoing bills: detected plus declared. Declared rows used to be excluded
-     here, so anything typed in Bills reached no forecast at all — and a cash
-     account you cannot import never produces the three occurrences detection
-     needs, so declared is the ONLY source for those. */
+  /* Outgoing bills: detected plus declared. A detected bill's "posted" is
+     still a merchant-name guess against the statement, because that's all
+     three-occurrences pattern-matching ever had to go on. A declared bill's
+     is exact — its row already carries whether ITS OWN transaction (found by
+     id, not name) exists this cycle, so a declared "Rent" no longer waits on
+     a bank export ever spelling it that way. */
   const known=rows.filter(r=>r.kind==="bill");
-  const pending=known.filter(r=>!seen.has(r.name))
+  const pending=known.filter(r=>r.origin==="declared" ? r.missed : !seen.has(r.name))
     .map(r=>({...r, estimate: r.varies?r.latest:r.amount}))
     .sort((a,b)=>a.day-b.day);
   const toCome=pending.reduce((a,r)=>a+r.estimate,0);
@@ -1449,7 +1540,7 @@ function verdict(ym){
     why.push({ text:"held for review, out of every total above", figure:held,
                goto:"review" });
   if (b.toCome>0)
-    why.push({ text:"in bills still expected this month", figure:b.toCome, goto:"commit" });
+    why.push({ text:"in bills still expected this month", figure:b.toCome, goto:"bills" });
   if (cashLeft!=null && cashLeft<0)
     why.push({ text:"more than the month brings in, all in", figure:-cashLeft });
   else if (cashLeft!=null && why.length<3)
@@ -1881,7 +1972,8 @@ function billHistory(merchant, n){
   }).filter(x=>x.amount>0);
 }
 /* Every bill as one row, however we learned about it. */
-function billRows(){
+function billRows(ym){
+  ym=ym||cycleOf(todayISO());
   const rec=detectRecurring().filter(r=>r.confirmed && FIXED_CATS.includes(r.category));
   const rows=rec.map(r=>{
     const hist=billHistory(r.merchant,6);
@@ -1898,16 +1990,23 @@ function billRows(){
   });
   /* Declared rows. A declared item has a kind: an outgoing bill, a paycheck
      (timing for the cash forecast, never counted as spending), or a
-     reimbursement that reduces your share of a bill rather than adding income. */
+     reimbursement that reduces your share of a bill rather than adding income.
+     Only "bill" rows have a real transaction to look for; paychecks and
+     reimbursements are timing/offset metadata and always show. */
   for(const b of billStatus()){
     if(b.detected && (b.kind||"bill")==="bill") continue;
     const per = b.cadence==="annual"?12 : b.cadence==="quarterly"?3
               : b.cadence==="weekly"?(1/4.33) : 1;
+    const isBill=(b.kind||"bill")==="bill";
+    const postedTxn = isBill
+      ? S.txns.find(t=>!t.pending && t.billId===b.id && monthOf(t)===ym) : null;
+    if(isBill && !postedTxn && !billDueThisCycle(b,ym)) continue;
+    const amt = postedTxn ? postedTxn.amount : Number(b.amount||0);
     rows.push({ key:b.id, id:b.id, name:b.name, category:b.category, day:Number(b.day)||1,
                 kind:b.kind||"bill",
-                amount:Number(b.amount||0), lo:Number(b.amount||0), hi:Number(b.amount||0),
+                amount:amt, lo:Number(b.amount||0), hi:Number(b.amount||0),
                 hist:[], varies:false, cadence:b.cadence, monthly:Number(b.amount||0)/per,
-                latest:Number(b.amount||0), missed:!b.seenThisMonth, changed:null,
+                latest:amt, missed: isBill && !postedTxn, changed:null,
                 origin:"declared", trend:0 });
   }
   return rows.sort((a,b)=>a.day-b.day||b.monthly-a.monthly);
@@ -1920,7 +2019,7 @@ function cashFlow(ym, mode){
   const income = plan ? Number(S.settings.income||0) : d.income;
   let housing, bills, disc;
   if(plan){
-    const rows=billRows();
+    const rows=billRows(ym);
     housing = rows.filter(r=>r.category==="Housing").reduce((a,r)=>a+r.monthly,0);
     bills   = rows.filter(r=>r.category!=="Housing").reduce((a,r)=>a+r.monthly,0);
     disc    = targetTotal();
@@ -2448,38 +2547,6 @@ function renderTrajectory(){
 }
 
 /* ---------- BILLS AT A GLANCE ---------- */
-function renderBillsGlance(){
-  const b=billsThisMonth(cursor);
-  const el=document.getElementById("billsCard");
-  if(!b.anyKnown && !b.posted){
-    el.innerHTML='<div class="spread"><span class="eyebrow">Bills</span>'
-      + '<button class="link" data-goto="commit">Set up</button></div>'
-      + '<div class="empty">No bills tracked yet. Import the cash account, or add the ones you know under Bills.</div>';
-    el.querySelectorAll("[data-goto]").forEach(x=>x.onclick=()=>go(x.dataset.goto));
-    return;
-  }
-  const pct=b.total>0?(b.posted/b.total)*100:0;
-  el.innerHTML='<div class="spread"><span class="eyebrow">Bills</span>'
-    + '<button class="link" data-goto="commit">All bills</button></div>'
-    + '<div class="twocol" style="margin-top:10px">'
-    +   '<div class="col"><div class="sm muted">Posted</div>'
-    +     '<div class="mid num">'+money(b.posted)+'</div></div>'
-    +   '<div class="col"><div class="sm muted">Still to come</div>'
-    +     '<div class="mid num '+(b.toCome>0?"holdc":"pathc")+'">'+money(b.toCome)+'</div></div>'
-    + '</div>'
-    + '<div class="billbar"><div class="bfill" style="width:'+pct.toFixed(1)+'%"></div></div>'
-    + '<div class="spread sm muted" style="margin-top:7px">'
-    +   '<span>'+money(b.total)+' this month</span>'
-    +   '<span>'+(b.toCome>0?Math.round(100-pct)+"% outstanding":"all posted")+'</span></div>'
-    + (b.next
-       ? '<div class="spread" style="margin-top:11px;border-top:1px solid var(--rule);padding-top:9px">'
-         + '<span class="sm">Next up \u00b7 <strong>'+esc(b.next.name)+'</strong></span>'
-         + '<span class="num sm">day '+b.next.day+' \u00b7 '+money(b.next.estimate)
-         + (b.next.varies?' est':'')+'</span></div>'
-       : '');
-  el.querySelectorAll("[data-goto]").forEach(x=>x.onclick=()=>go(x.dataset.goto));
-}
-
 /* ---------- fold summary: enough to decide whether to open it ---------- */
 function renderFoldSummary(){
   const d=monthData(cursor), b=billsThisMonth(cursor);
@@ -2707,7 +2774,6 @@ function renderDash(){
   renderTrajectory();
   renderOutlook();
   renderIncome();
-  renderBillsGlance();
   renderFlow();
   renderFoldSummary();
 
@@ -2739,30 +2805,53 @@ function renderDash(){
         + '<span class="num '+(proj>=obj?"pathc":"overc")+'">'+(proj*100).toFixed(0)+'%</span></div>':'');
   }
 
-  /* the ceilings — readable two ways */
-  const list=TC().map(c=>({
+  /* the ceilings — readable two ways, and now two SETS: your own spending
+     limits, or the household's non-discretionary side (Housing, Bills) —
+     which used to only be visible by filtering the Ledger by hand. A
+     "target" for the fixed side is the standing expected monthly amount from
+     billRows(), the closest thing a bill has to a ceiling. */
+  const scope=S.settings.catScope==="fixed"?"fixed":"disc";
+  const scopeCats = scope==="disc" ? TC() : FIXED_CATS;
+  const billMonthly = scope==="fixed"
+    ? billRows(cursor).filter(r=>(r.kind||"bill")==="bill")
+        .reduce((a,r)=>{ a[r.category]=(a[r.category]||0)+r.monthly; return a; },{})
+    : {};
+  const list=scopeCats.map(c=>({
     cat:c,
     spent:d.byCat[c]||0,
-    target:Number(S.settings.targets[c]||0),
-    /* Money held against THIS ceiling, so the tank can show what is at risk.
+    target: scope==="disc" ? Number(S.settings.targets[c]||0) : (billMonthly[c]||0),
+    /* Money held against THIS category, so the tank can show what is at risk.
        Only holds whose category is already settled count — a new or ambiguous
-       merchant defaults to Flex/Buffer in makeTxn, and pinning it there would
-       be exactly the silent guess the review queue exists to prevent. */
+       merchant defaults to the catch-all in makeTxn, and pinning it there
+       would be exactly the silent guess the review queue exists to prevent. */
     held:d.held.filter(t=>t.category===c && CAT_KNOWN_HOLDS.has(t.reason))
                .reduce((a,t)=>a+Math.abs(t.amount),0)
   }));
   const cm=S.settings.catMode==="remaining"?"remaining":"pace";
   const catEl=document.getElementById("catCard");
-  catEl.innerHTML='<div class="spread"><span class="eyebrow">'
-    + 'Spending plan</span>'
-    + '<div class="miniseg" id="catMode" role="group" aria-label="Ceiling view">'
-    +   '<button data-c="pace" aria-pressed="'+(cm==="pace")+'">Pace</button>'
-    +   '<button data-c="remaining" aria-pressed="'+(cm==="remaining")+'">Left</button></div></div>'
-    + list.map(x=>'<div style="margin-top:14px"><div class="spread"><strong>'+esc(withIcon(x.cat))+'</strong></div>'
-      + ribbon(x.spent,x.target,pace,x.held,cm,dim)+'</div>').join("");
-  catEl.querySelectorAll("#catMode button").forEach(b=>b.onclick=()=>{
-    S.settings.catMode=b.dataset.c; save(); renderDash();
+  catEl.innerHTML='<div class="spread"><span class="eyebrow">Spending plan</span></div>'
+    + '<div class="spread" style="margin-top:7px">'
+    +   '<div class="miniseg" id="catScope" role="group" aria-label="Spending scope">'
+    +     '<button data-s="disc" aria-pressed="'+(scope==="disc")+'">Spending</button>'
+    +     '<button data-s="fixed" aria-pressed="'+(scope==="fixed")+'">Bills</button></div>'
+    +   '<div class="miniseg" id="catMode" role="group" aria-label="Ceiling view">'
+    +     '<button data-c="pace" aria-pressed="'+(cm==="pace")+'">Pace</button>'
+    +     '<button data-c="remaining" aria-pressed="'+(cm==="remaining")+'">Left</button></div>'
+    + '</div>'
+    + list.map(x=>'<div class="catrow" data-catrow="'+esc(x.cat)+'" '
+      + 'style="margin-top:14px;cursor:pointer"><div class="spread"><strong>'+esc(withIcon(x.cat))+'</strong></div>'
+      + ribbon(x.spent,x.target,pace,x.held,cm,dim)+'</div>').join("")
+    + '<p class="hint" style="margin-top:12px">Tap a category to see its transactions.</p>';
+  catEl.querySelectorAll("#catScope button").forEach(b=>{
+    b.onclick=()=>{ S.settings.catScope=b.dataset.s; save(); renderDash(); };
   });
+  catEl.querySelectorAll("#catMode button").forEach(b=>{
+    b.onclick=()=>{ S.settings.catMode=b.dataset.c; save(); renderDash(); };
+  });
+  catEl.querySelectorAll("[data-catrow]").forEach(r=>{
+    r.onclick=()=>{ ledgerFilter=r.dataset.catrow; renderLedger(); go("ledger"); };
+  });
+  document.getElementById("billsScope").hidden = scope!=="fixed";
 
   const ppl=Object.keys(d.byPerson);
   document.getElementById("peopleCard").innerHTML='<div class="eyebrow">By person</div>'
@@ -2803,6 +2892,24 @@ function renderReview(){
     + '</div>'
     + held.map(t=>{
       const cats=[...TC(),...FIXED_CATS];
+      /* Not "which category" \u2014 that part is already settled, it matched a
+         bill by category and amount. The actual question is whether this IS
+         that bill arriving from the bank, or a second real charge beside it. */
+      if(t.reason==="bill-duplicate"){
+        const bt=S.txns.find(x=>x.id===t.billMatch);
+        return '<div class="card review" data-id="'+t.id+'">'
+          + '<div class="spread"><span class="eyebrow overc">'+esc(REASON_TEXT[t.reason])+'</span></div>'
+          + '<div class="spread" style="margin:6px 0 2px"><strong>'+esc(t.merchant)+'</strong>'
+          +   '<span class="num mid">'+money2(t.amount)+'</span></div>'
+          + '<div class="meta">'+t.date+' \u00b7 '+esc(t.category)+' \u00b7 '+esc(acct(t.account).name)+'</div>'
+          + '<div class="rawd num">'+esc(t.rawDesc)+'</div>'
+          + (bt ? '<div class="hint" style="margin-top:8px">Already on file: '+esc(bt.merchant)
+              +' for '+money2(bt.amount)+' on '+bt.date+'.</div>' : '')
+          + '<div class="row" style="gap:8px;margin-top:10px">'
+          +   '<button class="btn ghost" style="flex:1" data-billdup="replace">Same bill \u2014 replace</button>'
+          +   '<button class="btn ghost" style="flex:1" data-billdup="keep">Different \u2014 keep both</button>'
+          + '</div></div>';
+      }
       return '<div class="card review" data-id="'+t.id+'">'
         + '<div class="spread"><span class="eyebrow overc">'+esc(REASON_TEXT[t.reason]||"Needs a decision")+'</span></div>'
         + '<div class="spread" style="margin:6px 0 2px"><strong>'+esc(t.merchant)+'</strong>'
@@ -2844,11 +2951,28 @@ function renderReview(){
       resolve(id,b.dataset.cat,teach);
       save(); renderAll(); toast("Filed to "+b.dataset.cat);
     });
-    card.querySelector("[data-drop]").onclick=()=>{
+    const dropBtn=card.querySelector("[data-drop]");
+    if(dropBtn) dropBtn.onclick=()=>{
       S.txns=S.txns.filter(x=>x.id!==id);
       save(); renderAll(); toast("Discarded");
     };
+    card.querySelectorAll("[data-billdup]").forEach(b=>b.onclick=()=>{
+      resolveBillDuplicate(id, b.dataset.billdup);
+      save(); renderAll();
+      toast(b.dataset.billdup==="replace" ? "Replaced with the imported charge" : "Kept both");
+    });
   });
+}
+
+/* "Same bill" \u2014 the manual placeholder gave way to the real thing arriving
+   from the bank, so it goes and the import stands in its place, actual amount
+   and all. "Different" \u2014 they were never the same charge; the import
+   simply resembled one, so it's released to stand on its own beside it. */
+function resolveBillDuplicate(id, mode){
+  const t=S.txns.find(x=>x.id===id);
+  if(!t) return;
+  if(mode==="replace") S.txns=S.txns.filter(x=>x.id!==t.billMatch);
+  t.pending=false; t.reason=""; t.billMatch=null;
 }
 
 /* ============================================================
@@ -2856,14 +2980,15 @@ function renderReview(){
    ============================================================ */
 function renderLedger(){
   const d=monthData(cursor);
-  const opts=["all",...TC(),"Fixed","Transfer",...S.settings.people];
+  const opts=["all",...TC(),...FIXED_CATS,"Fixed","Transfer",...S.settings.people];
   const fb=document.getElementById("ledgerFilters");
   fb.innerHTML=opts.map(o=>'<button class="chip" data-f="'+esc(o)+'" aria-pressed="'
     +(ledgerFilter===o)+'">'+esc(o)+'</button>').join("");
   fb.querySelectorAll("button").forEach(b=>b.onclick=()=>{ ledgerFilter=b.dataset.f; renderLedger(); });
 
   let rows=d.live.slice();
-  if(TC().includes(ledgerFilter)) rows=rows.filter(t=>t.category===ledgerFilter);
+  if(TC().includes(ledgerFilter)||FIXED_CATS.includes(ledgerFilter))
+    rows=rows.filter(t=>t.category===ledgerFilter);
   else if(ledgerFilter==="Fixed") rows=rows.filter(t=>FIXED_CATS.includes(t.category));
   else if(ledgerFilter==="Transfer") rows=rows.filter(t=>t.type==="transfer");
   else if(ledgerFilter!=="all") rows=rows.filter(t=>personOf(t)===ledgerFilter);
@@ -2967,7 +3092,12 @@ function renderCommitted(){
         const range=r.varies
           ? '<span class="range">'+money(r.lo)+'\u2013'+money(r.hi)+'</span>'
           : '';
-        const flags=(r.missed?'<span class="tag dup">not seen yet</span>':'')
+        /* A detected row's "missed" really means bank data hasn't shown up. A
+           declared row's means the opposite kind of gap \u2014 nothing to
+           detect, just nobody has confirmed this cycle's bill yet \u2014 so it
+           gets its own wording and its own way to close the gap. */
+        const flags=(r.missed&&r.origin==="declared"?'<span class="tag dup">awaiting confirmation</span>'
+            :r.missed?'<span class="tag dup">not seen yet</span>':'')
           + (r.origin==="declared"?'<span class="tag">you added</span>':'')
           + (isShared(r.name)?'<span class="tag ref">split '+myPct()+'/'+(100-myPct())+'</span>':'')
           + (r.changed?'<span class="tag one">'+(r.changed==="up"?"\u2191":"\u2193")
@@ -2979,6 +3109,9 @@ function renderCommitted(){
           +   '<div class="meta">'+esc(r.category)
           +   (r.cadence!=="monthly"?' \u00b7 '+r.cadence:'')+'</div>'
           + (r.varies?sparkbar(r.hist,r.lo,r.hi):'')
+          + (r.missed&&r.origin==="declared"
+             ? '<button class="link" data-confirm="'+r.id+'" style="margin-right:14px">Confirm posted</button>'
+             : '')
           + '<button class="link splitbtn" data-split="'+esc(r.name)+'">'
           +   (isShared(r.name)?"Not split":"Mark split")+'</button></div>'
           + '<div class="bamt"><div class="amt">'+money2(amt)+'</div>'
@@ -3004,6 +3137,14 @@ function renderCommitted(){
     list.querySelectorAll("[data-bid]").forEach(r=>r.onclick=()=>{
       S.settings.bills=(S.settings.bills||[]).filter(b=>b.id!==r.dataset.bid);
       save(); renderAll(); toast("Removed");
+    });
+    list.querySelectorAll("[data-confirm]").forEach(b=>b.onclick=(e)=>{
+      e.stopPropagation();
+      const bill=(S.settings.bills||[]).find(x=>x.id===b.dataset.confirm);
+      if(!bill) return;
+      const r=postBill(bill,cursor);
+      save(); renderAll();
+      toast(r&&r.held ? bill.name+" needs a look in Review" : bill.name+" confirmed");
     });
   }
 
@@ -3125,13 +3266,21 @@ function renderProject(){
    ============================================================ */
 function renderPlan(){
   renderProject();
-  document.getElementById("targetInputs").innerHTML=TC().map(c=>
-    '<div class="spread" style="margin-bottom:9px;align-items:center;gap:8px">'
-    + '<input type="text" maxlength="2" data-icon="'+esc(c)+'" aria-label="Glyph for '+esc(c)+'" '
-    +   'style="width:44px;text-align:center;padding:9px 4px" value="'+esc(catIcon(c))+'">'
-    + '<span class="lt" style="flex:1;margin:0">'+esc(c)+'</span>'
-    + '<input type="number" inputmode="decimal" step="10" data-cat="'+esc(c)+'" '
-    + 'style="width:100px" value="'+(S.settings.targets[c]??"")+'"></div>').join("");
+  const cats=S.settings.categories||CAT_ROLE_SEED;
+  document.getElementById("targetInputs").innerHTML=cats.map(c=>
+    '<div class="spread" style="margin-bottom:9px;align-items:center;gap:7px" data-row="'+c.id+'">'
+    + '<input type="text" maxlength="2" data-icon="'+c.id+'" aria-label="Glyph for '+esc(c.name)+'" '
+    +   'style="width:38px;text-align:center;padding:9px 3px;flex:none" value="'+esc(catIcon(c.name))+'">'
+    + '<input type="text" data-name="'+c.id+'" aria-label="Category name" '
+    +   'style="flex:1;min-width:0" value="'+esc(c.name)+'">'
+    + '<input type="number" inputmode="decimal" step="10" data-target="'+c.id+'" aria-label="Monthly limit for '+esc(c.name)+'" '
+    +   'style="width:84px;flex:none" value="'+(S.settings.targets[c.name]??"")+'">'
+    + (cats.length>1
+        ? '<button type="button" class="link overc" data-del="'+c.id+'" aria-label="Remove '+esc(c.name)+'" '
+          + 'style="flex:none;font-size:16px;text-decoration:none;padding:4px 2px">\u2715</button>'
+        : '<span style="width:20px;flex:none"></span>')
+    + '</div>').join("");
+  document.querySelectorAll("#targetInputs [data-del]").forEach(b=>b.onclick=()=>removeCategory(b.dataset.del));
 
   /* recurring roster */
   const rec=detectRecurring();
@@ -3181,25 +3330,57 @@ function renderPlan(){
         + money(p.insideCeilings)+'/mo of recurring charges already sit inside your limits and '
         + 'are not double-counted here.</div>':'');
 
-  renderCustomCats();
   renderAliases();
 }
 
-function renderCustomCats(){
-  const cats=S.settings.customCats||[];
-  document.getElementById("customList").innerHTML = cats.length
-    ? cats.map(c=>'<div class="spread eq" data-cc="'+esc(c)+'" style="cursor:pointer">'
-      + '<span>'+esc(c)+'</span><span class="link overc">Remove</span></div>').join("")
-    : '<div class="sm muted">None yet. The four built-in categories are always there.</div>';
-  document.querySelectorAll("[data-cc]").forEach(r=>r.onclick=()=>{
-    const c=r.dataset.cc;
-    const used=S.txns.filter(t=>t.category===c).length;
-    if(used && !confirm(used+" transactions use "+c+". They'll move to Flex/Buffer. Continue?")) return;
-    S.txns.forEach(t=>{ if(t.category===c) t.category="Flex/Buffer"; });
-    S.settings.customCats=(S.settings.customCats||[]).filter(x=>x!==c);
-    delete (S.settings.targets||{})[c];
-    save(); renderAll(); toast("Removed "+c);
-  });
+/* Renaming a category is a rekey, not a new thing: every transaction, the
+   ceiling, the glyph, and any taught merchant rule follow the name to its
+   new spelling. The role (if any) stays on the object untouched, which is
+   what lets auto-categorization keep finding a renamed category. */
+function renameCategory(id, newName){
+  const c=catById(id);
+  if(!c || newName===c.name) return;
+  const old=c.name;
+  if(TC().some(x=>x!==old && x.toLowerCase()===newName.toLowerCase())){
+    toast("Another category is already named "+newName); return false;
+  }
+  S.txns.forEach(t=>{ if(t.category===old) t.category=newName; });
+  const tg=S.settings.targets||{};
+  if(old in tg){ tg[newName]=tg[old]; delete tg[old]; }
+  const ic=S.settings.catIcons||{};
+  if(old in ic){ ic[newName]=ic[old]; delete ic[old]; }
+  for(const k of Object.keys(S.settings.rules||{}))
+    if(S.settings.rules[k]===old) S.settings.rules[k]=newName;
+  if(ledgerFilter===old) ledgerFilter=newName;
+  c.name=newName;
+  return true;
+}
+
+/* Removing a category reassigns whatever used it \u2014 transactions, its
+   ceiling, its glyph \u2014 to the catch-all, same as the app has always done
+   for a custom category. The only new part is that ANY category can now be
+   the one removed, including the one currently doing catch-all duty, so a
+   replacement gets promoted before the old one is gone. */
+function removeCategory(id){
+  const cats=S.settings.categories||[];
+  if(cats.length<=1){ toast("At least one category has to stay"); return; }
+  const c=catById(id); if(!c) return;
+  const used=S.txns.filter(t=>t.category===c.name).length;
+  if(used && !confirm(used+" transactions use "+c.name+". They'll move to "
+      +catchAllName()+". Continue?")) return;
+
+  const wasCatchAll = S.settings.catchAllId===id;
+  S.settings.categories=cats.filter(x=>x.id!==id);
+  if(wasCatchAll) S.settings.catchAllId=S.settings.categories[0].id;
+
+  const dest=catchAllName();
+  S.txns.forEach(t=>{ if(t.category===c.name) t.category=dest; });
+  delete (S.settings.targets||{})[c.name];
+  delete (S.settings.catIcons||{})[c.name];
+  for(const k of Object.keys(S.settings.rules||{}))
+    if(S.settings.rules[k]===c.name) delete S.settings.rules[k];
+  if(ledgerFilter===c.name) ledgerFilter="all";
+  save(); renderAll(); toast("Removed "+c.name);
 }
 
 function renderAliases(){
@@ -3527,11 +3708,18 @@ function renderHeader(){
   const btn=document.querySelector("nav button.main");
   const v=verdict(cursor);
   btn.className="main "+v.state;
-  btn.setAttribute("aria-label", MAIN_TAB+" \u2014 "+v.word);
+  btn.setAttribute("aria-label", mainTabName()+" \u2014 "+v.word);
 }
 function renderAll(){ renderHeader(); renderDash(); renderReview(); renderLedger();
   renderCommitted(); renderPlan(); renderProfile(); renderRules(); renderData(); }
 function go(v){
+  /* "bills" isn't a section of its own \u2014 it's the Bills half of the scope
+     toggle on Spending. Anything that used to link straight to the old Bills
+     tab lands here instead, with that scope already selected. */
+  if(v==="bills"){
+    if(S.settings.catScope!=="fixed"){ S.settings.catScope="fixed"; save(); renderDash(); }
+    v="dash";
+  }
   document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-current",x.dataset.v===v));
   document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));
   window.scrollTo({top:0,behavior:"instant"});
@@ -3645,17 +3833,23 @@ document.getElementById("mprev").onclick=()=>{ cursor=ymShift(cursor,-1); render
 document.getElementById("mnext").onclick=()=>{ cursor=ymShift(cursor,1); renderAll(); };
 
 document.getElementById("saveTargets").onclick=()=>{
+  document.querySelectorAll("#targetInputs [data-name]").forEach(i=>{
+    const v=i.value.trim();
+    if(v) renameCategory(i.dataset.name, v);
+  });
   const ic={...(S.settings.catIcons||{})};
   document.querySelectorAll("#targetInputs [data-icon]").forEach(i=>{
+    const c=catById(i.dataset.icon); if(!c) return;
     const v=i.value.trim();
-    if(v) ic[i.dataset.icon]=v.slice(0,2); else delete ic[i.dataset.icon];
+    if(v) ic[c.name]=v.slice(0,2); else delete ic[c.name];
   });
   S.settings.catIcons=ic;
   const t={};
-  document.querySelectorAll("#targetInputs input").forEach(i=>{
-    const v=Number(i.value); if(v>0) t[i.dataset.cat]=v;
+  document.querySelectorAll("#targetInputs [data-target]").forEach(i=>{
+    const c=catById(i.dataset.target); if(!c) return;
+    const v=Number(i.value); if(v>0) t[c.name]=v;
   });
-  S.settings.targets=t; save(); renderAll(); toast("Ceilings saved");
+  S.settings.targets=t; save(); renderAll(); toast("Saved");
 };
 document.getElementById("saveAliases").onclick=()=>{
   const a={};
@@ -3666,7 +3860,7 @@ document.getElementById("addCat").onclick=()=>{
   const v=document.getElementById("newCat").value.trim();
   if(!v){ toast("Give the category a name"); return; }
   if(TC().some(c=>c.toLowerCase()===v.toLowerCase())){ toast("That one already exists"); return; }
-  S.settings.customCats=[...(S.settings.customCats||[]),v];
+  S.settings.categories=[...(S.settings.categories||CAT_ROLE_SEED.map(c=>({...c}))),{id:uid(),name:v}];
   document.getElementById("newCat").value="";
   save(); renderAll(); toast("Added "+v);
 };
@@ -3676,16 +3870,22 @@ document.getElementById("addBill").onclick=()=>{
   const day=parseInt(document.getElementById("bDay").value,10);
   if(!name||!isFinite(amount)){ toast("A name and an amount are needed"); return; }
   const kind=document.getElementById("bKind").value;
-  S.settings.bills=[...(S.settings.bills||[]),{
+  const bill={
     id:uid(), name, amount:Math.abs(amount), kind,
     day: isFinite(day)?Math.min(31,Math.max(1,day)):1,
     category: kind==="bill" ? document.getElementById("bCat").value
             : kind==="pay" ? "Income" : "Reimbursement",
-    cadence: document.getElementById("bCad").value
-  }];
+    cadence: document.getElementById("bCad").value,
+    /* the anchor a quarterly/annual bill's future due-cycles count from */
+    startYM: cursor
+  };
+  S.settings.bills=[...(S.settings.bills||[]),bill];
+  /* "Counts immediately" — no waiting on an import to see it happen. */
+  const r=kind==="bill" ? postBill(bill,cursor) : null;
   document.getElementById("bName").value=""; document.getElementById("bAmt").value="";
   save(); renderAll();
-  toast(kind==="pay"?"Paycheck scheduled":kind==="offset"?"Reimbursement added":"Bill added");
+  toast(kind==="pay"?"Paycheck scheduled":kind==="offset"?"Reimbursement added"
+    : r&&r.held ? name+" added — needs a look in Review" : name+" added, posted this cycle");
 };
 document.getElementById("saveSplit").onclick=()=>{
   const v=Math.round(Number(document.getElementById("splitPct").value));
