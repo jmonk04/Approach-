@@ -226,6 +226,16 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
   box-shadow:none;margin:0;padding:14px 0}
 .fold .inner .card:first-child{border-top:0}
 .fold .inner .big{font-size:22px}
+/* A disclosure INSIDE a card, so it drops the card chrome the standalone
+   .fold carries — a bordered box inside a bordered box reads as two cards. */
+.ceilfold{margin:16px 0 0;border-top:1px solid var(--rule);padding-top:12px}
+.ceilfold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;
+  gap:10px;padding:0;background:none;border:0;border-radius:0;box-shadow:none;
+  font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--quiet)}
+.ceilfold>summary::-webkit-details-marker{display:none}
+.ceilfold>summary::after{content:"\203A";margin-left:auto;font-size:15px;
+  transition:transform .18s ease}
+.ceilfold[open]>summary::after{transform:rotate(90deg)}
 @media (prefers-reduced-motion:reduce){.fold>summary .chev{transition:none}}
 input,select,textarea,button{font-family:inherit;font-size:15px;color:var(--ink)}
 input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--rule);border-radius:8px;background:var(--card)}
@@ -369,8 +379,8 @@ label{display:block;margin-bottom:10px}
     <!-- Bills lives here now, as the second half of the scope toggle above —
          not its own tab. Hidden whenever Spending scope is showing. -->
     <div id="billsScope" hidden>
-      <div class="card" id="billList"></div>
       <div class="card" id="commitTop"></div>
+      <div class="card" id="billList"></div>
       <div class="card">
         <div class="eyebrow">Cost sharing</div>
         <h2 style="margin:4px 0 4px">Your split</h2>
@@ -396,7 +406,7 @@ label{display:block;margin-bottom:10px}
             <option value="pay">Paycheck in</option>
             <option value="offset">Reimbursement in</option>
           </select></label>
-        <p class="hint" id="bKindHint">A recurring debit the app can't see \u2014 rent, an
+        <p class="hint" id="bKindHint">A recurring debit the app can't see &mdash; rent, an
           autopay it hasn't learned yet.</p>
         <label><span class="lt">Name</span><input type="text" id="bName" placeholder="Cox Communications"></label>
         <div class="row" style="gap:8px;margin-bottom:10px">
@@ -432,11 +442,11 @@ label{display:block;margin-bottom:10px}
   </section>
 
   <section id="v-saving">
-    <div class="card" id="saveCard"></div>
     <div class="card" id="outlookCard"></div>
+    <div class="card" id="saveCard"></div>
   </section>
 
-  <section id="v-review"><div id="reviewList"></div></section>
+  <section id="v-review"><div id="billSort"></div><div id="reviewList"></div><div id="recSort"></div></section>
 
   <section id="v-ledger">
     <div class="filters" id="ledgerFilters"></div>
@@ -458,8 +468,8 @@ label{display:block;margin-bottom:10px}
       <div id="projOut"></div>
     </div>
     <div class="card">
-      <div class="eyebrow">Discretionary</div>
-      <h2 style="margin:4px 0 6px">How your ceilings get set</h2>
+      <div class="eyebrow">Spending</div>
+      <h2 style="margin:4px 0 6px">Planning your discretionary spending</h2>
       <p class="hint">Three ways to arrive at the numbers. You always type them
         yourself &mdash; this decides what the total is allowed to be, so you
         don&rsquo;t budget past what the month leaves you.</p>
@@ -468,17 +478,43 @@ label{display:block;margin-bottom:10px}
         <button data-k="objective" aria-pressed="false">Objective</button>
         <button data-k="history" aria-pressed="false">History</button>
       </div>
+      <!-- The objective used to sit in Profile, three taps from the only thing
+           that reads it. It is a budgeting input, not an identity field, so it
+           lives with the allowance it produces — change it and the figure below
+           moves while you are looking at it. -->
+      <div id="objWrap" hidden>
+        <label style="margin-top:13px"><span class="lt">Savings objective (% of take-home)</span>
+          <div class="row" style="gap:8px">
+            <input type="number" id="pObj" inputmode="decimal" step="1" min="0" max="100" style="flex:1">
+            <button class="btn" id="saveObj" style="width:auto;padding:11px 18px">Save</button>
+          </div></label>
+      </div>
       <div id="allowBox"></div>
+
+      <!-- The ceilings editor lived in Settings, which split one task across two
+           tabs: this card told you what the total was allowed to be, then sent
+           you elsewhere to type the numbers. It is the only part of Settings you
+           touch monthly, so it belongs with the allowance it has to fit inside.
+           Collapsible because Planning is a long tab; open by default until the
+           ceilings exist, since there is nothing to plan against without them. -->
+      <details class="fold ceilfold" id="ceilFold">
+        <summary>Set the ceilings</summary>
+        <p class="hint" style="margin-top:10px">Name them what you call them, set what
+          each is allowed to be. Rename or remove any of them &mdash; nothing here is
+          fixed, and another person&rsquo;s list need not match yours.</p>
+        <div id="ceilReminder"></div>
+        <div id="targetInputs"></div>
+        <div class="row" style="gap:8px;margin-top:2px">
+          <input type="text" id="newCat" placeholder="Kids, Travel, Boat fund&hellip;" style="flex:1">
+          <button class="btn" id="addCat" style="width:auto;padding:11px 16px">Add</button>
+        </div>
+        <button class="btn" id="saveTargets" style="margin-top:12px">Save</button>
+      </details>
     </div>
     <div class="card">
       <div class="eyebrow">The equation</div>
       <h2 style="margin:4px 0 8px">What these rates imply</h2>
       <div id="rateBox"></div>
-    </div>
-    <div class="card">
-      <div class="eyebrow">Committed</div>
-      <h2 style="margin:4px 0 2px">Recurring charges</h2>
-      <div id="recList"></div>
     </div>
   </section>
 
@@ -507,8 +543,6 @@ label{display:block;margin-bottom:10px}
         <p class="hint">A W2 figure that doesn't move month to month, so it lives here
           rather than being re-entered. Detected deposits still override it when they
           come in higher.</p>
-        <label style="margin-top:12px"><span class="lt">Savings objective (% of take-home)</span>
-          <input type="number" id="pObj" inputmode="decimal" step="1" min="0" max="100"></label>
         <button class="btn" id="savePerson">Save profile</button>
       </div>
 
@@ -552,30 +586,6 @@ label{display:block;margin-bottom:10px}
         <button class="btn" id="saveBehaviour">Save</button>
       </div>
 
-      <div class="card">
-        <div class="eyebrow">Naming</div>
-        <h2 style="margin:4px 0 10px">What things are called</h2>
-        <label><span class="lt">App name</span>
-          <input type="text" id="pAppName" maxlength="18" placeholder="Path"></label>
-        <label style="margin-top:12px"><span class="lt">Main tab</span>
-          <input type="text" id="pMainTab" maxlength="12" placeholder="Spending"></label>
-        <button class="btn" id="saveNaming">Save names</button>
-      </div>
-
-      <div class="card">
-        <div class="eyebrow">Your spending limits</div>
-        <h2 style="margin:4px 0 6px">Monthly ceilings</h2>
-        <p class="hint">Name them what you call them, set what each is allowed to be.
-          Rename or remove any of them \u2014 nothing here is fixed, and Maja's list
-          need not match yours.</p>
-        <div id="ceilReminder"></div>
-        <div id="targetInputs"></div>
-        <div class="row" style="gap:8px;margin-top:2px">
-          <input type="text" id="newCat" placeholder="Kids, Travel, Boat fund\u2026" style="flex:1">
-          <button class="btn" id="addCat" style="width:auto;padding:11px 16px">Add</button>
-        </div>
-        <button class="btn" id="saveTargets" style="margin-top:12px">Save</button>
-      </div>
     </div>
 
     <div class="setpane" id="pane-rules" hidden>
@@ -752,11 +762,20 @@ const CAT_ROLE_SEED = [
   { id:"dining",    name:"Dining/Coffee" },
   { id:"flex",      name:"Flex/Buffer" }
 ];
-/* Bills and utilities are one thing. Rent is the other. These two stay fixed:
-   the cash forecast and the split-with-a-housemate logic key off them by
-   name, and neither is a "ceiling" a household budgets discretionary spend
-   against. */
-const FIXED_CATS  = ["Housing","Bills"];
+/* Non-discretionary groups. These were two hardcoded buckets — Housing and
+   Bills — which meant rent, water, a student loan and a $19.99 subscription
+   all landed in the same place, and the list could never say where the cash
+   actually went. They are editable now, the same as the discretionary ones.
+
+   Housing stays first and stays named: the split-with-a-housemate logic and
+   the cash forecast key off it. The rest are yours to cut however you like.
+   None of them is a "ceiling" — a household does not budget discretionary
+   spend against rent. */
+const FIXED_SEED = ["Housing","Bills/Utilities","Loans","Insurance","Subscriptions"];
+function FC(){
+  const f=(S.settings||{}).fixedCategories;
+  return Array.isArray(f)&&f.length ? f : FIXED_SEED;
+}
 function TC(){ return (S.settings.categories||CAT_ROLE_SEED).map(c=>c.name); }
 function catById(id){ return (S.settings.categories||[]).find(c=>c.id===id); }
 function catByName(n){ return (S.settings.categories||[]).find(c=>c.name===n); }
@@ -770,7 +789,7 @@ function catchAllCat(){
 }
 function catchAllName(){ return (catchAllCat()||{}).name || "Uncategorized"; }
 const SYS_CATS    = ["Transfer","Income","Savings"];
-function ALL_CATS(){ return [...TC(), ...FIXED_CATS, ...SYS_CATS]; }
+function ALL_CATS(){ return [...TC(), ...FC(), ...SYS_CATS]; }
 
 /* Accounts are user-defined. There is no per-bank parser anywhere in this file
    and there should never be one: CSV shape is sniffed from the header row. What
@@ -803,6 +822,9 @@ const DEFAULTS = {
   gsMode: "spent",
   catMode: "pace",       // ceilings card: "pace" or "remaining"
   catScope: "disc",      // spending-plan card: "disc" or "fixed" (non-discretionary)
+  fixedCategories: [...FIXED_SEED],  // editable non-discretionary groups
+  fixedMigrated: false,  // set once the old two-bucket model has been folded in
+  billsSorted: [],       // merchants already placed into a group, so Review stops asking
   ceilingMode: "custom", // how ceilings are set: "custom" | "objective" | "history"
   targets: {},          // cat -> monthly ceiling
   rules: {},            // normalized merchant -> category (learned)
@@ -981,7 +1003,7 @@ function autoCategory(t){
     if (!rx.test(t.rawDesc)) continue;
     /* Housing/Bills rules still carry a literal name — only the three
        discretionary buckets were converted to roles above. */
-    const cat = FIXED_CATS.includes(role) ? role : (catById(role)||{}).name;
+    const cat = FC().includes(role) ? role : (catById(role)||{}).name;
     if (cat) return { cat, why: "rule" };
   }
   return { cat: null, why: "unknown" };
@@ -1208,6 +1230,36 @@ function resolve(id, cat, teach){
 const CAT_MIGRATION = { "Utilities":"Bills", "Insurance":"Bills", "Debt/Loan":"Bills" };
 function migrate(){
   let n=0;
+  /* Non-discretionary used to be two hardcoded buckets. Seed the editable list
+     and rename the old "Bills" bucket rather than dropping it: every existing
+     transaction, rule, bill and split key still says "Bills", and orphaning
+     them would take real money out of the totals. The rename keeps every
+     figure identical; sorting them into Loans / Insurance / Subscriptions is a
+     separate, optional pass in Review that never blocks anything. */
+  /* Guard on an explicit marker, NOT on the presence of fixedCategories:
+     load() does Object.assign(freshSettings(), stored), so the fresh default
+     is already in place by the time this runs and a presence check would
+     never fire. Every existing install would have kept transactions filed
+     under "Bills" while no group by that name existed any more — the money
+     would have vanished from every non-discretionary total silently. */
+  if(!S.settings.fixedMigrated){
+    S.settings.fixedMigrated=true;
+    if(!Array.isArray(S.settings.fixedCategories) || !S.settings.fixedCategories.length)
+      S.settings.fixedCategories=[...FIXED_SEED];
+    const OLD="Bills", NEW="Bills/Utilities";
+    if(!S.settings.fixedCategories.includes(NEW))
+      S.settings.fixedCategories.splice(1,0,NEW);
+    for(const t of S.txns) if(t.category===OLD){ t.category=NEW; n++; }
+    for(const b of (S.settings.bills||[])) if(b.category===OLD) b.category=NEW;
+    for(const k of Object.keys(S.settings.rules||{}))
+      if(S.settings.rules[k]===OLD) S.settings.rules[k]=NEW;
+    if(S.settings.targets && S.settings.targets[OLD]!=null){
+      S.settings.targets[NEW]=S.settings.targets[OLD]; delete S.settings.targets[OLD];
+    }
+    if(S.settings.catIcons && S.settings.catIcons[OLD]!=null){
+      S.settings.catIcons[NEW]=S.settings.catIcons[OLD]; delete S.settings.catIcons[OLD];
+    }
+  }
   /* One-time fold-in: installs that predate user-editable categories kept
      extras in customCats, separate from the fixed four. Same names, so
      nothing in targets/catIcons/txns needs rekeying — they're just joining
@@ -1321,10 +1373,10 @@ function monthData(ym){
       /* A refund against a Bills or Housing charge was never part of the
          discretionary total, so netting it off that total understated spend.
          Keep the two apart: discNet is the one figure everything reads. */
-      if (FIXED_CATS.includes(cat)) refundsFixed+=Math.abs(t.amount);
+      if (FC().includes(cat)) refundsFixed+=Math.abs(t.amount);
       else refundsDisc+=Math.abs(t.amount);
     }
-    else if (FIXED_CATS.includes(cat)) fixed+=t.amount;
+    else if (FC().includes(cat)) fixed+=t.amount;
     else discretionary+=t.amount;
   }
   const heldAmt = held.filter(t=>t.type!=="transfer")
@@ -1520,6 +1572,37 @@ function theirShare(amount,name){
   return isShared(name) ? amount*(1-myPct()/100) : 0;
 }
 
+/* Non-discretionary broken out by group, with the change from last cycle.
+   The old comparison measured actuals against the recurring SCHEDULE, which
+   are not the same set — a one-off charge filed here had no schedule line to
+   be measured against, so it read as "over expectation" when nothing was over
+   anything. Month over month compares like with like, and it is the question
+   that was actually being asked: what moved since last time?
+
+   Most groups will read "unchanged" every cycle, which is the point. Rent and
+   a fixed loan payment do not move; metered utilities do. Surfacing the change
+   per group is what makes the one live number visible instead of averaged into
+   a total that always looks roughly the same. */
+function fixedGroups(ym){
+  const prevYM=ymShift(ym,-1);
+  const d=monthData(ym), p=monthData(prevYM);
+  const b=billsThisMonth(ym);
+  const ahead={};
+  for(const r of b.pending) ahead[r.category]=(ahead[r.category]||0)+r.estimate;
+
+  const rows=FC().map(c=>{
+    const now=(d.byCat[c]||0)+(ahead[c]||0);
+    const was=p.byCat[c]||0;
+    return { cat:c, now, was, delta: was>0||now>0 ? now-was : 0, hadPrev: was>0 };
+  }).filter(r=>Math.abs(r.now)>0.005 || r.hadPrev);
+
+  rows.sort((a,b2)=>b2.now-a.now);
+  const now=rows.reduce((a,r)=>a+r.now,0);
+  const was=rows.reduce((a,r)=>a+r.was,0);
+  return { rows, now, was, delta:now-was,
+           comparable: rows.some(r=>r.hadPrev), prevYM };
+}
+
 function billsThisMonth(ym){
   const d=monthData(ym);
   /* byCat is already net of refunds — monthData books a refund as a negative
@@ -1527,8 +1610,8 @@ function billsThisMonth(ym){
      every non-discretionary refund off the total twice, so a $44 credit read
      as $88 back. The line-item list is built from the same charges and made
      the gap visible. */
-  const posted=FIXED_CATS.reduce((a,c)=>a+(d.byCat[c]||0),0);
-  const seen=new Set(d.live.filter(t=>FIXED_CATS.includes(t.category)).map(t=>t.merchant));
+  const posted=FC().reduce((a,c)=>a+(d.byCat[c]||0),0);
+  const seen=new Set(d.live.filter(t=>FC().includes(t.category)).map(t=>t.merchant));
   const rows=billRows(ym);
 
   /* Outgoing bills: detected plus declared. A detected bill's "posted" is
@@ -1551,7 +1634,7 @@ function billsThisMonth(ym){
      Most of it is derived rather than declared — the other party's percentage
      of whatever each shared bill ACTUALLY came to, so a utility that swings
      $215 to $302 moves her share with it. */
-  const postedShared = d.live.filter(t=>FIXED_CATS.includes(t.category) && t.type==="spend")
+  const postedShared = d.live.filter(t=>FC().includes(t.category) && t.type==="spend")
     .reduce((a,t)=>a+theirShare(t.amount,t.merchant),0);
   const aheadShared  = pending.reduce((a,r)=>a+theirShare(r.estimate,r.name),0);
   const derived = postedShared + aheadShared;
@@ -1619,7 +1702,7 @@ function verdict(ym){
   if(!target){
     return { state:"unset", word:"No ceilings set", figure:null, label:"",
              sub:"Path can't answer anything until it knows your limits.",
-             why:[{ text:"Set your spending limits in Profile", goto:"settings" }] };
+             why:[{ text:"Set your spending limits on Planning", goto:"plan" }] };
   }
 
   /* At today's rate, where does discretionary spending finish? */
@@ -1807,7 +1890,11 @@ function monthsBetween(fromISO,toISO_){
   return Math.max(0,m);
 }
 function project(targetDate){
-  const cash=currentCash();
+  /* cashOnHand(), not currentCash(): the narrow one only sees balances read
+     off an imported statement, so a balance typed on Saving left this
+     projection starting from $0 and asking for $79,470/mo. Same intended
+     number, two functions — this is the one that also takes what you typed. */
+  const cash=cashOnHand();
   const start=cash?cash.amount:0;
   const from=cash?cash.date:todayISO();
   const months=monthsBetween(from,targetDate);
@@ -2104,7 +2191,7 @@ function billHistory(merchant, n){
 /* Every bill as one row, however we learned about it. */
 function billRows(ym){
   ym=ym||cycleOf(todayISO());
-  const rec=detectRecurring().filter(r=>r.confirmed && FIXED_CATS.includes(r.category));
+  const rec=detectRecurring().filter(r=>r.confirmed && FC().includes(r.category));
   const rows=rec.map(r=>{
     const hist=billHistory(r.merchant,6);
     const amts=hist.map(h=>h.amount);
@@ -2167,7 +2254,7 @@ function fixedLines(ym){
     const src = t.type==="refund" && t.linkedTo
       ? S.txns.find(x=>x.id===t.linkedTo) : null;
     const cat = src ? (src.category||t.category) : t.category;
-    if(!FIXED_CATS.includes(cat)) continue;
+    if(!FC().includes(cat)) continue;
     const r=row(src ? (src.merchant||t.merchant) : t.merchant);
     r.category=cat;
     r.amount += t.type==="refund" ? -Math.abs(t.amount) : t.amount;
@@ -2200,7 +2287,7 @@ function cashFlow(ym, mode){
     disc    = targetTotal();
   } else {
     housing = d.byCat["Housing"]||0;
-    bills   = FIXED_CATS.filter(c=>c!=="Housing").reduce((a,c)=>a+(d.byCat[c]||0),0);
+    bills   = FC().filter(c=>c!=="Housing").reduce((a,c)=>a+(d.byCat[c]||0),0);
     disc    = TC().reduce((a,c)=>a+(d.byCat[c]||0),0);
   }
   const out=housing+bills+disc;
@@ -2618,7 +2705,7 @@ function renderTrajectory(){
   if(!g.target){
     el.className="card verdict unset";
     el.innerHTML='<div class="eyebrow">Trajectory</div>'
-      + '<div class="empty">Set your spending limits in Profile and the trajectory appears here.</div>';
+      + '<div class="empty">Set your spending limits on Planning and the trajectory appears here.</div>';
     return;
   }
   const rem=(S.settings.gsMode||"spent")==="remaining";
@@ -2811,8 +2898,8 @@ function renderOutlook(){
           ? '<div class="sm '+(o.vsTarget>=0?"pathc":"overc")+'" style="margin-top:6px">'
             + (o.vsTarget>=0?"Ahead of":"Short of")+' your '+o.objPct+'% objective by '
             + money(Math.abs(o.vsTarget))+'</div>'
-          : '<div class="sm muted" style="margin-top:6px">Set a savings objective in Profile '
-            + 'to measure this against something.</div>')
+          : '<div class="sm muted" style="margin-top:6px">Set a savings objective on '
+            + 'Planning to measure this against something.</div>')
       + '<p class="hint" style="margin-top:10px">Cash at the end of the cycle needs today\u2019s '
       + 'balance. Statements with a running-balance column fill it in on import, and OFX carries '
       + 'it in the ledger record. QIF has none, so type it below.</p>';
@@ -2868,7 +2955,7 @@ function setupSteps(){
     { key:"pillars",done:targetTotal()>0,
       label:"Set your spending limits",
       why:"The ceilings this month stands on",
-      pane:"profile" },
+      view:"plan" },
     { key:"income", done:Number(S.settings.income||0)>0,
       label:"Add your monthly take-home",
       why:"Optional \u2014 powers save rate and the cash outlook",
@@ -2917,7 +3004,9 @@ function renderSetup(){
   el.querySelectorAll("[data-role=go]").forEach(b=>b.onclick=()=>{
     const key=b.closest("[data-step]").dataset.step;
     const step=setupSteps().find(x=>x.key===key);
-    go("settings"); setGo(step.pane);
+    /* Some steps are settings panes, some are now tabs in their own right. */
+    if(step.view){ go(step.view); openCeilings(); }
+    else { go("settings"); setGo(step.pane); }
   });
 }
 
@@ -2951,20 +3040,41 @@ function renderDash(){
     + (d.transfers?'<hr><div class="spread sm muted"><span>Card payments netted out</span>'
        + '<span class="num">'+money(d.transfers)+'</span></div>':'');
 
-  /* save rate */
+  /* Save rate, in plain language. It used to run its own arithmetic — income
+     minus net, and a separate pace projection — which is why it read 25% /
+     $2,987 while Outlook, one card away, said $4,898 surplus and 42%. Same
+     idea, two calculations, two answers. Both figures now come off the one
+     surplus in outlook(): the rate is that surplus over take-home, so the
+     quantity and the percentage cannot disagree. The rate stays because it is
+     the number some people track instead of the dollars. */
   const sc=document.getElementById("saveCard"), obj=Number(S.settings.objective||0)/100;
-  if(!d.income){
-    sc.innerHTML='<div class="eyebrow">Save rate</div><div class="empty">Add monthly take-home in Profile.</div>';
+  const ok=outlook(cursor);
+  if(!d.income || ok.surplus==null){
+    sc.innerHTML='<div class="eyebrow">Saving</div>'
+      + '<div class="empty">Add your monthly take-home in Profile and this fills in.</div>';
   } else {
-    const sr=d.saveRate;
-    const proj=pace>0&&pace<1?(d.income-(d.fixed+disc/pace))/d.income:sr;
-    sc.innerHTML='<div class="spread"><span class="eyebrow">Save rate</span>'
-      + '<span class="eyebrow">Objective '+Math.round(obj*100)+'%</span></div>'
-      + '<div class="row" style="margin-top:8px;align-items:baseline;gap:12px">'
-      + '<span class="big num '+(sr>=obj?"pathc":"overc")+'">'+(sr*100).toFixed(0)+'%</span>'
-      + '<span class="sm muted">'+money(d.income-d.net)+' kept of '+money(d.income)+'</span></div>'
-      + (pace<1&&pace>0?'<div class="sm muted" style="margin-top:8px">At this pace the month lands near '
-        + '<span class="num '+(proj>=obj?"pathc":"overc")+'">'+(proj*100).toFixed(0)+'%</span></div>':'');
+    const rate=ok.rate, up=ok.surplus>=0, cash=ok.cash;
+    const tone=up?(obj>0?(rate>=obj?"pathc":"holdc"):"pathc"):"overc";
+    sc.innerHTML='<div class="spread"><span class="eyebrow">Saving</span>'
+      + (obj>0?'<span class="eyebrow">Objective '+Math.round(obj*100)+'%</span>':'')+'</div>'
+      + '<p class="vsub" style="margin-top:9px;font-size:15px;color:var(--ink)">'
+      +   (ok.closed
+          ? 'You saved <span class="num '+tone+'">'+money(Math.abs(ok.surplus))+'</span> '
+          : 'You are on track to '+(up?'save':'overspend by')+' <span class="num '+tone+'">'
+            + money(Math.abs(ok.surplus))+'</span> ')
+      +   'this month, which is <span class="num '+tone+'">'+Math.abs(rate*100).toFixed(0)
+      +   '%</span> of your take-home.'
+      +   (cash?' Total cash on hand is <span class="num">'+money(cash.amount)+'</span>.':'')
+      + '</p>'
+      + (obj>0 && ok.vsTarget!=null
+        ? '<p class="vsub" style="margin-top:7px">'
+          + (ok.vsTarget>=0?'That clears your '+Math.round(obj*100)+'% objective by '
+             : 'That is short of your '+Math.round(obj*100)+'% objective by ')
+          + '<span class="num '+(ok.vsTarget>=0?"pathc":"overc")+'">'
+          + money(Math.abs(ok.vsTarget))+'</span>.</p>'
+        : '')
+      + (cash?'':'<p class="hint" style="margin-top:9px">Enter your cash balance below '
+        + 'and this will carry it too.</p>');
   }
 
   /* the ceilings — readable two ways. Only the discretionary side has them.
@@ -3038,13 +3148,113 @@ function renderDash(){
 /* ============================================================
    REVIEW QUEUE — the mediation mechanism
    ============================================================ */
+/* Merchants sitting in the catch-all non-discretionary group that have never
+   been placed into one of the finer ones. Deliberately NOT the pending queue:
+   a held transaction is out of every total, and holding your rent hostage to a
+   sorting chore would make every figure in the app wrong until you finished.
+   These stay live and counted; sorting is optional and can be abandoned. */
+function billsToSort(){
+  const CATCH=FC()[1];
+  if(!CATCH) return [];
+  const done=new Set((S.settings.billsSorted||[]).map(splitKey));
+  const by=new Map();
+  for(const t of S.txns){
+    if(t.pending || t.category!==CATCH) continue;
+    if(done.has(splitKey(t.merchant))) continue;
+    const k=splitKey(t.merchant);
+    if(!by.has(k)) by.set(k,{ name:t.merchant, n:0, total:0, last:"" });
+    const r=by.get(k); r.n++; r.total+=t.amount;
+    if(t.date>r.last) r.last=t.date;
+  }
+  return [...by.values()].sort((a,b)=>b.total-a.total);
+}
+
+function renderBillSort(){
+  const el=document.getElementById("billSort");
+  if(!el) return;
+  const rows=billsToSort(), groups=FC().slice(1);
+  if(!rows.length || groups.length<2){ el.innerHTML=""; return; }
+  el.innerHTML='<div class="card">'
+    + '<div class="spread"><span class="eyebrow">Sort your bills</span>'
+    +   '<span class="eyebrow">'+rows.length+' left</span></div>'
+    + '<p class="hint" style="margin:6px 0 0">These are all filed under '
+    +   esc(FC()[1])+'. Placing them shows where the cash actually goes. '
+    +   'Nothing is held out of your totals while you do it, and you can stop '
+    +   'any time.</p>'
+    + rows.slice(0,8).map(r=>'<div class="bsort" data-m="'+esc(r.name)+'">'
+      + '<div class="spread" style="margin-top:13px"><strong>'+esc(r.name)+'</strong>'
+      +   '<span class="num">'+money(r.total)+'</span></div>'
+      + '<div class="meta">'+r.n+' charge'+(r.n===1?"":"s")+' \u00b7 latest '+r.last+'</div>'
+      + '<div class="catgrid" style="margin-top:7px">'
+      +   groups.map(c=>'<button class="catbtn" data-g="'+esc(c)+'">'+esc(c)+'</button>').join("")
+      + '</div></div>').join("")
+    + (rows.length>8?'<p class="hint" style="margin-top:12px">'+(rows.length-8)
+       +' more after these.</p>':'')
+    + '</div>';
+
+  el.querySelectorAll(".bsort").forEach(row=>{
+    row.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>{
+      const name=row.dataset.m, cat=b.dataset.g, key=splitKey(name);
+      /* Re-file every charge from this merchant and teach the rule, so next
+         cycle's import lands in the right group without asking again. */
+      let n=0;
+      for(const t of S.txns)
+        if(!t.pending && splitKey(t.merchant)===key && FC().includes(t.category)){
+          t.category=cat; n++;
+        }
+      for(const bill of (S.settings.bills||[]))
+        if(splitKey(bill.name)===key) bill.category=cat;
+      S.settings.rules[ruleKey(name)]=cat;
+      S.settings.billsSorted=[...(S.settings.billsSorted||[]), name];
+      save(); renderAll();
+      toast(name+" \u2192 "+cat+(n>1?" ("+n+" charges)":""));
+    });
+  });
+}
+
+/* Striking a merchant off the recurring roster is the same kind of work as
+   sorting bills: optional, corrective, and nothing depends on finishing it.
+   It sat on Planning, which is where you go to decide what to spend, not to
+   correct what the detector guessed. */
+function renderRecurring(){
+  const el=document.getElementById("recSort");
+  if(!el) return;
+  const rec=detectRecurring();
+  if(!rec.length){ el.innerHTML=""; return; }
+  const conf=rec.filter(r=>r.confirmed), susp=rec.filter(r=>!r.confirmed);
+  const sec=(title,arr)=>arr.length?'<div class="eyebrow" style="margin:14px 0 4px">'+title+'</div>'
+    + arr.map(r=>'<div class="rec" data-m="'+esc(r.merchant)+'">'
+      + '<div class="body"><div class="name">'+esc(r.merchant)
+      +   (r.missed?'<span class="tag dup">not seen</span>':'')
+      +   (r.changed?'<span class="tag one">'+(r.changed==="up"?"\u2191":"\u2193")
+            +Math.abs(r.changePct*100).toFixed(0)+'%</span>':'')+'</div>'
+      + '<div class="meta">'+r.cadence+' \u00b7 '+esc(r.category)+' \u00b7 next '+r.next+'</div></div>'
+      + '<div style="text-align:right"><div class="amt">'+money2(r.amount)+'</div>'
+      + '<div class="meta">'+money(r.monthly)+'/mo</div></div></div>').join(""):"";
+  el.innerHTML='<div class="card">'
+    + '<div class="spread"><span class="eyebrow">Recurring charges</span>'
+    +   '<span class="eyebrow">'+rec.length+' found</span></div>'
+    + sec("Confirmed \u2014 three or more",conf)+sec("Suspected \u2014 seen twice",susp)
+    + '<p class="hint" style="margin-top:12px">Tap any row to strike it off if it only '
+    + 'looks regular. Nothing is held out of your totals either way.</p></div>';
+  el.querySelectorAll(".rec").forEach(r=>r.onclick=()=>{
+    S.settings.notRecurring=[...(S.settings.notRecurring||[]),r.dataset.m];
+    save(); renderAll(); toast("Removed from recurring");
+  });
+}
+
 function renderReview(){
+  renderBillSort();
+  renderRecurring();
   const held=S.txns.filter(t=>t.pending);
   const badge=document.getElementById("reviewBadge");
   badge.textContent=held.length; badge.style.display=held.length?"":"none";
   const el=document.getElementById("reviewList");
   if(!held.length){
-    el.innerHTML='<div class="card"><div class="empty">Nothing waiting. Every transaction is filed.</div></div>';
+    el.innerHTML='<div class="card"><div class="empty">'
+      + (billsToSort().length
+         ? "Nothing held. Anything on this tab is optional \u2014 every figure is already correct."
+         : "Nothing waiting. Every transaction is filed.")+'</div></div>';
     return;
   }
   const total=held.filter(t=>t.type!=="transfer").reduce((a,t)=>a+Math.abs(t.amount),0);
@@ -3063,7 +3273,7 @@ function renderReview(){
           + lb.count+' rows)</button>' : '')
     + '</div>'
     + held.map(t=>{
-      const cats=[...TC(),...FIXED_CATS];
+      const cats=[...TC(),...FC()];
       /* Not "which category" \u2014 that part is already settled, it matched a
          bill by category and amount. The actual question is whether this IS
          that bill arriving from the bank, or a second real charge beside it. */
@@ -3152,16 +3362,16 @@ function resolveBillDuplicate(id, mode){
    ============================================================ */
 function renderLedger(){
   const d=monthData(cursor);
-  const opts=["all",...TC(),...FIXED_CATS,"Fixed","Transfer",...S.settings.people];
+  const opts=["all",...TC(),...FC(),"Fixed","Transfer",...S.settings.people];
   const fb=document.getElementById("ledgerFilters");
   fb.innerHTML=opts.map(o=>'<button class="chip" data-f="'+esc(o)+'" aria-pressed="'
     +(ledgerFilter===o)+'">'+esc(o)+'</button>').join("");
   fb.querySelectorAll("button").forEach(b=>b.onclick=()=>{ ledgerFilter=b.dataset.f; renderLedger(); });
 
   let rows=d.live.slice();
-  if(TC().includes(ledgerFilter)||FIXED_CATS.includes(ledgerFilter))
+  if(TC().includes(ledgerFilter)||FC().includes(ledgerFilter))
     rows=rows.filter(t=>t.category===ledgerFilter);
-  else if(ledgerFilter==="Fixed") rows=rows.filter(t=>FIXED_CATS.includes(t.category));
+  else if(ledgerFilter==="Fixed") rows=rows.filter(t=>FC().includes(t.category));
   else if(ledgerFilter==="Transfer") rows=rows.filter(t=>t.type==="transfer");
   else if(ledgerFilter!=="all") rows=rows.filter(t=>personOf(t)===ledgerFilter);
 
@@ -3171,7 +3381,7 @@ function renderLedger(){
     const signed=t.type==="refund"?-Math.abs(t.amount):t.amount;
     const tags=(t.type==="transfer"?'<span class="tag xfer">'+(t.crossAccount?"card payment":"transfer")+'</span>':"")
       +(t.type==="refund"?'<span class="tag ref">'+(t.linkedTo?"refund \u2192 origin":"refund")+'</span>':"")
-      +(FIXED_CATS.includes(t.category)?'<span class="tag fix">committed</span>':"")
+      +(FC().includes(t.category)?'<span class="tag fix">committed</span>':"")
       +(t.oneTime?'<span class="tag one">one-time</span>':"")
       +(t.provisional?'<span class="tag pend">pending</span>':"");
     return '<div class="txn" data-id="'+t.id+'"><div class="body">'
@@ -3195,29 +3405,42 @@ function reopen(id){
    ============================================================ */
 
 function renderCommitted(){
-  const rows=billRows();
-  const total=rows.reduce((a,r)=>a+r.monthly,0);
-  const steady=rows.filter(r=>!r.varies).reduce((a,r)=>a+r.monthly,0);
-  const moves=total-steady;
-
-  /* The point of this tab: how much non-discretionary I have this cycle, and
-     how it compares with what I expected. */
+  /* The point of this tab: how much non-discretionary went out this cycle,
+     where it went, and what moved since last cycle. The steady/varies split
+     that used to sit in the footer described the recurring roster, which is a
+     different set from what the card totals — the group rows say more, and
+     say it about the same money. */
   const b=billsThisMonth(cursor);
-  const v=b.variance, over=v>0.5, under=v<-0.5;
+  const G=fixedGroups(cursor);
   const sp=document.getElementById("splitPct");
   if(sp && document.activeElement!==sp) sp.value=myPct();
+
+  const chg=(x,cmp)=>Math.abs(x)<1 ? '<span class="sm muted">unchanged</span>'
+    : '<span class="sm '+(x>0?"overc":"pathc")+' num">'+(x>0?"+":"\u2212")
+      + money(Math.abs(x))+'</span>';
+
   document.getElementById("commitTop").innerHTML=
     '<div class="spread"><span class="eyebrow">Non-discretionary</span>'
     +   '<span class="eyebrow">'+esc(cycleLabel(cursor))+'</span></div>'
     + '<div class="big num" style="margin:8px 0 2px">'+money(b.posted+b.toCome)+'</div>'
-    + '<div class="sm muted">expected '+money(b.expected)
-    +   (Math.abs(v)>=0.5
-        ? ' \u00b7 <span class="'+(over?"overc":"pathc")+'">'+money(Math.abs(v))
-          + (over?" over":" under")+'</span>'
-        : ' \u00b7 on expectation')+'</div>'
+    + '<div class="sm muted">'
+    +   (G.comparable
+        ? (Math.abs(G.delta)<1 ? "level with "+esc(cycleLabel(G.prevYM))
+           : '<span class="'+(G.delta>0?"overc":"pathc")+'">'+money(Math.abs(G.delta))
+             + (G.delta>0?" more":" less")+'</span> than '+esc(cycleLabel(G.prevYM)))
+        : "no earlier cycle to compare against yet")+'</div>'
+
+    /* Where the cash goes, largest first. Most rows read "unchanged" every
+       cycle by design — that is what makes the one that moved visible. */
     + '<div class="vwhy" style="margin-top:12px">'
-    +   '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
-    +     money(b.posted)+'</span><span>posted so far</span></div>'
+    +   G.rows.map(r=>'<div class="r">'
+    +     '<span class="num mid" style="font-size:14px;min-width:74px">'+money(r.now)+'</span>'
+    +     '<span>'+esc(r.cat)+'</span>'
+    +     (G.comparable && r.hadPrev?'<span style="margin-left:auto">'+chg(r.delta)+'</span>':'')
+    +     '</div>').join("")
+    + '</div>'
+
+    + '<div class="vwhy" style="margin-top:10px">'
     +   (b.toCome>0.5?'<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
     +     money(b.toCome)+'</span><span>still expected \u00b7 '+b.pending.length+' item'
     +     (b.pending.length===1?"":"s")+'</span></div>':'')
@@ -3232,20 +3455,28 @@ function renderCommitted(){
           + '<span class="num mid">'+money(b.net)+'</span></div>'
         : '')
     + '<p class="hint" style="margin:10px 0 0">Non-discretionary comes out before your '
-    + 'limits, never against them. '+money(steady)+' of the schedule is fixed'
-    + (moves>0?', '+money(moves)+' varies':'')+'.</p>';
+    + 'limits, never against them.</p>';
 
   const list=document.getElementById("billList");
   const lines=fixedLines(cursor);
   if(!lines.length){
     list.innerHTML='<div class="eyebrow">Your bills</div>'
       + '<div class="empty">Nothing non-discretionary this cycle yet. Anything filed to '
-      + esc(FIXED_CATS.join(" or "))+' lands here, and you can declare what the import '
+      + esc(FC().join(" or "))+' lands here, and you can declare what the import '
       + 'can\u2019t see below.</div>';
   } else {
     list.innerHTML='<div class="spread"><span class="eyebrow">Your bills</span>'
       + '<span class="eyebrow">by day of month</span></div>'
-      + lines.map(r=>{
+      /* Grouped, largest group first, so the list reads as "here is where the
+         cash goes" rather than fifteen undifferentiated rows. */
+      + FC().map(gcat=>{
+        const gl=lines.filter(r=>r.category===gcat);
+        if(!gl.length) return "";
+        const gt=gl.reduce((a,r)=>a+r.amount,0);
+        return '<div class="spread" style="margin-top:15px;padding-top:9px;'
+          + 'border-top:1px solid var(--rule)"><span class="eyebrow">'+esc(gcat)+'</span>'
+          + '<span class="num sm">'+money(gt)+'</span></div>'
+          + gl.map(r=>{
         const shared=isShared(r.name);
         const flags=(r.status==="expected"
               ? (r.origin==="declared"
@@ -3267,11 +3498,12 @@ function renderCommitted(){
           + '<div class="bamt"><div class="amt">'+money2(r.amount)+'</div>'
           + (shared?'<div class="meta pathc">yours '+money(r.amount*myPct()/100)+'</div>':'')
           + '</div></div>';
+        }).join("");
       }).join("")
-      + '<p class="hint" style="margin-top:12px">Everything filed to '
-      + esc(FIXED_CATS.join(" or "))+' this cycle \u2014 detected, imported and declared '
-      + 'alike. Marking one split remembers the merchant, so next cycle\u2019s charge '
-      + 'arrives already split.</p>'
+      + '<p class="hint" style="margin-top:12px">Every non-discretionary charge '
+      + 'this cycle &mdash; detected, imported and declared alike, grouped by where '
+      + 'it goes. Marking one split remembers the merchant, so next cycle&rsquo;s '
+      + 'charge arrives already split.</p>'
       + (lines.some(r=>r.origin==="declared")
         ? '<p class="hint">Tap a bill you added to remove it.</p>':'');
     list.querySelectorAll("[data-split]").forEach(b=>b.onclick=(e)=>{
@@ -3298,7 +3530,7 @@ function renderCommitted(){
 
   const bc=document.getElementById("bCat");
   if(!bc.options.length)
-    bc.innerHTML=[...FIXED_CATS,...TC()].map(x=>'<option>'+esc(x)+'</option>').join("");
+    bc.innerHTML=[...FC(),...TC()].map(x=>'<option>'+esc(x)+'</option>').join("");
 }
 
 /* ============================================================
@@ -3310,14 +3542,18 @@ function renderProject(){
     b.setAttribute("aria-pressed", b.dataset.m===projMode));
   document.getElementById("goalWrap").style.display = projMode==="reverse"?"":"none";
 
-  const cash=currentCash();
+  /* Same switch as project() below: the card said "No balance found yet"
+     while a balance typed on Saving sat right there unread. */
+  const cash=cashOnHand();
   const cashLine=document.getElementById("cashLine");
   cashLine.innerHTML = cash
     ? '<div class="spread"><span class="sm muted">Cash on hand</span>'
       + '<span class="num mid">'+money(cash.amount)+'</span></div>'
-      + '<div class="sm muted" style="margin-top:2px">bank balance as of '+cash.date+'</div>'
-    : '<div class="sm muted">No balance found yet. Import a Navy Federal export that includes '
-      + 'its running balance column and cash appears here.</div>';
+      + '<div class="sm muted" style="margin-top:2px">'
+      + (cash.source==="entered"?"as you entered it on Saving, ":"bank balance as of ")
+      + cash.date+'</div>'
+    : '<div class="sm muted">No balance yet. Enter one on the Saving tab, or import a '
+      + 'statement that carries a running-balance column.</div>';
 
   const date=document.getElementById("projDate").value;
   const out=document.getElementById("projOut");
@@ -3387,10 +3623,28 @@ function renderProject(){
 /* ============================================================
    PLAN — recurring roster + ceilings + the rate equation
    ============================================================ */
+/* Sending someone to Planning for the ceilings should land them on the open
+   editor, not on a collapsed summary they have to find. */
+function openCeilings(){
+  const f=document.getElementById("ceilFold");
+  if(!f) return;
+  f.dataset.touched="1"; f.open=true;
+  requestAnimationFrame(()=>f.scrollIntoView({block:"center",behavior:"smooth"}));
+}
+
 function renderAllowance(){
   const mode=ceilingMode(), a=allowance(cursor), h=historyAvg(3);
   document.querySelectorAll("#ceilMode button").forEach(b=>
     b.setAttribute("aria-pressed", b.dataset.k===mode));
+
+  /* Only shown in the mode that uses it — an objective is meaningless as a
+     yardstick you are not measuring against. */
+  const ow=document.getElementById("objWrap");
+  if(ow){
+    ow.hidden = mode!=="objective";
+    const oi=document.getElementById("pObj");
+    if(oi && document.activeElement!==oi) oi.value=S.settings.objective??"";
+  }
 
   const box=document.getElementById("allowBox");
   const gap = a.limit!=null ? a.limit-a.committed : null;
@@ -3399,7 +3653,7 @@ function renderAllowance(){
       + 'are whatever you say they are, and nothing checks them against the month.</p>'
     : a.limit==null
       ? '<div class="empty">'+(mode==="objective"
-          ? "Set your take-home and savings objective in Profile and the allowance appears here."
+          ? "Add your monthly take-home in Profile, and a savings objective below, and the allowance appears here."
           : "No closed cycle to average yet. Import a full month and this fills in.")+'</div>'
       : '<div class="spread" style="margin-top:14px"><span class="lt" style="margin:0">'
         + (mode==="objective"?"Discretionary can be":"You normally spend")+'</span>'
@@ -3413,9 +3667,9 @@ function renderAllowance(){
         + '<span class="num mid '+(gap>=0?"pathc":"overc")+'">'+money(Math.abs(gap))+'</span></div>'
         + (a.excess>0.5
            ? '<p class="hint" style="margin:10px 0 0">Nothing has been overspent — the plan '
-             + 'itself is more than the month allows. Trim a ceiling in Settings, or switch '
+             + 'itself is more than the month allows. Trim a ceiling below, or switch '
              + 'modes if this is the wrong yardstick.</p>'
-           : '<p class="hint" style="margin:10px 0 0">Set the ceilings in Settings. This figure '
+           : '<p class="hint" style="margin:10px 0 0">Set the ceilings below. This figure '
              + 'moves as non-discretionary lands, so check it late in the cycle too.</p>');
 
   /* Per-category averages: the descriptive half. Useful in every mode —
@@ -3455,6 +3709,12 @@ function renderPlan(){
 
   /* The same allowance, repeated where the ceilings are actually typed. Not a
      second calculation — the same one, shown at the moment it matters. */
+  const fold=document.getElementById("ceilFold");
+  if(fold && !fold.dataset.touched){
+    fold.open = targetTotal()<=0;
+    fold.ontoggle=()=>{ fold.dataset.touched="1"; };
+  }
+
   const rem=document.getElementById("ceilReminder");
   if(rem){
     const a=allowance(cursor);
@@ -3481,30 +3741,6 @@ function renderPlan(){
         : '<span style="width:20px;flex:none"></span>')
     + '</div>').join("");
   document.querySelectorAll("#targetInputs [data-del]").forEach(b=>b.onclick=()=>removeCategory(b.dataset.del));
-
-  /* recurring roster */
-  const rec=detectRecurring();
-  const rl=document.getElementById("recList");
-  if(!rec.length){
-    rl.innerHTML='<div class="empty">Import two or more months and the repeat charges surface here.</div>';
-  } else {
-    const conf=rec.filter(r=>r.confirmed), susp=rec.filter(r=>!r.confirmed);
-    const sec=(title,arr)=>arr.length?'<div class="eyebrow" style="margin:14px 0 4px">'+title+'</div>'
-      + arr.map(r=>'<div class="rec" data-m="'+esc(r.merchant)+'">'
-        + '<div class="body"><div class="name">'+esc(r.merchant)
-        +   (r.missed?'<span class="tag dup">not seen</span>':'')
-        +   (r.changed?'<span class="tag one">'+(r.changed==="up"?"\u2191":"\u2193")
-              +Math.abs(r.changePct*100).toFixed(0)+'%</span>':'')+'</div>'
-        + '<div class="meta">'+r.cadence+' \u00b7 '+esc(r.category)+' \u00b7 next '+r.next+'</div></div>'
-        + '<div style="text-align:right"><div class="amt">'+money2(r.amount)+'</div>'
-        + '<div class="meta">'+money(r.monthly)+'/mo</div></div></div>').join(""):"";
-    rl.innerHTML=sec("Confirmed \u2014 three or more",conf)+sec("Suspected \u2014 seen twice",susp)
-      + '<p class="hint" style="margin-top:12px">Tap any row to strike it off if it only looks regular.</p>';
-    rl.querySelectorAll(".rec").forEach(r=>r.onclick=()=>{
-      S.settings.notRecurring=[...(S.settings.notRecurring||[]),r.dataset.m];
-      save(); renderAll(); toast("Removed from recurring");
-    });
-  }
 
   /* the equation */
   const p=ratePlan(), obj=Number(S.settings.objective||0)/100;
@@ -3738,7 +3974,7 @@ function renderData(){
     ps.innerHTML=who.map(p=>'<option>'+esc(p)+'</option>').join("");
   const cs=document.getElementById("mCat");
   if(!cs.options.length)
-    cs.innerHTML=[...TC(),...FIXED_CATS].map(c=>'<option>'+esc(c)+'</option>').join("");
+    cs.innerHTML=[...TC(),...FC()].map(c=>'<option>'+esc(c)+'</option>').join("");
 }
 
 /* ---------- PROFILE ---------- */
@@ -3785,9 +4021,6 @@ function renderProfile(){
     if(el && document.activeElement!==el) el.value=v; };
   set("pName", p.name||"");
   set("pIncome", S.settings.income||"");
-  set("pObj", S.settings.objective??"");
-  set("pAppName", p.appName||"");
-  set("pMainTab", p.mainTab||"");
   set("pBlur", p.blur?"on":"off");
   set("pLaunch", p.launch||"dash");
   set("pDefPerson", p.defaultPerson||"");
@@ -3810,7 +4043,7 @@ function catIcon(c){ return ((S.settings.catIcons||{})[c]||"").slice(0,2); }
 function withIcon(c){ const i=catIcon(c); return (i?i+" ":"")+c; }
 
 function catOptions(sel){
-  return [...TC(),...FIXED_CATS].map(c=>
+  return [...TC(),...FC()].map(c=>
     '<option'+(c===sel?' selected':'')+'>'+esc(c)+'</option>').join("");
 }
 function ruleRowHTML(r){
@@ -3955,7 +4188,6 @@ document.getElementById("savePerson").onclick=()=>{
   const name=document.getElementById("pName").value.trim();
   S.settings.profile={...pro(), name};
   S.settings.income=Number(document.getElementById("pIncome").value)||0;
-  S.settings.objective=Number(document.getElementById("pObj").value)||0;
   /* the profile name is a person the ledger can attribute charges to */
   if(name && !(S.settings.people||[]).some(p=>p.toLowerCase()===name.toLowerCase()))
     S.settings.people=[name,...(S.settings.people||[])];
@@ -3985,12 +4217,6 @@ document.getElementById("saveBehaviour").onclick=()=>{
   toast(changed && day>1
     ? "Months now run "+cycleLabel(cursor)
     : changed ? "Back to calendar months" : "Saved");
-};
-document.getElementById("saveNaming").onclick=()=>{
-  S.settings.profile={...pro(),
-    appName: document.getElementById("pAppName").value.trim(),
-    mainTab: document.getElementById("pMainTab").value.trim() };
-  save(); applyNames(); renderAll(); toast("Names saved");
 };
 document.getElementById("addAcct").onclick=()=>{
   const name=document.getElementById("acName").value.trim();
@@ -4023,6 +4249,11 @@ document.getElementById("mnext").onclick=()=>{ cursor=ymShift(cursor,1); renderA
 document.querySelectorAll("#ceilMode button").forEach(b=>b.onclick=()=>{
   S.settings.ceilingMode=b.dataset.k; save(); renderAll();
 });
+document.getElementById("saveObj").onclick=()=>{
+  const v=Number(document.getElementById("pObj").value);
+  S.settings.objective=(v>0&&v<=100)?v:0;
+  save(); renderAll(); toast(S.settings.objective?"Objective "+S.settings.objective+"%":"Objective cleared");
+};
 document.getElementById("saveTargets").onclick=()=>{
   document.querySelectorAll("#targetInputs [data-name]").forEach(i=>{
     const v=i.value.trim();
