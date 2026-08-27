@@ -64,9 +64,6 @@ html[data-blur="on"] .big,html[data-blur="on"] .mid{
   filter:blur(7px);transition:filter .12s ease;user-select:none}
 html[data-blur="on"][data-reveal="1"] .num,html[data-blur="on"][data-reveal="1"] .display,
 html[data-blur="on"][data-reveal="1"] .big,html[data-blur="on"][data-reveal="1"] .mid{filter:none}
-.mono-txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.02em;color:var(--onaccent)}
-nav button.main .pill .mono-txt{font-size:13px;letter-spacing:.01em}
 @media (prefers-reduced-motion:reduce){
   html[data-blur="on"] .num,html[data-blur="on"] .display{transition:none}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -101,8 +98,6 @@ header{position:sticky;top:0;z-index:20;background:var(--paper);padding:14px 0 1
    stops being legible. */
 .mark{height:23px;flex:none;display:flex;align-items:center;position:relative;color:var(--accent)}
 .mark svg{height:23px;width:auto;display:block}
-.mark.has-mono{width:23px;border-radius:5px;background:var(--accent)}
-.mark.has-mono svg{display:none}
 .monthpick{margin-left:auto;display:flex;align-items:center;gap:2px}
 .monthpick button{border:0;background:none;color:var(--ink);font-size:17px;padding:4px 8px;cursor:pointer;border-radius:6px}
 .monthpick button:disabled{opacity:.25}
@@ -137,26 +132,25 @@ nav{position:fixed;left:0;right:0;bottom:0;z-index:30;height:calc(var(--rail) + 
   display:flex;overflow:visible}
 nav button{flex:1;border:0;background:none;color:var(--quiet);font-size:9.5px;font-weight:600;
   letter-spacing:.05em;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:5px;padding:0;position:relative}
+  align-items:center;justify-content:center;gap:4px;padding:0;position:relative}
+/* Every tab reserves the same 16px slot above its label. Closed tabs show a
+   dash; the open one shows the P. The mark is the app saying where you are,
+   so it is always the accent colour and never carries a reading of any kind. */
+nav button .tabmark{height:16px;display:flex;align-items:center;justify-content:center;flex:none}
 nav button .dot{width:16px;height:3px;border-radius:2px;background:currentColor;opacity:.35}
+nav button .glyph{display:none;height:16px;width:auto;color:var(--accent)}
 nav button[aria-current="true"]{color:var(--ink)}
-nav button[aria-current="true"] .dot{opacity:1;background:var(--path)}
+nav button[aria-current="true"] .dot{display:none}
+nav button[aria-current="true"] .glyph{display:block}
 
-/* The centre tab is the one you open first and the one you come back to, so it
-   is bigger, raised, and coloured by the verdict — the answer is legible from
-   any screen in the app without opening it. */
-nav button.main{flex:1.18;justify-content:flex-start;padding-top:0;gap:6px}
-nav button.main .pill{width:42px;height:42px;border-radius:22px;margin-top:-15px;
-  background:var(--quiet);border:3px solid var(--card);box-shadow:0 3px 10px rgba(22,35,43,.20);
-  display:flex;align-items:center;justify-content:center;position:relative;flex:none;
-  transition:background .3s ease}
+/* Spending keeps the verdict, moved off the mark and onto its dash: green on
+   plan, amber tight, red over, plain grey when the review queue is big enough
+   that the honest answer is "can't say yet." It reads from any other screen,
+   and goes quiet when you are already on Spending and can see the number. */
 nav button.main .mlbl{font-size:9.5px;letter-spacing:.06em}
-nav button.main[aria-current="true"] .pill{box-shadow:0 3px 10px rgba(22,35,43,.28)}
-nav button.main.ok .pill{background:var(--path)}
-nav button.main.tight .pill{background:var(--hold)}
-nav button.main.over .pill{background:var(--over)}
-nav button.main.unknown .pill,nav button.main.unset .pill{background:var(--quiet)}
-@media (prefers-reduced-motion:reduce){nav button.main .pill{transition:none}}
+nav button.main.ok .dot{background:var(--path);opacity:1}
+nav button.main.tight .dot{background:var(--hold);opacity:1}
+nav button.main.over .dot{background:var(--over);opacity:1}
 .badge{position:absolute;top:8px;right:50%;margin-right:-16px;background:var(--over);color:var(--onink);
   font-size:9px;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;
   justify-content:center;padding:0 4px;letter-spacing:0}
@@ -193,6 +187,10 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .band{margin:20px 2px 9px}
 .band .eyebrow{color:var(--quiet)}
 .verdict{border-top:3px solid var(--rule);padding:17px 16px 15px}
+/* The verdict and the trajectory are one thought, so they sit closer to each
+   other than to anything else on the page — the gap does the work the band
+   label used to do, without splitting them into two sections. */
+.verdict + .card{margin-top:-5px}
 .verdict.ok{border-top-color:var(--path)}
 .verdict.tight{border-top-color:var(--hold)}
 .verdict.over{border-top-color:var(--over)}
@@ -318,9 +316,26 @@ label{display:block;margin-bottom:10px}
 </style>
 </head>
 <body>
+<!-- The mark is defined once and referenced everywhere it appears: the header
+     and whichever bottom tab is currently open. One definition means the two
+     can never drift apart. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- A <g>, deliberately not a <symbol>: a symbol carrying its own viewBox
+         establishes a second viewport inside the referencing svg's viewBox and
+         re-anchors the artwork at 0,0, which shifted the mark up and left and
+         clipped the top of the stem. A <g> clones straight into the caller's
+         coordinate system, so the viewBox below is the only one in play. -->
+    <g id="pathmark">
+      <path d="M53.4,29.4L20.6,50.8L8.8,51.5C19,47 40,38 53.4,29.4Z" fill="currentColor"/>
+      <rect x="18.6" y="12" width="4" height="35" fill="currentColor"/>
+      <path d="M20.6,14H29.5A7.5,7.5 0 0 1 29.5,29H20.6" fill="none" stroke="currentColor" stroke-width="4"/>
+    </g>
+  </defs>
+</svg>
 <div id="app">
   <header>
-    <div class="mark" aria-hidden="true"><svg viewBox="8.4 11.6 45.4 40.3" fill="currentColor" aria-hidden="true"><path d="M53.4,29.4L20.6,50.8L8.8,51.5C19,47 40,38 53.4,29.4Z"/><rect x="18.6" y="12" width="4" height="35"/><path d="M20.6,14H29.5A7.5,7.5 0 0 1 29.5,29H20.6" fill="none" stroke="currentColor" stroke-width="4"/></svg></div><h1>Path</h1>
+    <div class="mark" aria-hidden="true"><svg viewBox="6.4 9.6 49.4 44.3" aria-hidden="true"><use href="#pathmark"/></svg></div><h1>Path</h1>
     <div class="monthpick">
       <button id="mprev" aria-label="Previous month">&#8249;</button>
       <span class="lbl num" id="mlbl">&mdash;</span>
@@ -347,6 +362,11 @@ label{display:block;margin-bottom:10px}
     <div class="card" id="setupCard" hidden></div>
 
     <div class="card verdict" id="verdictCard"></div>
+
+    <!-- No band above this one on purpose: the verdict is the answer and the
+         trajectory is the reason for it, so they run together as one thought.
+         A label between them would make them read as two sections. -->
+    <div class="card" id="trajCard"></div>
 
     <div class="band"><span class="eyebrow">Where you are</span></div>
     <div class="card" id="catCard"></div>
@@ -404,9 +424,6 @@ label{display:block;margin-bottom:10px}
         <button class="btn" id="addBill">Add bill</button>
       </div>
     </div>
-
-    <div class="band"><span class="eyebrow">Where you’re headed</span></div>
-    <div class="card" id="trajCard"></div>
 
     <details class="fold" id="foldRest">
       <summary><span class="eyebrow">The rest of the month</span>
@@ -485,8 +502,6 @@ label{display:block;margin-bottom:10px}
           come in higher.</p>
         <label style="margin-top:12px"><span class="lt">Savings objective (% of take-home)</span>
           <input type="number" id="pObj" inputmode="decimal" step="1" min="0" max="100"></label>
-        <label style="margin-top:12px"><span class="lt">Monogram (1&ndash;3 characters)</span>
-          <input type="text" id="pInitials" maxlength="3" placeholder="JG"></label>
         <button class="btn" id="savePerson">Save profile</button>
       </div>
 
@@ -688,12 +703,19 @@ label{display:block;margin-bottom:10px}
 </div>
 <nav>
   <button data-v="dash" class="main" aria-current="true">
-    <span class="pill" id="navPill" aria-hidden="true"></span>
+    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
+      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>
     <span class="mlbl" id="navMain">Spending</span>
   </button>
-  <button data-v="saving"><span class="dot"></span>Saving</button>
-  <button data-v="plan"><span class="dot"></span>Planning</button>
-  <button data-v="review"><span class="dot"></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
+  <button data-v="saving">
+    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
+      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Saving</button>
+  <button data-v="plan">
+    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
+      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Planning</button>
+  <button data-v="review">
+    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
+      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
 </nav>
 <div class="toast" id="toast"></div>
 <script>
@@ -777,7 +799,7 @@ const DEFAULTS = {
   rules: {},            // normalized merchant -> category (learned)
   ambiguous: [],
   profile: { name:"", theme:"system", cycleStart:1, appName:"", mainTab:"",
-             initials:"", accent:"ink", blur:false, launch:"dash", defaultPerson:"" },
+             accent:"ink", blur:false, launch:"dash", defaultPerson:"" },
   catIcons: {},         // pillar -> one glyph
   splitPct: 60,         // percent of a shared bill that is yours
   shared: {},           // bill name -> true when that bill is split
@@ -3577,16 +3599,6 @@ function applyNames(){
   document.querySelector("header h1").textContent=appName();
   document.title=appName();
   document.getElementById("navMain").textContent=mainTabName();
-  /* monogram replaces the slash on both the header mark and the centre tab */
-  const ini=(pro().initials||"").trim().toUpperCase().slice(0,3);
-  for(const el of [document.querySelector("header .mark"),
-                   document.getElementById("navPill")]){
-    if(!el) continue;
-    el.querySelector(".mono-txt")?.remove();
-    el.classList.toggle("has-mono", !!ini);
-    if(ini){ const sp=document.createElement("span");
-      sp.className="mono-txt"; sp.textContent=ini; el.appendChild(sp); }
-  }
 }
 
 function renderProfile(){
@@ -3596,7 +3608,6 @@ function renderProfile(){
   set("pName", p.name||"");
   set("pIncome", S.settings.income||"");
   set("pObj", S.settings.objective??"");
-  set("pInitials", p.initials||"");
   set("pAppName", p.appName||"");
   set("pMainTab", p.mainTab||"");
   set("pBlur", p.blur?"on":"off");
@@ -3764,8 +3775,7 @@ document.getElementById("closeSettings").onclick=()=>go(lastView);
 document.querySelectorAll("#setNav button").forEach(b=>b.onclick=()=>setGo(b.dataset.s));
 document.getElementById("savePerson").onclick=()=>{
   const name=document.getElementById("pName").value.trim();
-  S.settings.profile={...pro(), name,
-    initials: document.getElementById("pInitials").value.trim().toUpperCase().slice(0,3)};
+  S.settings.profile={...pro(), name};
   S.settings.income=Number(document.getElementById("pIncome").value)||0;
   S.settings.objective=Number(document.getElementById("pObj").value)||0;
   /* the profile name is a person the ledger can attribute charges to */
