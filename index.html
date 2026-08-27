@@ -151,6 +151,7 @@ nav button.main .mlbl{font-size:9.5px;letter-spacing:.06em}
 nav button.main.ok .dot{background:var(--path);opacity:1}
 nav button.main.tight .dot{background:var(--hold);opacity:1}
 nav button.main.over .dot{background:var(--over);opacity:1}
+nav button.main.overcommitted .dot{background:var(--hold);opacity:1}
 .badge{position:absolute;top:8px;right:50%;margin-right:-16px;background:var(--over);color:var(--onink);
   font-size:9px;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;
   justify-content:center;padding:0 4px;letter-spacing:0}
@@ -195,6 +196,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .verdict.tight{border-top-color:var(--hold)}
 .verdict.over{border-top-color:var(--over)}
 .verdict.unknown{border-top-color:var(--quiet)}
+.verdict.overcommitted{border-top-color:var(--hold)}
 .vword{font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:700}
 .display{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:clamp(40px,13vw,54px);
   font-weight:600;line-height:1;letter-spacing:-.035em;margin:9px 0 3px}
@@ -274,9 +276,6 @@ label{display:block;margin-bottom:10px}
 .gs .ax{font-family:var(--mono);font-size:8px;fill:var(--quiet);letter-spacing:.06em}
 .twocol{display:flex;gap:12px}
 .twocol .col{flex:1;min-width:0}
-.spark{width:100%;height:34px;display:block;margin-top:9px}
-.sparklab{display:flex;justify-content:space-between;font-family:var(--mono);
-  font-size:8px;color:var(--quiet);margin-top:3px}
 .flowwrap{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap}
 .donut{width:128px;height:128px;flex:none}
 .dnum{font-family:var(--mono);font-size:22px;font-weight:600;fill:var(--ink)}
@@ -290,6 +289,11 @@ label{display:block;margin-bottom:10px}
 .miniseg button{border:0;background:var(--card);padding:4px 9px;font-family:var(--mono);font-size:9px;
   letter-spacing:.08em;text-transform:uppercase;color:var(--quiet);cursor:pointer}
 .miniseg button[aria-pressed="true"]{background:var(--accent);color:var(--onaccent)}
+/* Full-width variant: two equal halves, so "Discretionary" and
+   "Non-discretionary" read as a pair rather than one word crowding the other. */
+.miniseg.wide{margin-top:9px}
+.miniseg.wide button{flex:1;padding:7px 4px;font-size:9.5px;letter-spacing:.05em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bill{display:flex;align-items:flex-start;gap:11px;padding:12px 0;border-bottom:1px solid var(--rule)}
 .bill:last-of-type{border-bottom:0}
 .bill.declared{cursor:pointer}
@@ -297,16 +301,10 @@ label{display:block;margin-bottom:10px}
   background:var(--paper);border-radius:6px;padding:3px 0;margin-top:1px}
 .bill .body{flex:1;min-width:0}
 .bill .bamt{text-align:right;flex:none}
-.range{font-family:var(--mono);font-size:11px;color:var(--quiet)}
 .billbar{position:relative;height:9px;background:var(--track);border-radius:3px;margin-top:12px;overflow:hidden}
 .billbar .bfill{position:absolute;left:0;top:0;bottom:0;background:#5F8090;border-radius:3px;
   transition:width .5s cubic-bezier(.22,.9,.3,1)}
 @media (prefers-reduced-motion:reduce){.billbar .bfill{transition:none}}
-.daystrip{display:flex;gap:1px;height:46px;align-items:flex-end;margin-top:9px;
-  padding:0 0 3px;border-bottom:1px solid var(--rule)}
-.dcol{flex:1;height:100%;display:flex;align-items:flex-end;position:relative}
-.dcol.now::after{content:"";position:absolute;left:0;right:0;bottom:-4px;height:2px;background:var(--ink)}
-.dbar{width:100%;background:var(--path);border-radius:1.5px 1.5px 0 0;opacity:.85}
 .empty{text-align:center;color:var(--quiet);padding:26px 12px;font-size:14px}
 .hint{font-size:12px;color:var(--quiet);margin:-2px 0 10px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--rail) + 16px);z-index:60;
@@ -374,9 +372,8 @@ label{display:block;margin-bottom:10px}
     <!-- Bills lives here now, as the second half of the scope toggle above —
          not its own tab. Hidden whenever Spending scope is showing. -->
     <div id="billsScope" hidden>
-      <div class="card" id="commitTop"></div>
       <div class="card" id="billList"></div>
-      <div class="card" id="commitCal"></div>
+      <div class="card" id="commitTop"></div>
       <div class="card">
         <div class="eyebrow">Cost sharing</div>
         <h2 style="margin:4px 0 4px">Your split</h2>
@@ -462,6 +459,19 @@ label{display:block;margin-bottom:10px}
       <label id="goalWrap" style="display:none"><span class="lt">Amount I want</span>
         <input type="number" id="projGoal" inputmode="decimal" step="100"></label>
       <div id="projOut"></div>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Discretionary</div>
+      <h2 style="margin:4px 0 6px">How your ceilings get set</h2>
+      <p class="hint">Three ways to arrive at the numbers. You always type them
+        yourself &mdash; this decides what the total is allowed to be, so you
+        don&rsquo;t budget past what the month leaves you.</p>
+      <div class="miniseg wide" id="ceilMode" role="group" aria-label="How ceilings are set">
+        <button data-k="custom" aria-pressed="true">Custom</button>
+        <button data-k="objective" aria-pressed="false">Objective</button>
+        <button data-k="history" aria-pressed="false">History</button>
+      </div>
+      <div id="allowBox"></div>
     </div>
     <div class="card">
       <div class="eyebrow">The equation</div>
@@ -561,6 +571,7 @@ label{display:block;margin-bottom:10px}
         <p class="hint">Name them what you call them, set what each is allowed to be.
           Rename or remove any of them \u2014 nothing here is fixed, and Maja's list
           need not match yours.</p>
+        <div id="ceilReminder"></div>
         <div id="targetInputs"></div>
         <div class="row" style="gap:8px;margin-top:2px">
           <input type="text" id="newCat" placeholder="Kids, Travel, Boat fund\u2026" style="flex:1">
@@ -794,7 +805,8 @@ const DEFAULTS = {
   catchAllId: "flex",
   gsMode: "spent",
   catMode: "pace",       // ceilings card: "pace" or "remaining"
-  catScope: "disc",      // spending-plan card: "disc" or "fixed" (bills)
+  catScope: "disc",      // spending-plan card: "disc" or "fixed" (non-discretionary)
+  ceilingMode: "custom", // how ceilings are set: "custom" | "objective" | "history"
   targets: {},          // cat -> monthly ceiling
   rules: {},            // normalized merchant -> category (learned)
   ambiguous: [],
@@ -1345,6 +1357,76 @@ function monthsWithData(){
 function targetTotal(){
   return TC().reduce((a,c)=>a+Number(S.settings.targets[c]||0),0);
 }
+
+/* ---------- HOW THE CEILINGS GET SET ----------
+   Three ways, and the user picks which. None of them writes the ceilings for
+   you — you always type the numbers — but two of them tell you what the total
+   is allowed to be, which is the part that was missing:
+
+     custom     no allowance, no opinion. Set what you like.
+     objective  take-home, less your share of non-discretionary, less the
+                savings you said you wanted. What's left is what discretionary
+                can be. Prescriptive.
+     history    what you actually spend. Descriptive, and the honest starting
+                point when the objective number turns out to be fantasy.
+
+   Non-discretionary is not allocated here — it is whatever the month needs,
+   which is why it comes from the live figure rather than a budget line. */
+function ceilingMode(){
+  const m=(S.settings||{}).ceilingMode;
+  return m==="objective"||m==="history" ? m : "custom";
+}
+
+/* Trailing per-category discretionary averages. Excludes the open cycle: a
+   month that is four days old would drag every average toward zero. */
+function historyAvg(n){
+  n=n||3;
+  const cur=cycleOf(todayISO());
+  const ms=monthsWithData().filter(m=>m<cur).slice(-n);
+  if(!ms.length) return { months:0, byCat:{}, total:0 };
+  const byCat={};
+  for(const m of ms){
+    const d=monthData(m);
+    for(const c of TC()) byCat[c]=(byCat[c]||0)+(d.byCat[c]||0);
+  }
+  for(const c of Object.keys(byCat)) byCat[c]=Math.max(0,byCat[c]/ms.length);
+  return { months:ms.length, byCat,
+           total:Object.values(byCat).reduce((a,v)=>a+v,0) };
+}
+
+/* What discretionary is ALLOWED to total, under the mode in force. Null in
+   custom mode, and null whenever the inputs to compute it are missing —
+   a made-up allowance is worse than none. */
+function allowance(ym){
+  ym=ym||cycleOf(todayISO());
+  const mode=ceilingMode();
+  const committed=targetTotal();
+  if(mode==="custom") return { mode, limit:null, committed, excess:0, basis:null };
+
+  if(mode==="history"){
+    const h=historyAvg(3);
+    return { mode, limit: h.months?h.total:null, committed,
+             excess: h.months?Math.max(0,committed-h.total):0,
+             basis: h.months?("your average over the last "+h.months+" cycle"
+               +(h.months===1?"":"s")):null, hist:h };
+  }
+
+  /* objective */
+  const stated=Number(S.settings.income||0);
+  const objPct=Number(S.settings.objective||0);
+  if(stated<=0) return { mode, limit:null, committed, excess:0, basis:null };
+  const b=billsThisMonth(ym);
+  const d=monthData(ym);
+  /* Your share, not the household's: reimbursements come back off the top. */
+  const fixedNet=(d.fixed - d.refundsFixed) + b.toCome - b.offsetTotal;
+  const save=stated*objPct/100;
+  const limit=stated - fixedNet - save;
+  return { mode, limit, committed, excess:Math.max(0,committed-limit),
+           basis:"take-home less your share of non-discretionary"
+             +(objPct>0?" and a "+Math.round(objPct)+"% objective":""),
+           stated, fixedNet, save };
+}
+
 function statusOf(spent,target,pace){
   if (!target) return "none";
   if (spent>target) return "over";
@@ -1443,7 +1525,12 @@ function theirShare(amount,name){
 
 function billsThisMonth(ym){
   const d=monthData(ym);
-  const posted=FIXED_CATS.reduce((a,c)=>a+(d.byCat[c]||0),0) - d.refundsFixed;
+  /* byCat is already net of refunds — monthData books a refund as a negative
+     against its origin category. Subtracting refundsFixed on top of that took
+     every non-discretionary refund off the total twice, so a $44 credit read
+     as $88 back. The line-item list is built from the same charges and made
+     the gap visible. */
+  const posted=FIXED_CATS.reduce((a,c)=>a+(d.byCat[c]||0),0);
   const seen=new Set(d.live.filter(t=>FIXED_CATS.includes(t.category)).map(t=>t.merchant));
   const rows=billRows(ym);
 
@@ -1552,10 +1639,22 @@ function verdict(ym){
   else                      state = "ok";
 
   /* Second test, different failure: the ceilings can be fine while the month
-     still doesn't close on the money coming in. */
-  const cashOut  = d.fixed + b.toCome + headed;
-  const cashLeft = d.income>0 ? d.income - cashOut : null;
-  if (cashLeft!=null && cashLeft<0 && state==="ok") state="tight";
+     still doesn't close on the money coming in. This used to run its own
+     arithmetic — income minus gross fixed minus projected discretionary —
+     which double-counted non-discretionary refunds and ignored Maja's share
+     entirely, so it disagreed with the identical figure on Saving. There is
+     one surplus calculation now and it lives in outlook(). */
+  const surplus = outlook(ym).surplus;
+  if (surplus!=null && surplus<0 && state==="ok") state="tight";
+
+  /* Third test, a different KIND of failure: the ceilings themselves add up
+     to more than the mode in force allows. Nothing has been overspent — the
+     plan is simply not affordable as written. It only surfaces when actual
+     spending is otherwise fine, because an already-blown month is the more
+     urgent thing to say. */
+  const al = allowance(ym);
+  const overcommitted = !closed && al.limit!=null && al.excess>0.5;
+  if (overcommitted && state==="ok") state="overcommitted";
 
   const why=[];
   if (state==="unknown" || held>0)
@@ -1563,36 +1662,48 @@ function verdict(ym){
                goto:"review" });
   if (b.toCome>0)
     why.push({ text:"in bills still expected this month", figure:b.toCome, goto:"bills" });
-  if (cashLeft!=null && cashLeft<0)
-    why.push({ text:"more than the month brings in, all in", figure:-cashLeft });
-  else if (cashLeft!=null && why.length<3)
-    why.push({ text:"left over once everything lands", figure:cashLeft });
+  if (overcommitted)
+    why.push({ text:"more than your ceilings are allowed to total", figure:al.excess,
+               goto:"plan" });
   if (d.refunds>0 && why.length<3)
     why.push({ text:"in refunds applied to this month", figure:d.refunds });
 
-  const word = state==="ok"      ? (closed?"Finished under":"On plan")
-             : state==="tight"   ? (closed?"Finished close":"Tight")
-             : state==="over"    ? (closed?"Finished over":"Over plan")
-             :                     "Can\u2019t say yet";
-  const figure = state==="unknown" ? held : Math.abs(slack);
+  const word = state==="ok"            ? (closed?"Finished on path":"On path")
+             : state==="tight"          ? (closed?"Finished close":"Straying")
+             : state==="over"           ? (closed?"Finished off":"Significantly off")
+             : state==="overcommitted"  ? "Plan exceeds budget"
+             :                            "Can\u2019t say yet";
+
+  /* The hero figure is the cash answer, not the ceiling margin. "Spare at
+     this rate" only ever described the gap to your limits, which is not the
+     question — the question is what is left after everything, and that is
+     the surplus. */
+  const figure = state==="unknown" ? held
+               : surplus!=null ? Math.abs(surplus) : Math.abs(slack);
   const label  = state==="unknown"
       ? "held for review \u2014 enough to change the answer"
-    : state==="over"
-      ? (closed?"over your limits":"over your limits at this rate")
-      : (closed?"under your limits":"spare at this rate");
+    : surplus==null
+      ? (closed?"under your limits":"to your limits at this rate")
+    : surplus>=0
+      ? (closed?"surplus for the cycle":"surplus by end of month at this rate")
+      : (closed?"deficit for the cycle":"deficit by end of month at this rate");
 
   const sub = state==="unknown"
       ? "Clear the queue and the month resolves one way or the other."
     : state==="over"
       ? "Spending has to slow for the rest of the month to finish inside plan."
+    : state==="overcommitted"
+      ? "Spending is fine. Your ceilings are the problem \u2014 they total more "
+        + "than " + (al.mode==="history"?"you normally spend":"the objective leaves you") + "."
     : state==="tight"
-      ? (cashLeft!=null && cashLeft<0
+      ? (surplus!=null && surplus<0
           ? "Inside your limits, but the month doesn't close on income."
           : "Inside your limits, with very little room to spare.")
       : "On plan across every limit.";
 
   return { state, word, figure, label, sub, why:why.slice(0,3),
-           spent, target, headed, slack, held, closed };
+           spent, target, headed, slack, held, closed, surplus,
+           allowance:al, overcommitted };
 }
 
 
@@ -2034,6 +2145,51 @@ function billRows(ym){
   return rows.sort((a,b)=>a.day-b.day||b.monthly-a.monthly);
 }
 
+/* Every non-discretionary line this cycle, not just the recurring ones.
+   billRows() only ever knew about patterns that had fired three times plus
+   whatever you declared by hand, which left one-off Housing and Bills charges
+   off the list entirely — you could see them in the total and nowhere else.
+   This walks the actual charges instead and folds the still-expected ones in
+   on top, so the list and the total finally describe the same money.
+
+   Grouped by merchant because that is the unit a split applies to: two Amex
+   charges from one biller are one line you can mark shared, not two. */
+function fixedLines(ym){
+  const d=monthData(ym), dim=daysIn(ym);
+  const byName=new Map();
+  const row=(name)=>{
+    const k=splitKey(name);
+    if(!byName.has(k)) byName.set(k,{ key:k, name, category:"", day:dim, amount:0,
+      count:0, status:"posted", origin:"detected", id:null });
+    return byName.get(k);
+  };
+  for(const t of d.live){
+    if(t.type==="transfer"||t.type==="income"||t.type==="savings") continue;
+    /* A refund belongs to the charge it reverses — same merchant, same day,
+       same category — or the line it cancels never nets out. */
+    const src = t.type==="refund" && t.linkedTo
+      ? S.txns.find(x=>x.id===t.linkedTo) : null;
+    const cat = src ? (src.category||t.category) : t.category;
+    if(!FIXED_CATS.includes(cat)) continue;
+    const r=row(src ? (src.merchant||t.merchant) : t.merchant);
+    r.category=cat;
+    r.amount += t.type==="refund" ? -Math.abs(t.amount) : t.amount;
+    if(t.type!=="refund") r.count++;
+    r.day=Math.min(r.day, Math.max(1,Math.min(dim,dayIndex(src?src.date:t.date, ym))));
+    if(t.billId){ r.id=t.billId; r.origin="declared"; }
+  }
+  /* What hasn't landed yet, from the same pending set the total is built on. */
+  for(const p of billsThisMonth(ym).pending){
+    if(byName.has(splitKey(p.name))) continue;
+    const r=row(p.name);
+    r.category=p.category; r.day=p.day; r.amount=p.estimate;
+    r.status="expected"; r.origin=p.origin;
+    if(p.id) r.id=p.id;
+  }
+  return [...byName.values()].filter(r=>Math.abs(r.amount)>0.005)
+    .sort((a,b)=>a.day-b.day || b.amount-a.amount);
+}
+
 /* Where the money goes: housing, the rest of the bills, the four ceilings, what's left */
 function cashFlow(ym, mode){
   const d=monthData(ym);
@@ -2055,31 +2211,6 @@ function cashFlow(ym, mode){
            remainder: income-out, out, heldAmt: plan?0:d.heldAmt };
 }
 
-function committedView(){
-  const rec=detectRecurring().filter(r=>r.confirmed);
-  const rows=rec.map(r=>{
-    const hist=billHistory(r.merchant,6);
-    const amts=hist.map(h=>h.amount);
-    const lo=amts.length?Math.min(...amts):r.amount;
-    const hi=amts.length?Math.max(...amts):r.amount;
-    const steady = r.amount>0 && (hi-lo)/r.amount < 0.06;
-    const trend = amts.length>=3
-      ? (amts[amts.length-1]-amts[0])/Math.max(1,amts[0]) : 0;
-    return {...r, hist, lo, hi, steady, trend,
-            group: FIXED_CATS.includes(r.category) ? "fixed" : "discretionary"};
-  });
-  const fixedSteady = rows.filter(r=>r.group==="fixed" && r.steady);
-  const fixedVar    = rows.filter(r=>r.group==="fixed" && !r.steady);
-  const inCeilings  = rows.filter(r=>r.group==="discretionary");
-  const sum=a=>a.reduce((x,r)=>x+r.monthly,0);
-  return { fixedSteady, fixedVar, inCeilings,
-           totalFixed: sum(fixedSteady)+sum(fixedVar),
-           totalSteady: sum(fixedSteady), totalVar: sum(fixedVar),
-           totalInCeilings: sum(inCeilings),
-           byDay: rows.filter(r=>r.group==="fixed").map(r=>({
-             day: Number(r.next.slice(8,10)), merchant:r.merchant, amount:r.amount }))
-                 .sort((a,b)=>a.day-b.day) };
-}
 
 
 /* ============================================================
@@ -2760,7 +2891,8 @@ function renderVerdict(){
   el.className="card verdict "+v.state;
 
   if(v.state==="unset"){
-    el.innerHTML='<div class="vword muted">'+esc(v.word)+'</div>'
+    el.innerHTML='<div class="eyebrow">Spending overview</div>'
+      + '<div class="vword muted" style="margin-top:6px">'+esc(v.word)+'</div>'
       + '<div class="vsub" style="margin-top:8px">'+esc(v.sub)+'</div>'
       + '<div class="vwhy">'+v.why.map(w=>'<div class="r"><span>'+esc(w.text)+'</span>'
         + '<button class="link" data-goto="'+w.goto+'">Open</button></div>').join("")+'</div>';
@@ -2768,11 +2900,13 @@ function renderVerdict(){
     return;
   }
 
-  const tone = v.state==="ok" ? "pathc" : v.state==="tight" ? "holdc"
+  const tone = v.state==="ok" ? "pathc"
+             : v.state==="tight"||v.state==="overcommitted" ? "holdc"
              : v.state==="over" ? "overc" : "muted";
-  el.innerHTML='<div class="spread"><span class="vword '+tone+'">'+esc(v.word)+'</span>'
+  el.innerHTML='<div class="spread"><span class="eyebrow">Spending overview</span>'
     +   '<span class="eyebrow">'+(v.closed?"cycle closed":"day "
     +   Math.max(1,Math.round(paceOf(cursor)*daysIn(cursor)))+" of "+daysIn(cursor))+'</span></div>'
+    + '<div class="vword '+tone+'" style="margin-top:6px">'+esc(v.word)+'</div>'
     + '<div class="display '+tone+'">'+money(v.figure)+'</div>'
     + '<div class="sm muted">'+esc(v.label)+'</div>'
     + '<div class="vsub" style="margin-top:9px">'+esc(v.sub)+'</div>'
@@ -2827,21 +2961,19 @@ function renderDash(){
         + '<span class="num '+(proj>=obj?"pathc":"overc")+'">'+(proj*100).toFixed(0)+'%</span></div>':'');
   }
 
-  /* the ceilings — readable two ways, and now two SETS: your own spending
-     limits, or the household's non-discretionary side (Housing, Bills) —
-     which used to only be visible by filtering the Ledger by hand. A
-     "target" for the fixed side is the standing expected monthly amount from
-     billRows(), the closest thing a bill has to a ceiling. */
+  /* the ceilings — readable two ways. Only the discretionary side has them.
+     Bills scope used to draw the same ribbons against a "target" derived from
+     billRows(), which read as "$1,065 of $171 · $894 over" — a ceiling you
+     had supposedly blown through on money you never chose to spend. A bill is
+     not a limit, so Bills scope now shows no bars at all and hands the
+     question to the line-item list below, which answers the one thing that
+     was actually being asked: how much non-discretionary went out. */
   const scope=S.settings.catScope==="fixed"?"fixed":"disc";
-  const scopeCats = scope==="disc" ? TC() : FIXED_CATS;
-  const billMonthly = scope==="fixed"
-    ? billRows(cursor).filter(r=>(r.kind||"bill")==="bill")
-        .reduce((a,r)=>{ a[r.category]=(a[r.category]||0)+r.monthly; return a; },{})
-    : {};
+  const scopeCats = scope==="disc" ? TC() : [];
   const list=scopeCats.map(c=>({
     cat:c,
     spent:d.byCat[c]||0,
-    target: scope==="disc" ? Number(S.settings.targets[c]||0) : (billMonthly[c]||0),
+    target: Number(S.settings.targets[c]||0),
     /* Money held against THIS category, so the tank can show what is at risk.
        Only holds whose category is already settled count — a new or ambiguous
        merchant defaults to the catch-all in makeTxn, and pinning it there
@@ -2852,18 +2984,30 @@ function renderDash(){
   const cm=S.settings.catMode==="remaining"?"remaining":"pace";
   const catEl=document.getElementById("catCard");
   catEl.innerHTML='<div class="spread"><span class="eyebrow">Spending plan</span></div>'
-    + '<div class="spread" style="margin-top:7px">'
-    +   '<div class="miniseg" id="catScope" role="group" aria-label="Spending scope">'
-    +     '<button data-s="disc" aria-pressed="'+(scope==="disc")+'">Spending</button>'
-    +     '<button data-s="fixed" aria-pressed="'+(scope==="fixed")+'">Bills</button></div>'
-    +   '<div class="miniseg" id="catMode" role="group" aria-label="Ceiling view">'
-    +     '<button data-c="pace" aria-pressed="'+(cm==="pace")+'">Pace</button>'
-    +     '<button data-c="remaining" aria-pressed="'+(cm==="remaining")+'">Left</button></div>'
+    /* Two long words don't share a row with Pace/Left without looking crammed,
+       so the scope gets its own full-width row and the view toggle sits under
+       it, right-aligned against the ribbons it controls. */
+    + '<div class="miniseg wide" id="catScope" role="group" aria-label="Spending scope">'
+    +   '<button data-s="disc" aria-pressed="'+(scope==="disc")+'">Discretionary</button>'
+    +   '<button data-s="fixed" aria-pressed="'+(scope==="fixed")+'">Non-discretionary</button></div>'
+    + '<div class="spread" style="margin-top:9px">'
+    +   '<span></span>'
+    /* Pace/Left only means something against a ceiling, so it goes with the
+       ribbons when the scope has none. */
+    +   (scope==="disc"
+        ? '<div class="miniseg" id="catMode" role="group" aria-label="Ceiling view">'
+          + '<button data-c="pace" aria-pressed="'+(cm==="pace")+'">Pace</button>'
+          + '<button data-c="remaining" aria-pressed="'+(cm==="remaining")+'">Left</button></div>'
+        : '')
     + '</div>'
     + list.map(x=>'<div class="catrow" data-catrow="'+esc(x.cat)+'" '
       + 'style="margin-top:14px;cursor:pointer"><div class="spread"><strong>'+esc(withIcon(x.cat))+'</strong></div>'
       + ribbon(x.spent,x.target,pace,x.held,cm,dim)+'</div>').join("")
-    + '<p class="hint" style="margin-top:12px">Tap a category to see its transactions.</p>';
+    + '<p class="hint" style="margin-top:12px">'
+    +   (scope==="disc"
+        ? 'Tap a category to see its transactions.'
+        : 'Every non-discretionary line for this cycle is below. Bills are not '
+          + 'ceilings, so there is nothing to be over.')+'</p>';
   catEl.querySelectorAll("#catScope button").forEach(b=>{
     b.onclick=()=>{ S.settings.catScope=b.dataset.s; save(); renderDash(); };
   });
@@ -3043,26 +3187,9 @@ function reopen(id){
 /* ============================================================
    COMMITTED
    ============================================================ */
-function sparkbar(hist, lo, hi){
-  if(hist.length<2) return "";
-  const W=280,H=34;
-  const max=Math.max(hi,1)*1.12;
-  const bw=W/hist.length;
-  return '<svg viewBox="0 0 '+W+' '+H+'" class="spark" preserveAspectRatio="none">'
-    + hist.map((h,i)=>{
-        const bh=Math.max(2,(h.amount/max)*H);
-        const isMax=h.amount===hi, isMin=h.amount===lo;
-        return '<rect x="'+(i*bw+1.5).toFixed(1)+'" y="'+(H-bh).toFixed(1)+'" '
-          + 'width="'+(bw-3).toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="1.5" '
-          + 'fill="'+(isMax?"var(--over)":isMin?"var(--path)":"var(--track)")+'"/>';
-      }).join("")
-    + '</svg>'
-    + '<div class="sparklab">'+hist.map(h=>'<span>'+h.ym.slice(5)+'</span>').join("")+'</div>';
-}
 
 function renderCommitted(){
   const rows=billRows();
-  const c=committedView();
   const total=rows.reduce((a,r)=>a+r.monthly,0);
   const steady=rows.filter(r=>!r.varies).reduce((a,r)=>a+r.monthly,0);
   const moves=total-steady;
@@ -3103,58 +3230,51 @@ function renderCommitted(){
     + (moves>0?', '+money(moves)+' varies':'')+'.</p>';
 
   const list=document.getElementById("billList");
-  if(!rows.length){
+  const lines=fixedLines(cursor);
+  if(!lines.length){
     list.innerHTML='<div class="eyebrow">Your bills</div>'
-      + '<div class="empty">A charge has to appear three times before it is called recurring. '
-      + 'Until then, add your known bills below \u2014 they count right away.</div>';
+      + '<div class="empty">Nothing non-discretionary this cycle yet. Anything filed to '
+      + esc(FIXED_CATS.join(" or "))+' lands here, and you can declare what the import '
+      + 'can\u2019t see below.</div>';
   } else {
     list.innerHTML='<div class="spread"><span class="eyebrow">Your bills</span>'
       + '<span class="eyebrow">by day of month</span></div>'
-      + rows.map(r=>{
-        const range=r.varies
-          ? '<span class="range">'+money(r.lo)+'\u2013'+money(r.hi)+'</span>'
-          : '';
-        /* A detected row's "missed" really means bank data hasn't shown up. A
-           declared row's means the opposite kind of gap \u2014 nothing to
-           detect, just nobody has confirmed this cycle's bill yet \u2014 so it
-           gets its own wording and its own way to close the gap. */
-        const flags=(r.missed&&r.origin==="declared"?'<span class="tag dup">awaiting confirmation</span>'
-            :r.missed?'<span class="tag dup">not seen yet</span>':'')
+      + lines.map(r=>{
+        const shared=isShared(r.name);
+        const flags=(r.status==="expected"
+              ? (r.origin==="declared"
+                 ? '<span class="tag dup">awaiting confirmation</span>'
+                 : '<span class="tag dup">not seen yet</span>')
+              : '')
           + (r.origin==="declared"?'<span class="tag">you added</span>':'')
-          + (isShared(r.name)?'<span class="tag ref">split '+myPct()+'/'+(100-myPct())+'</span>':'')
-          + (r.changed?'<span class="tag one">'+(r.changed==="up"?"\u2191":"\u2193")
-              +Math.abs(r.changePct*100).toFixed(0)+'%</span>':'');
-        const amt=r.varies?r.latest:r.amount;
-        return '<div class="bill'+(r.origin==="declared"?' declared" data-bid="'+r.id:'')+'">'
+          + (shared?'<span class="tag ref">split '+myPct()+'/'+(100-myPct())+'</span>':'')
+          + (r.count>1?'<span class="tag one">'+r.count+' charges</span>':'');
+        return '<div class="bill'+(r.id?' declared" data-bid="'+r.id:'')+'">'
           + '<div class="bday num">'+r.day+'</div>'
           + '<div class="body"><div class="name">'+esc(r.name)+flags+'</div>'
-          +   '<div class="meta">'+esc(r.category)
-          +   (r.cadence!=="monthly"?' \u00b7 '+r.cadence:'')+'</div>'
-          + (r.varies?sparkbar(r.hist,r.lo,r.hi):'')
-          + (r.missed&&r.origin==="declared"
+          +   '<div class="meta">'+esc(r.category)+'</div>'
+          + (r.status==="expected"&&r.origin==="declared"&&r.id
              ? '<button class="link" data-confirm="'+r.id+'" style="margin-right:14px">Confirm posted</button>'
              : '')
           + '<button class="link splitbtn" data-split="'+esc(r.name)+'">'
-          +   (isShared(r.name)?"Not split":"Mark split")+'</button></div>'
-          + '<div class="bamt"><div class="amt">'+money2(amt)+'</div>'
-          + (isShared(r.name)
-             ? '<div class="meta pathc">yours '+money(amt*myPct()/100)+'</div>' : '')
-          + (range?'<div class="meta">'+range+'</div>':'')
-          + (r.varies&&Math.abs(r.trend)>0.12
-             ? '<div class="meta '+(r.trend>0?"overc":"pathc")+'">'
-               +(r.trend>0?"up ":"down ")+Math.abs(r.trend*100).toFixed(0)+'%</div>':'')
+          +   (shared?"Not split":"Mark split")+'</button></div>'
+          + '<div class="bamt"><div class="amt">'+money2(r.amount)+'</div>'
+          + (shared?'<div class="meta pathc">yours '+money(r.amount*myPct()/100)+'</div>':'')
           + '</div></div>';
       }).join("")
-      + (moves>0?'<p class="hint" style="margin-top:12px">Bills that move show their range and '
-        + 'six-month history. Budget against the high figure, not the average.</p>':'')
-      + (rows.some(r=>r.origin==="declared")
+      + '<p class="hint" style="margin-top:12px">Everything filed to '
+      + esc(FIXED_CATS.join(" or "))+' this cycle \u2014 detected, imported and declared '
+      + 'alike. Marking one split remembers the merchant, so next cycle\u2019s charge '
+      + 'arrives already split.</p>'
+      + (lines.some(r=>r.origin==="declared")
         ? '<p class="hint">Tap a bill you added to remove it.</p>':'');
     list.querySelectorAll("[data-split]").forEach(b=>b.onclick=(e)=>{
       e.stopPropagation();
       const k=splitKey(b.dataset.split), sh={...(S.settings.shared||{})};
       if(sh[k]) delete sh[k]; else sh[k]=true;
       S.settings.shared=sh; save(); renderAll();
-      toast(sh[k]?b.dataset.split+" split "+myPct()+"/"+(100-myPct()):b.dataset.split+" is all yours");
+      toast(sh[k]?b.dataset.split+" split "+myPct()+"/"+(100-myPct())+" \u2014 remembered"
+                 :b.dataset.split+" is all yours");
     });
     list.querySelectorAll("[data-bid]").forEach(r=>r.onclick=()=>{
       S.settings.bills=(S.settings.bills||[]).filter(b=>b.id!==r.dataset.bid);
@@ -3168,31 +3288,6 @@ function renderCommitted(){
       save(); renderAll();
       toast(r&&r.held ? bill.name+" needs a look in Review" : bill.name+" confirmed");
     });
-  }
-
-  /* timing */
-  const cal=document.getElementById("commitCal");
-  if(!rows.length){ cal.style.display="none"; }
-  else {
-    cal.style.display="";
-    const dim=daysIn(cursor);
-    const today=paceOf(cursor)>=1?dim:dayIndex(todayISO(),cursor);
-    const byDay={};
-    rows.forEach(b=>{ byDay[b.day]=(byDay[b.day]||0)+b.monthly; });
-    const maxd=Math.max(...Object.values(byDay),1);
-    let strip="";
-    for(let d=1;d<=dim;d++){
-      const v=byDay[d]||0;
-      strip+='<div class="dcol'+(d===today?" now":"")+'">'
-        + (v?'<div class="dbar" style="height:'+Math.max(18,(v/maxd)*100).toFixed(0)+'%"></div>':'')
-        + '</div>';
-    }
-    const heavy=Object.entries(byDay).sort((a,b)=>b[1]-a[1])[0];
-    cal.innerHTML='<div class="eyebrow">When it leaves</div>'
-      + '<div class="daystrip">'+strip+'</div>'
-      + '<div class="spread sm muted" style="margin-top:6px"><span>day 1</span><span>day '+dim+'</span></div>'
-      + (heavy?'<div class="sm" style="margin-top:9px">Day '+heavy[0]+' is the heaviest at '
-         + '<span class="num">'+money(heavy[1])+'</span>.</div>':'');
   }
 
   const bc=document.getElementById("bCat");
@@ -3286,8 +3381,85 @@ function renderProject(){
 /* ============================================================
    PLAN — recurring roster + ceilings + the rate equation
    ============================================================ */
+function renderAllowance(){
+  const mode=ceilingMode(), a=allowance(cursor), h=historyAvg(3);
+  document.querySelectorAll("#ceilMode button").forEach(b=>
+    b.setAttribute("aria-pressed", b.dataset.k===mode));
+
+  const box=document.getElementById("allowBox");
+  const gap = a.limit!=null ? a.limit-a.committed : null;
+  const head = mode==="custom"
+    ? '<p class="hint" style="margin:12px 0 0">No allowance in this mode. Your ceilings '
+      + 'are whatever you say they are, and nothing checks them against the month.</p>'
+    : a.limit==null
+      ? '<div class="empty">'+(mode==="objective"
+          ? "Set your take-home and savings objective in Profile and the allowance appears here."
+          : "No closed cycle to average yet. Import a full month and this fills in.")+'</div>'
+      : '<div class="spread" style="margin-top:14px"><span class="lt" style="margin:0">'
+        + (mode==="objective"?"Discretionary can be":"You normally spend")+'</span>'
+        + '<span class="num mid">'+money(a.limit)+'</span></div>'
+        + '<div class="sm muted" style="margin-top:-2px">'+esc(a.basis||"")+'</div>'
+        + '<div class="spread" style="margin-top:10px;border-top:1px solid var(--rule);padding-top:10px">'
+        + '<span class="lt" style="margin:0">Your ceilings total</span>'
+        + '<span class="num mid'+(a.excess>0.5?" overc":"")+'">'+money(a.committed)+'</span></div>'
+        + '<div class="spread" style="margin-top:4px"><span class="lt" style="margin:0">'
+        + (gap>=0?"Room left to allocate":"Over the allowance by")+'</span>'
+        + '<span class="num mid '+(gap>=0?"pathc":"overc")+'">'+money(Math.abs(gap))+'</span></div>'
+        + (a.excess>0.5
+           ? '<p class="hint" style="margin:10px 0 0">Nothing has been overspent — the plan '
+             + 'itself is more than the month allows. Trim a ceiling in Settings, or switch '
+             + 'modes if this is the wrong yardstick.</p>'
+           : '<p class="hint" style="margin:10px 0 0">Set the ceilings in Settings. This figure '
+             + 'moves as non-discretionary lands, so check it late in the cycle too.</p>');
+
+  /* Per-category averages: the descriptive half. Useful in every mode —
+     knowing you set $400 against a $612 habit is the point. */
+  const rows = h.months
+    ? '<div class="eyebrow" style="margin:16px 0 6px">Ceiling vs your average</div>'
+      + TC().map(c=>{
+          const t=Number(S.settings.targets[c]||0), av=h.byCat[c]||0;
+          const off = t>0 && av>0 ? av-t : null;
+          return '<div class="spread eq"><span>'+esc(withIcon(c))+'</span>'
+            + '<span class="num">'+(t>0?money(t):"\\u2014")+' / '+money(av)+'</span></div>'
+            + (off!=null && Math.abs(off)>1
+               ? '<div class="sm '+(off>0?"overc":"muted")+'" style="margin-top:-2px">'
+                 + (off>0?"averages "+money(off)+" above the ceiling"
+                        :money(-off)+" of headroom on average")+'</div>'
+               : '');
+        }).join("")
+      + '<p class="hint" style="margin-top:10px">Ceiling / average over the last '
+      + h.months+' closed cycle'+(h.months===1?"":"s")+'. The open cycle is excluded.</p>'
+      + (mode==="history"
+         ? '<button class="btn ghost" id="useAvgs">Copy averages into my ceilings</button>':'')
+    : "";
+
+  box.innerHTML=head+rows;
+  const ua=document.getElementById("useAvgs");
+  if(ua) ua.onclick=()=>{
+    const t={...(S.settings.targets||{})};
+    for(const c of TC()){ const v=h.byCat[c]||0; if(v>0) t[c]=Math.round(v/10)*10; }
+    S.settings.targets=t; save(); renderAll();
+    toast("Ceilings set from your averages");
+  };
+}
+
 function renderPlan(){
   renderProject();
+  renderAllowance();
+
+  /* The same allowance, repeated where the ceilings are actually typed. Not a
+     second calculation — the same one, shown at the moment it matters. */
+  const rem=document.getElementById("ceilReminder");
+  if(rem){
+    const a=allowance(cursor);
+    rem.innerHTML = a.limit==null ? "" :
+      '<div class="spread" style="margin-bottom:11px;padding:9px 11px;border-radius:9px;'
+      + 'background:var(--track)"><span class="lt" style="margin:0">'
+      + (a.mode==="objective"?"Allowed to total":"You normally spend")+'</span>'
+      + '<span class="num mid'+(a.excess>0.5?" overc":"")+'">'+money(a.committed)
+      + ' / '+money(a.limit)+'</span></div>';
+  }
+
   const cats=S.settings.categories||CAT_ROLE_SEED;
   document.getElementById("targetInputs").innerHTML=cats.map(c=>
     '<div class="spread" style="margin-bottom:9px;align-items:center;gap:7px" data-row="'+c.id+'">'
@@ -3842,6 +4014,9 @@ document.getElementById("addAsk").onclick=()=>{
 document.getElementById("mprev").onclick=()=>{ cursor=ymShift(cursor,-1); renderAll(); };
 document.getElementById("mnext").onclick=()=>{ cursor=ymShift(cursor,1); renderAll(); };
 
+document.querySelectorAll("#ceilMode button").forEach(b=>b.onclick=()=>{
+  S.settings.ceilingMode=b.dataset.k; save(); renderAll();
+});
 document.getElementById("saveTargets").onclick=()=>{
   document.querySelectorAll("#targetInputs [data-name]").forEach(i=>{
     const v=i.value.trim();
