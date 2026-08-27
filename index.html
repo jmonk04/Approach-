@@ -442,8 +442,8 @@ label{display:block;margin-bottom:10px}
   </section>
 
   <section id="v-saving">
+    <div class="card verdict" id="saveCard"></div>
     <div class="card" id="outlookCard"></div>
-    <div class="card" id="saveCard"></div>
   </section>
 
   <section id="v-review"><div id="billSort"></div><div id="reviewList"></div><div id="recSort"></div></section>
@@ -2862,27 +2862,18 @@ function renderOutlook(){
   let html='<div class="spread"><span class="eyebrow">Outlook</span>'
     + '<span class="eyebrow">'+(o.closed?"cycle closed":"by day "+daysIn(cursor))+'</span></div>';
 
-  /* ---- The answer first. Cash at the end of the cycle is the concrete
-     question — what is actually in the account when this cycle closes — so it
-     leads when there is a balance to compute it from. Surplus rides underneath
-     it as the movement, because that is the figure the objective is set
-     against. Both are still here; only the accounting is folded away. */
+  /* ---- Cash at the end of the cycle: where the balance lands, which is a
+     different question from how much of the month you kept. The surplus, the
+     rate and the objective comparison used to repeat here under it — all three
+     now lead the card above, so printing them again put the same figures twice
+     on one screen. This card keeps the balance and the accounting behind it. */
   const lead = o.cashEOM!=null;
 
   if(lead){
-    const neg=o.cashEOM<0, up=o.surplus>=0;
+    const neg=o.cashEOM<0;
     html+='<div class="display '+(neg?"overc":"")+'" style="font-size:clamp(34px,10.5vw,44px);margin:10px 0 3px">'
       +   money(o.cashEOM)+'</div>'
-      + '<div class="sm muted">projected cash when the cycle closes</div>'
-      + '<div class="mid num '+(up?"pathc":"overc")+'" style="font-size:16px;margin-top:8px">'
-      +   (up?"\u2191 ":"\u2193 ")+money(Math.abs(o.surplus))+'</div>'
-      + '<div class="sm muted">'+(up?"surplus":"shortfall")+' this cycle'
-      +   (o.rate!=null?' \u00b7 '+Math.round(o.rate*100)+"% of take-home":"")+'</div>'
-      + (o.target!=null
-          ? '<div class="sm '+(o.vsTarget>=0?"pathc":"overc")+'" style="margin-top:6px">'
-            + (o.vsTarget>=0?"Ahead of":"Short of")+' your '+o.objPct+'% objective by '
-            + money(Math.abs(o.vsTarget))+'</div>'
-          : '');
+      + '<div class="sm muted">projected cash when the cycle closes</div>';
   } else if(o.surplus==null){
     html+='<h2 style="margin:5px 0 4px">Projected surplus</h2>'
       + '<div class="empty">Add your monthly take-home in Profile and this fills in.</div>';
@@ -3040,41 +3031,47 @@ function renderDash(){
     + (d.transfers?'<hr><div class="spread sm muted"><span>Card payments netted out</span>'
        + '<span class="num">'+money(d.transfers)+'</span></div>':'');
 
-  /* Save rate, in plain language. It used to run its own arithmetic — income
-     minus net, and a separate pace projection — which is why it read 25% /
-     $2,987 while Outlook, one card away, said $4,898 surplus and 42%. Same
-     idea, two calculations, two answers. Both figures now come off the one
-     surplus in outlook(): the rate is that surplus over take-home, so the
-     quantity and the percentage cannot disagree. The rate stays because it is
-     the number some people track instead of the dollars. */
+  /* The saving answer, shaped like the Spending card: one hero figure, then
+     the second-order metrics under it. The hero is the AMOUNT expected to be
+     saved this month — that is the question the tab exists to answer. An
+     earlier pass led with a prose paragraph, which buried the number in a
+     sentence; and before that with a bare percentage, which answered a
+     question nobody opened the tab to ask.
+
+     Every figure here comes off the one surplus in outlook(): the rate is that
+     surplus over take-home, so the amount and the percentage cannot disagree
+     the way 25% and 42% once did on the same screen. */
   const sc=document.getElementById("saveCard"), obj=Number(S.settings.objective||0)/100;
   const ok=outlook(cursor);
   if(!d.income || ok.surplus==null){
+    sc.className="card verdict unset";
     sc.innerHTML='<div class="eyebrow">Saving</div>'
       + '<div class="empty">Add your monthly take-home in Profile and this fills in.</div>';
   } else {
-    const rate=ok.rate, up=ok.surplus>=0, cash=ok.cash;
-    const tone=up?(obj>0?(rate>=obj?"pathc":"holdc"):"pathc"):"overc";
+    const up=ok.surplus>=0, rate=ok.rate;
+    const tone = !up ? "overc" : (obj>0 && rate<obj) ? "holdc" : "pathc";
+    sc.className="card verdict "+(!up?"over":(obj>0&&rate<obj)?"tight":"ok");
     sc.innerHTML='<div class="spread"><span class="eyebrow">Saving</span>'
-      + (obj>0?'<span class="eyebrow">Objective '+Math.round(obj*100)+'%</span>':'')+'</div>'
-      + '<p class="vsub" style="margin-top:9px;font-size:15px;color:var(--ink)">'
-      +   (ok.closed
-          ? 'You saved <span class="num '+tone+'">'+money(Math.abs(ok.surplus))+'</span> '
-          : 'You are on track to '+(up?'save':'overspend by')+' <span class="num '+tone+'">'
-            + money(Math.abs(ok.surplus))+'</span> ')
-      +   'this month, which is <span class="num '+tone+'">'+Math.abs(rate*100).toFixed(0)
-      +   '%</span> of your take-home.'
-      +   (cash?' Total cash on hand is <span class="num">'+money(cash.amount)+'</span>.':'')
-      + '</p>'
-      + (obj>0 && ok.vsTarget!=null
-        ? '<p class="vsub" style="margin-top:7px">'
-          + (ok.vsTarget>=0?'That clears your '+Math.round(obj*100)+'% objective by '
-             : 'That is short of your '+Math.round(obj*100)+'% objective by ')
-          + '<span class="num '+(ok.vsTarget>=0?"pathc":"overc")+'">'
-          + money(Math.abs(ok.vsTarget))+'</span>.</p>'
-        : '')
-      + (cash?'':'<p class="hint" style="margin-top:9px">Enter your cash balance below '
-        + 'and this will carry it too.</p>');
+      + '<span class="eyebrow">'+(ok.closed?"cycle closed":"by day "+daysIn(cursor))+'</span></div>'
+      + '<div class="display '+tone+'">'+money(Math.abs(ok.surplus))+'</div>'
+      + '<div class="sm muted">'
+      +   (ok.closed ? (up?"saved this month":"overspent this month")
+                     : (up?"on track to save this month":"on track to overspend this month"))
+      + '</div>'
+      + '<div class="vwhy" style="margin-top:12px">'
+      +   '<div class="r"><span class="num mid '+tone+'" style="font-size:14px;min-width:74px">'
+      +     Math.abs(rate*100).toFixed(0)+'%</span><span>of your take-home</span></div>'
+      +   (ok.cash
+          ? '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+            + money(ok.cash.amount)+'</span><span>total cash on hand</span></div>'
+          : '<div class="r"><span>Enter your cash balance below and it appears here</span></div>')
+      +   (obj>0 && ok.vsTarget!=null
+          ? '<div class="r"><span class="num mid '+(ok.vsTarget>=0?"pathc":"overc")
+            + '" style="font-size:14px;min-width:74px">'+money(Math.abs(ok.vsTarget))+'</span>'
+            + '<span>'+(ok.vsTarget>=0?"ahead of":"short of")+' your '
+            + Math.round(obj*100)+'% objective</span></div>'
+          : '')
+      + '</div>';
   }
 
   /* the ceilings — readable two ways. Only the discretionary side has them.
