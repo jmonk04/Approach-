@@ -122,6 +122,13 @@ header{position:sticky;top:0;z-index:20;background:var(--paper);padding:14px 0 1
 .rulerow .rn .meta{font-size:11px;color:var(--quiet);font-family:var(--mono)}
 .rulerow select{width:auto;max-width:132px;padding:6px 7px;font-size:12px}
 .splitbtn{margin-top:6px;padding:0;font-size:11px}
+/* The group name reads as the meta line it replaced until you look for it —
+   it should not shout, but it has to be obviously tappable. */
+.refile{display:block;padding:0;font-size:12px;color:var(--quiet);
+  text-decoration:none;letter-spacing:.01em}
+.refile:hover{color:var(--ink)}
+.regroup{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 2px}
+.regroup .catbtn{font-size:11px;padding:6px 9px}
 .rulerow .x{border:0;background:none;color:var(--quiet);font-size:18px;padding:2px 4px;cursor:pointer;flex:none}
 .tick{width:20px;height:20px;flex:none;border-radius:10px;border:1.5px solid var(--rule);
   display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--onaccent)}
@@ -236,6 +243,25 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .ceilfold>summary::after{content:"\203A";margin-left:auto;font-size:15px;
   transition:transform .18s ease}
 .ceilfold[open]>summary::after{transform:rotate(90deg)}
+/* A closed month's plan is readable but not editable — dimmed and inert
+   rather than hidden, because the record is the point. */
+.lockedplan{opacity:.55;pointer-events:none}
+/* Same in-card disclosure, but it only appears when the month has failed, so
+   it carries a little more weight than the ceilings fold. */
+.recovery{margin:14px 0 0;border-top:1px solid var(--rule);padding-top:12px}
+.recovery>summary{list-style:none;cursor:pointer;display:flex;align-items:center;
+  gap:10px;padding:0;background:none;border:0;border-radius:0;box-shadow:none;
+  font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--over)}
+.recovery>summary::-webkit-details-marker{display:none}
+.recovery>summary::after{content:"\203A";margin-left:auto;font-size:15px;
+  transition:transform .18s ease}
+.recovery[open]>summary::after{transform:rotate(90deg)}
+/* Scrub readout: one line under the chart, three facts, monospaced so the
+   figures do not jitter as you drag across days. */
+.gsread{display:flex;align-items:baseline;gap:10px;margin-top:7px;
+  padding:7px 10px;border-radius:8px;background:var(--track)}
+.gsread .num{font-size:15px}
+.gs .gshit{cursor:crosshair;touch-action:none}
 @media (prefers-reduced-motion:reduce){.fold>summary .chev{transition:none}}
 input,select,textarea,button{font-family:inherit;font-size:15px;color:var(--ink)}
 input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--rule);border-radius:8px;background:var(--card)}
@@ -838,6 +864,8 @@ const DEFAULTS = {
   fixedCategories: [...FIXED_SEED],  // editable non-discretionary groups
   fixedMigrated: false,  // set once the old two-bucket model has been folded in
   cashAcctAdded: false,  // set once the Cash account has been backfilled
+  plans: {},             // ym -> { targets, objective } — the plan in force that month
+  plansMigrated: false,  // set once the old global plan has been stamped onto history
   billsSorted: [],       // merchants already placed into a group, so Review stops asking
   ceilingMode: "custom", // how ceilings are set: "custom" | "objective" | "history"
   targets: {},          // cat -> monthly ceiling
@@ -1244,6 +1272,27 @@ function resolve(id, cat, teach){
 const CAT_MIGRATION = { "Utilities":"Bills", "Insurance":"Bills", "Debt/Loan":"Bills" };
 function migrate(){
   let n=0;
+  /* The plan was global, so every month you have ever had ran on today's
+     numbers. Stamp them onto the earliest month with data: planFor() walks
+     backwards, so one entry covers all of history and nothing changes value.
+     The globals stay put as a fallback and are not deleted. */
+  if(!S.settings.plansMigrated){
+    S.settings.plansMigrated=true;
+    if(!S.settings.plans || !Object.keys(S.settings.plans).length){
+      /* Stamp EVERY month that has data, plus the current one — not just the
+         earliest. One entry at the start would technically reproduce the same
+         numbers through inheritance, but it leaves every past month depending
+         on a single row: change that row and all of history moves with it.
+         History should not be reachable by editing one thing. */
+      const P={}, snap={ targets:{...(S.settings.targets||{})},
+                         objective:Number(S.settings.objective||0) };
+      for(const m of monthsWithData()) P[m]={ targets:{...snap.targets}, objective:snap.objective };
+      const cur=cycleOf(todayISO());
+      if(!P[cur]) P[cur]={ targets:{...snap.targets}, objective:snap.objective };
+      S.settings.plans=P;
+    }
+  }
+
   /* Installs that predate the Cash account get one, once. Added rather than
      assumed because out-of-pocket spending has nowhere else to go, and it is
      deletable like any other account if it isn't wanted. */
@@ -1428,8 +1477,54 @@ function monthsWithData(){
   s.add(cycleOf(todayISO()));
   return [...s].sort();
 }
-function targetTotal(){
-  return TC().reduce((a,c)=>a+Number(S.settings.targets[c]||0),0);
+/* ---------- THE PLAN IS PER MONTH ----------
+   S.settings.targets was one global object. Editing a ceiling to plan next
+   month silently rewrote every month before it: August's trajectory, its
+   verdict, and the history averages all recomputed against numbers that were
+   never in force at the time. "You finished under" changed meaning after the
+   fact, which is the one thing a record of the past must not do.
+
+   plans[ym] holds the ceilings and the objective actually in force for that
+   month. A month with no plan of its own inherits the newest plan at or before
+   it, so September starts as a copy of August until you change something —
+   and the moment you do, only September moves. */
+function plans(){
+  if(!S.settings.plans || typeof S.settings.plans!=="object") S.settings.plans={};
+  return S.settings.plans;
+}
+function planKeys(){ return Object.keys(plans()).sort(); }
+
+/* The plan in force for a month: its own if it has one, else the latest one
+   set before it, else the legacy globals. */
+function planFor(ym){
+  const P=plans();
+  if(P[ym]) return P[ym];
+  const prior=planKeys().filter(k=>k<=ym);
+  if(prior.length) return P[prior[prior.length-1]];
+  return { targets:{...(S.settings.targets||{})},
+           objective:Number(S.settings.objective||0) };
+}
+function targetsFor(ym){ return planFor(ym).targets||{}; }
+function targetOf(ym,c){ return Number(targetsFor(ym)[c]||0); }
+function objectiveFor(ym){ return Number(planFor(ym).objective||0); }
+
+/* A month is closed once it is fully past. Closed plans are locked: the record
+   of what you were aiming at is not something to revise later. */
+function monthClosed(ym){ return ym < cycleOf(todayISO()); }
+
+/* Writing always targets THAT month explicitly, creating its own entry so the
+   inheritance chain stops there. */
+function setPlan(ym, patch){
+  const P=plans();
+  const base=P[ym] || planFor(ym);
+  P[ym]={ targets:{...(base.targets||{})}, objective:Number(base.objective||0), ...patch };
+  return P[ym];
+}
+
+function targetTotal(ym){
+  ym=ym||cursor;
+  const t=targetsFor(ym);
+  return TC().reduce((a,c)=>a+Number(t[c]||0),0);
 }
 
 /* ---------- HOW THE CEILINGS GET SET ----------
@@ -1474,7 +1569,7 @@ function historyAvg(n){
 function allowance(ym){
   ym=ym||cycleOf(todayISO());
   const mode=ceilingMode();
-  const committed=targetTotal();
+  const committed=targetTotal(ym);
   if(mode==="custom") return { mode, limit:null, committed, excess:0, basis:null };
 
   if(mode==="history"){
@@ -1487,7 +1582,7 @@ function allowance(ym){
 
   /* objective */
   const stated=Number(S.settings.income||0);
-  const objPct=Number(S.settings.objective||0);
+  const objPct=objectiveFor(ym);
   if(stated<=0) return { mode, limit:null, committed, excess:0, basis:null };
   const b=billsThisMonth(ym);
   const d=monthData(ym);
@@ -1685,8 +1780,46 @@ function billsThisMonth(ym){
    TRAJECTORY — cumulative discretionary spend against a linear
    burn from zero to the sum of the four ceilings
    ============================================================ */
+/* Projected to finish this far over the limit or worse and the verdict stops
+   being "drifting" and starts being "the month does not close." */
+const OFF_PATH_PCT = 0.10;
+
+/* What it would take to land on the limit from here: the daily number for the
+   days that remain, and where the overrun actually is. A plan you can act on
+   names the categories, because "spend less" is not an instruction. */
+function recoveryPlan(ym){
+  const g=trajectory(ym);
+  if(g.state==="on" || !g.target || g.today>=g.dim) return null;
+  const daysLeft=g.dim-g.today;
+  const left=g.target-g.run;
+  const perDay=left/daysLeft;
+  const pace=g.today>0 ? g.run/g.today : 0;
+
+  /* Per-category overrun, measured the same way the ribbons are: spend so far
+     against the share of the ceiling the month has used up. */
+  const d=monthData(ym), frac=g.today/g.dim;
+  const cats=TC().map(c=>{
+    const cap=targetOf(ym,c);
+    const spent=d.byCat[c]||0;
+    const should=cap*frac;
+    const catPace=g.today>0 ? spent/g.today : 0;
+    const capLeft=cap-spent;
+    const capPerDay=daysLeft>0 ? capLeft/daysLeft : 0;
+    return { cat:c, cap, spent, over:spent-should,
+             headed:catPace*g.dim, capLeft, capPerDay,
+             /* how much of the daily habit has to go to finish inside the cap */
+             cut: catPace>0 ? Math.max(0, Math.min(1, 1-(capPerDay/catPace))) : 0 };
+  }).filter(x=>x.cap>0 && x.headed>x.cap+0.5)
+    .sort((a,b)=>(b.headed-b.cap)-(a.headed-a.cap));
+
+  return { daysLeft, left, perDay, pace, cats,
+           feasible: left>0,
+           /* nothing left to spend: the only honest advice is stop */
+           spentOut: left<=0 };
+}
+
 function trajectory(ym){
-  const dim=daysIn(ym), d=monthData(ym), target=targetTotal();
+  const dim=daysIn(ym), d=monthData(ym), target=targetTotal(ym);
   const cur=cycleOf(todayISO());
   const today = ym<cur ? dim : ym>cur ? 0 : dayIndex(todayISO(),ym);
   const daily={};
@@ -1705,11 +1838,20 @@ function trajectory(ym){
   for(let i=1;i<=today;i++){ run+=daily[i]||0; pts.push([i,run]); }
   const rate = today>0 ? run/today : 0;
   const requiredNow = target*(today/dim);
-  return { ym, dim, today, target, pts, run, rate,
-           headed: rate*dim,
+  const headed=rate*dim;
+  /* Three states, and the split between the last two is where the month is
+     LANDING, not how it feels today. Above pace but still finishing under the
+     limit is drift. Finishing 10% or more over the limit is the month failing,
+     and that is a different sentence. */
+  const overshoot = target>0 ? (headed-target)/target : 0;
+  const state = run<=requiredNow+0.5 ? "on"
+              : overshoot>=OFF_PATH_PCT ? "far" : "off";
+  return { ym, dim, today, target, pts, run, rate, daily,
+           headed,
            requiredNow,
            gs: requiredNow>0 ? run/requiredNow : null,
            delta: run-requiredNow,
+           overshoot, state,
            heldAmt: d.heldAmt };
 }
 
@@ -1720,7 +1862,7 @@ function trajectory(ym){
    ============================================================ */
 function verdict(ym){
   const d=monthData(ym), g=trajectory(ym), b=billsThisMonth(ym);
-  const target=targetTotal(), pace=paceOf(ym);
+  const target=targetTotal(ym), pace=paceOf(ym);
   const spent=d.discNet;
   const closed=pace>=1;
 
@@ -1834,7 +1976,7 @@ function outlook(ym){
   const d=monthData(ym), b=billsThisMonth(ym), g=trajectory(ym);
   const dim=daysIn(ym), closed=paceOf(ym)>=1;
   const stated=Number(S.settings.income||0);
-  const objPct=Number(S.settings.objective||0);
+  const objPct=objectiveFor(ym);
   const notes=[];
 
   /* ---- 1. SURPLUS: a full-cycle P&L, not a bank balance. Take-home minus
@@ -2046,7 +2188,7 @@ function ratePlan(){
                       return a+Number(b.amount||0)/per;
                     },0);
   const committed = committedMonthly() + uncovered;
-  const ceilings = targetTotal();
+  const ceilings = targetTotal(cycleOf(todayISO()));
   /* recurring charges that fall inside a target category are already
      inside that ceiling — don't subtract them twice */
   const recurring = detectRecurring().filter(x=>x.confirmed);
@@ -2309,7 +2451,7 @@ function cashFlow(ym, mode){
     const rows=billRows(ym);
     housing = rows.filter(r=>r.category==="Housing").reduce((a,r)=>a+r.monthly,0);
     bills   = rows.filter(r=>r.category!=="Housing").reduce((a,r)=>a+r.monthly,0);
-    disc    = targetTotal();
+    disc    = targetTotal(ym);
   } else {
     housing = d.byCat["Housing"]||0;
     bills   = FC().filter(c=>c!=="Housing").reduce((a,c)=>a+(d.byCat[c]||0),0);
@@ -2724,6 +2866,42 @@ function renderFlow(){
 }
 
 /* ---------- TRAJECTORY ---------- */
+function recoveryHTML(p){
+  if(!p) return '';
+  if(p.spentOut)
+    return '<details class="fold recovery"><summary>Build a recovery plan</summary>'
+      + '<p class="hint" style="margin-top:10px">The limit is already spent. Nothing '
+      + 'you do for the rest of the month lands you inside it \u2014 the honest move is '
+      + 'to stop here and start the next month clean.</p></details>';
+
+  const cut=Math.max(0,Math.round((1-(p.perDay/p.pace))*100));
+  return '<details class="fold recovery"><summary>Build a recovery plan</summary>'
+    + '<div class="vwhy" style="margin-top:11px">'
+    +   '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+    +     money(p.perDay)+'</span><span>a day for the '+p.daysLeft
+    +     ' day'+(p.daysLeft===1?'':'s')+' left, to finish on your limit</span></div>'
+    +   '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+    +     money(p.pace)+'</span><span>what you are spending a day now'
+    +     (cut>0?' \u2014 a '+cut+'% cut':'')+'</span></div>'
+    + '</div>'
+    + (p.cats.length
+      ? '<div class="eyebrow" style="margin:14px 0 4px">Where the overrun is</div>'
+        + p.cats.map(c=>'<div class="spread eq"><span>'+esc(withIcon(c.cat))+'</span>'
+          + '<span class="num '+(c.capLeft<0?"overc":"")+'">'
+          + (c.capLeft<0 ? money(Math.abs(c.capLeft))+' over'
+                         : money(c.capPerDay)+'/day left')+'</span></div>'
+          + '<div class="sm muted" style="margin-top:-2px">'
+          + (c.capLeft<0
+             ? 'already past its '+money(c.cap)+' ceiling \u2014 nothing more here'
+             : 'heading for '+money(c.headed)+' against '+money(c.cap)
+               + (c.cut>0?', so cut this one by '+Math.round(c.cut*100)+'%':''))
+          + '</div>').join("")
+      : '<p class="hint" style="margin-top:10px">No single category is over its own '
+        + 'ceiling \u2014 the total is high across the board, so the daily figure above '
+        + 'is the whole plan.</p>')
+    + '</details>';
+}
+
 function renderTrajectory(){
   const g=trajectory(cursor);
   const el=document.getElementById("trajCard");
@@ -2736,10 +2914,11 @@ function renderTrajectory(){
   const rem=(S.settings.gsMode||"spent")==="remaining";
   const W=320,H=176,PL=6,PR=6,PT=16,PB=24;
   const iw=W-PL-PR, ih=H-PT-PB;
-  const hot=g.delta>0;
+  const hot=g.delta>0, far=g.state==="far";
   const col=hot?"var(--over)":"var(--path)";
-  /* The card's own top rule follows the one thing the header leads with. */
-  el.className="card verdict "+(hot?"over":"ok");
+  /* The card's own top rule follows the one thing the header leads with:
+     amber for drift, red only when the month is projected to fail. */
+  el.className="card verdict "+(far?"over":hot?"tight":"ok");
   const X=d=>PL+(d/g.dim)*iw;
   const val=v=>rem?g.target-v:v;
   const endVal=val(g.headed);
@@ -2819,11 +2998,6 @@ function renderTrajectory(){
        the header now, so repeating them under the chart would be the same
        number twice on one card. What stays is only what the header cannot
        say: the caveats that could move it. */
-    + (rem
-      ? '<div class="spread" style="margin-top:2px"><span class="sm muted">Limit left at day '
-        + g.dim+'</span><span class="num '+(leftAtEnd<0?"overc":"pathc")+'">'
-        + money(Math.abs(leftAtEnd))+(leftAtEnd<0?' short':' spare')+'</span></div>'
-      : '')
     + (v.overcommitted
        ? '<div class="warn">Your ceilings total <strong class="num">'
          + money(v.allowance.excess)+'</strong> more than '
@@ -2837,6 +3011,10 @@ function renderTrajectory(){
          + (Math.abs(g.heldAmt)>Math.abs(g.delta)?' \u2014 enough to change which side of pace you are on':'')
          + '. <button class="link" data-goto="review">Open Data</button></div>'
        : '')
+    /* Only in the state that has actually failed. "Spend less" is not an
+       instruction, so the plan names the daily number AND the categories the
+       overrun is actually in. */
+    + (far ? recoveryHTML(recoveryPlan(cursor)) : '')
     + ((v.why||[]).some(w=>w.text.indexOf("bills")>-1)
        ? '<div class="vwhy">'+v.why.filter(w=>w.text.indexOf("bills")>-1)
            .map(w=>'<div class="r"><span class="num">'+money(w.figure)+'</span>'
@@ -2845,11 +3023,55 @@ function renderTrajectory(){
          + '</div>'
        : '');
 
+  /* ---- chart scrubbing ---- */
+  const chart=el.querySelector("svg.gs"), read=document.getElementById("gsRead");
+  if(chart && read){
+    /* Cumulative spend on each day, carried forward across days with no
+       charges — otherwise scrubbing a quiet day reads as zero spent. */
+    const cum=[]; let acc=0;
+    for(let i=1;i<=g.dim;i++){ acc+=g.daily[i]||0; cum[i]=acc; }
+
+    const show=(clientX)=>{
+      const r=chart.getBoundingClientRect();
+      const frac=Math.min(1,Math.max(0,(clientX-r.left)/r.width));
+      /* clientX is in CSS pixels; the viewBox is 320 wide and stretched by
+         preserveAspectRatio="none", so convert through the fraction. */
+      const xUser=frac*W;
+      const day=Math.min(g.dim,Math.max(1,Math.round(((xUser-PL)/iw)*g.dim)));
+      const known=day<=g.today;
+      const spend=known?cum[day]:g.rate*day;
+      const perDay=spend/day;
+      chart.querySelector(".gsx").setAttribute("x1",X(day).toFixed(1));
+      chart.querySelector(".gsx").setAttribute("x2",X(day).toFixed(1));
+      chart.querySelector(".gsx").setAttribute("opacity",".35");
+      const dot=chart.querySelector(".gsdot");
+      dot.setAttribute("cx",X(day).toFixed(1));
+      dot.setAttribute("cy",Y(val(spend)).toFixed(1));
+      dot.setAttribute("opacity","1");
+      read.hidden=false;
+      read.innerHTML='<span class="eyebrow">Day '+day+(known?'':' \u00b7 projected')+'</span>'
+        + '<span class="num">'+money(spend)+'</span>'
+        + '<span class="sm muted">'+money(perDay)+'/day</span>';
+    };
+    const hide=()=>{
+      chart.querySelector(".gsx").setAttribute("opacity","0");
+      chart.querySelector(".gsdot").setAttribute("opacity","0");
+      read.hidden=true;
+    };
+    const hit=chart.querySelector(".gshit");
+    hit.addEventListener("pointerdown",e=>{
+      hit.setPointerCapture(e.pointerId); show(e.clientX);
+    });
+    hit.addEventListener("pointermove",e=>{ if(e.buttons||e.pointerType==="touch") show(e.clientX); });
+    hit.addEventListener("pointerup",hide);
+    hit.addEventListener("pointercancel",hide);
+    hit.addEventListener("pointerleave",e=>{ if(!e.buttons) hide(); });
+  }
+
   el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
   el.querySelectorAll("#gsMode button").forEach(b=>b.onclick=()=>{
     S.settings.gsMode=b.dataset.g; save(); renderTrajectory();
   });
-  el.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
 }
 
 /* ---------- BILLS AT A GLANCE ---------- */
@@ -3033,7 +3255,7 @@ function renderSetup(){
    model the tab colour does — there is no second calculation here to disagree
    with the first. */
 function renderDash(){
-  const d=monthData(cursor), pace=paceOf(cursor), tt=targetTotal();
+  const d=monthData(cursor), pace=paceOf(cursor), tt=targetTotal(cursor);
   const dim=daysIn(cursor);
   const disc=d.discNet;
 
@@ -3066,7 +3288,7 @@ function renderDash(){
      Every figure here comes off the one surplus in outlook(): the rate is that
      surplus over take-home, so the amount and the percentage cannot disagree
      the way 25% and 42% once did on the same screen. */
-  const sc=document.getElementById("saveCard"), obj=Number(S.settings.objective||0)/100;
+  const sc=document.getElementById("saveCard"), obj=objectiveFor(cursor)/100;
   const ok=outlook(cursor);
   if(!d.income || ok.surplus==null){
     sc.className="card verdict unset";
@@ -3111,7 +3333,7 @@ function renderDash(){
   const list=scopeCats.map(c=>({
     cat:c,
     spent:d.byCat[c]||0,
-    target: Number(S.settings.targets[c]||0),
+    target: targetOf(cursor,c),
     /* Money held against THIS category, so the tank can show what is at risk.
        Only holds whose category is already settled count — a new or ambiguous
        merchant defaults to the catch-all in makeTxn, and pinning it there
@@ -3189,6 +3411,26 @@ function billsToSort(){
     if(t.date>r.last) r.last=t.date;
   }
   return [...by.values()].sort((a,b)=>b.total-a.total);
+}
+
+/* Re-file every non-discretionary charge from a merchant into another group,
+   and teach the rule so future imports follow. Shared by the bills list and
+   the Data-tab sort card so the two can't drift apart. */
+function refileMerchant(name, cat){
+  const key=splitKey(name);
+  let n=0;
+  for(const t of S.txns)
+    if(!t.pending && splitKey(t.merchant)===key && FC().includes(t.category)){
+      t.category=cat; n++;
+    }
+  for(const bill of (S.settings.bills||[]))
+    if(splitKey(bill.name)===key) bill.category=cat;
+  S.settings.rules[ruleKey(name)]=cat;
+  /* Placing it here settles the same question the Data tab would have asked. */
+  if(!(S.settings.billsSorted||[]).some(x=>splitKey(x)===key))
+    S.settings.billsSorted=[...(S.settings.billsSorted||[]), name];
+  save(); renderAll();
+  toast(name+" \u2192 "+cat+(n>1?" ("+n+" charges)":""));
 }
 
 function renderBillSort(){
@@ -3511,7 +3753,15 @@ function renderCommitted(){
         return '<div class="bill'+(r.id?' declared" data-bid="'+r.id:'')+'">'
           + '<div class="bday num">'+r.day+'</div>'
           + '<div class="body"><div class="name">'+esc(r.name)+flags+'</div>'
-          +   '<div class="meta">'+esc(r.category)+'</div>'
+          /* The group name is the control. A wrong group is noticed HERE, and
+             until now the only cure was Settings > Rules — a tab away, and you
+             had to know it existed. Tapping opens the choices inline. */
+          +   '<button class="link refile" data-refile="'+esc(r.name)+'">'
+          +     esc(r.category)+' \u203A</button>'
+          +   '<div class="regroup" data-for="'+esc(r.name)+'" hidden>'
+          +     FC().filter(c=>c!==r.category).map(c=>'<button class="catbtn" '
+          +       'data-to="'+esc(c)+'" data-name="'+esc(r.name)+'">'+esc(c)+'</button>').join("")
+          +   '</div>'
           + (r.status==="expected"&&r.origin==="declared"&&r.id
              ? '<button class="link" data-confirm="'+r.id+'" style="margin-right:14px">Confirm posted</button>'
              : '')
@@ -3526,8 +3776,23 @@ function renderCommitted(){
       + 'this month &mdash; detected, imported and declared alike, grouped by where '
       + 'it goes. Marking one split remembers the merchant, so next month&rsquo;s '
       + 'charge arrives already split.</p>'
+      + '<p class="hint">Tap a group name to re-file that merchant.</p>'
       + (lines.some(r=>r.origin==="declared")
         ? '<p class="hint">Tap a bill you added to remove it.</p>':'');
+
+    list.querySelectorAll("[data-refile]").forEach(b=>b.onclick=(e)=>{
+      e.stopPropagation();
+      /* nextElementSibling, not a selector: a merchant name with a quote in it
+         is HTML-escaped in the attribute but raw in dataset, so the two would
+         not match and the panel would silently never open. */
+      const box=b.nextElementSibling;
+      if(box && box.classList.contains("regroup")) box.hidden=!box.hidden;
+    });
+    list.querySelectorAll("[data-to]").forEach(b=>b.onclick=(e)=>{
+      e.stopPropagation();
+      refileMerchant(b.dataset.name, b.dataset.to);
+    });
+
     list.querySelectorAll("[data-split]").forEach(b=>b.onclick=(e)=>{
       e.stopPropagation();
       const k=splitKey(b.dataset.split), sh={...(S.settings.shared||{})};
@@ -3665,7 +3930,7 @@ function renderAllowance(){
   if(ow){
     ow.hidden = mode!=="objective";
     const oi=document.getElementById("pObj");
-    if(oi && document.activeElement!==oi) oi.value=S.settings.objective??"";
+    if(oi && document.activeElement!==oi) oi.value=objectiveFor(cursor)||"";
   }
 
   const box=document.getElementById("allowBox");
@@ -3699,7 +3964,7 @@ function renderAllowance(){
   const rows = h.months
     ? '<div class="eyebrow" style="margin:16px 0 6px">Ceiling vs your average</div>'
       + TC().map(c=>{
-          const t=Number(S.settings.targets[c]||0), av=h.byCat[c]||0;
+          const t=targetOf(cursor,c), av=h.byCat[c]||0;
           const off = t>0 && av>0 ? av-t : null;
           return '<div class="spread eq"><span>'+esc(withIcon(c))+'</span>'
             + '<span class="num">'+(t>0?money(t):"\\u2014")+' / '+money(av)+'</span></div>'
@@ -3718,10 +3983,11 @@ function renderAllowance(){
   box.innerHTML=head+rows;
   const ua=document.getElementById("useAvgs");
   if(ua) ua.onclick=()=>{
-    const t={...(S.settings.targets||{})};
+    if(monthClosed(cursor)){ toast(cycleLabel(cursor)+" is closed \u2014 its plan is locked"); return; }
+    const t={...targetsFor(cursor)};
     for(const c of TC()){ const v=h.byCat[c]||0; if(v>0) t[c]=Math.round(v/10)*10; }
-    S.settings.targets=t; save(); renderAll();
-    toast("Ceilings set from your averages");
+    setPlan(cursor,{targets:t}); save(); renderAll();
+    toast("Ceilings set from your averages \u2014 "+cycleLabel(cursor));
   };
 }
 
@@ -3733,19 +3999,40 @@ function renderPlan(){
      second calculation — the same one, shown at the moment it matters. */
   const fold=document.getElementById("ceilFold");
   if(fold && !fold.dataset.touched){
-    fold.open = targetTotal()<=0;
+    fold.open = targetTotal(cursor)<=0;
     fold.ontoggle=()=>{ fold.dataset.touched="1"; };
   }
+  /* Which month you are editing is now load-bearing, so the fold says it, and
+     says whether this month has a plan of its own or is still riding the one
+     before it. Editing a closed month is refused rather than silently ignored. */
+  const sum=fold&&fold.querySelector("summary");
+  if(sum){
+    const own=!!plans()[cursor], locked=monthClosed(cursor);
+    sum.textContent = locked
+      ? "Ceilings for "+cycleLabel(cursor)+" \u00b7 locked"
+      : "Set the ceilings for "+cycleLabel(cursor)+(own?"":" \u00b7 inherited");
+  }
+  const inputsWrap=document.getElementById("targetInputs");
+  if(inputsWrap) inputsWrap.classList.toggle("lockedplan", monthClosed(cursor));
 
   const rem=document.getElementById("ceilReminder");
   if(rem){
     const a=allowance(cursor);
-    rem.innerHTML = a.limit==null ? "" :
+    const note = monthClosed(cursor)
+      ? '<p class="hint" style="margin:0 0 11px">'+esc(cycleLabel(cursor))+' has closed. Its plan '
+        + 'is kept as the record of what you were aiming at, so it can\u2019t be edited \u2014 '
+        + 'move to an open month to change ceilings.</p>'
+      : !plans()[cursor]
+      ? '<p class="hint" style="margin:0 0 11px">'+esc(cycleLabel(cursor))+' is running on the plan '
+        + 'you last set. Change anything here and it becomes '+esc(cycleLabel(cursor))
+        + '\u2019s own, leaving earlier months alone.</p>'
+      : '';
+    rem.innerHTML = note + (a.limit==null ? "" :
       '<div class="spread" style="margin-bottom:11px;padding:9px 11px;border-radius:9px;'
       + 'background:var(--track)"><span class="lt" style="margin:0">'
       + (a.mode==="objective"?"Allowed to total":"You normally spend")+'</span>'
       + '<span class="num mid'+(a.excess>0.5?" overc":"")+'">'+money(a.committed)
-      + ' / '+money(a.limit)+'</span></div>';
+      + ' / '+money(a.limit)+'</span></div>');
   }
 
   const cats=S.settings.categories||CAT_ROLE_SEED;
@@ -3765,7 +4052,7 @@ function renderPlan(){
   document.querySelectorAll("#targetInputs [data-del]").forEach(b=>b.onclick=()=>removeCategory(b.dataset.del));
 
   /* the equation */
-  const p=ratePlan(), obj=Number(S.settings.objective||0)/100;
+  const p=ratePlan(), obj=objectiveFor(cursor)/100;
   const need=p.income*obj;
   const line=(label,val,cls)=>'<div class="spread eq"><span class="'+(cls||"")+'">'+label+'</span>'
     + '<span class="num '+(cls||"")+'">'+money(val)+'</span></div>';
@@ -3998,9 +4285,9 @@ function renderData(){
   if(!cs.options.length)
     cs.innerHTML=[...TC(),...FC()].map(c=>'<option>'+esc(c)+'</option>').join("");
 
-  /* Rebuilt whenever the account list changes, and defaulted to a cash account
-     when one exists: a hand-typed transaction is usually one no statement will
-     ever carry, which is exactly what cash is. */
+  /* Rebuilt whenever the account list changes. Defaults to the account the
+     importer is pointed at — most hand-typed rows are a card charge the export
+     missed, not cash. Cash is one tap away in the list. */
   const as=document.getElementById("mAcct");
   if(as){
     const list=accounts();
@@ -4009,9 +4296,7 @@ function renderData(){
       const keep=as.value;
       as.dataset.sig=sig;
       as.innerHTML=list.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>').join("");
-      const cash=list.find(a=>a.kind==="cash" && /cash/i.test(a.name));
-      as.value = (keep && list.some(a=>a.id===keep)) ? keep
-               : (cash ? cash.id : importAccount);
+      as.value = (keep && list.some(a=>a.id===keep)) ? keep : importAccount;
     }
   }
 }
@@ -4289,9 +4574,11 @@ document.querySelectorAll("#ceilMode button").forEach(b=>b.onclick=()=>{
   S.settings.ceilingMode=b.dataset.k; save(); renderAll();
 });
 document.getElementById("saveObj").onclick=()=>{
+  if(monthClosed(cursor)){ toast(cycleLabel(cursor)+" is closed \u2014 its plan is locked"); return; }
   const v=Number(document.getElementById("pObj").value);
-  S.settings.objective=(v>0&&v<=100)?v:0;
-  save(); renderAll(); toast(S.settings.objective?"Objective "+S.settings.objective+"%":"Objective cleared");
+  const obj=(v>0&&v<=100)?v:0;
+  setPlan(cursor,{objective:obj}); save(); renderAll();
+  toast(obj?"Objective "+obj+"% for "+cycleLabel(cursor):"Objective cleared for "+cycleLabel(cursor));
 };
 document.getElementById("saveTargets").onclick=()=>{
   document.querySelectorAll("#targetInputs [data-name]").forEach(i=>{
@@ -4310,7 +4597,9 @@ document.getElementById("saveTargets").onclick=()=>{
     const c=catById(i.dataset.target); if(!c) return;
     const v=Number(i.value); if(v>0) t[c.name]=v;
   });
-  S.settings.targets=t; save(); renderAll(); toast("Saved");
+  if(monthClosed(cursor)){ toast(cycleLabel(cursor)+" is closed \u2014 its plan is locked"); return; }
+  setPlan(cursor,{targets:t}); save(); renderAll();
+  toast("Plan saved for "+cycleLabel(cursor));
 };
 document.getElementById("saveAliases").onclick=()=>{
   const a={};
