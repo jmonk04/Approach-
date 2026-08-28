@@ -2950,24 +2950,46 @@ function renderTrajectory(){
   const rate=g.today>0 ? g.run/g.today : 0;
   const surplus=outlook(cursor).surplus;
 
-  el.innerHTML='<div class="spread"><span class="eyebrow">Trajectory<span class="daycount">'
+  /* The sentence is the product. Every other budgeting app reports numbers and
+     leaves you to infer the verdict; this one takes a posture. Three states,
+     and the wording is deliberate — "going off path" is a drift you can still
+     correct, "significantly off the path" is the month not closing. */
+  const tone = far?"overc" : hot?"holdc" : "pathc";
+  const word = far ? "You\u2019re significantly off the path"
+             : hot ? "You\u2019re going off path"
+             :       "You\u2019re on the right path!";
+
+  el.innerHTML='<div class="spread"><span class="eyebrow">Monthly trajectory<span class="daycount">'
     + ' \u00b7 day '+(paceOf(cursor)>=1?g.dim:Math.max(1,Math.round(paceOf(cursor)*g.dim)))
     + ' of '+g.dim+'</span></span>'
     + '<div class="miniseg" id="gsMode">'
     +   '<button data-g="spent" aria-pressed="'+(!rem)+'">Spent</button>'
     +   '<button data-g="remaining" aria-pressed="'+rem+'">Left</button></div></div>'
 
-    + '<div class="vword '+(hot?"overc":"pathc")+'" style="margin-top:7px">'
-    +   (hot?"Off path":"On the right path")+'</div>'
+    + '<div class="vword '+tone+'" style="margin-top:7px">'+word+'</div>'
 
-    + '<div class="display '+(hot?"overc":"pathc")+'">'+money(g.run)+'</div>'
-    + '<div class="sm muted">spent so far \u00b7 <span class="num '
-    +   (hot?"overc":"pathc")+'">'+money(Math.abs(g.delta))+'</span> '
-    +   (hot?"above":"below")+' pace</div>'
+    /* The toggle has to move the hero, not just the chart. In Left it read
+       "spent so far" while the segment said LEFT and the line descended — the
+       one figure you came for was the only one the mode didn't change. */
+    + '<div class="display '+(headline<0?"overc":tone)+'">'
+    +   money(Math.abs(headline))+'</div>'
+    + '<div class="sm muted">'
+    +   (rem
+        ? (headline<0 ? 'over your '+money(g.target)+' limit'
+                      : 'left of your '+money(g.target)+' limit')
+          + ' \u00b7 <span class="num '+tone+'">'
+          + money(Math.abs(g.delta))+'</span> '+(hot?"behind":"ahead of")+' pace'
+        : 'spent so far \u00b7 <span class="num '+tone+'">'
+          + money(Math.abs(g.delta))+'</span> '+(hot?"above":"below")+' pace')
+    + '</div>'
 
     + '<div class="vwhy" style="margin-top:11px">'
-    +   '<div class="r"><span class="num">'+money(g.headed)+'</span>'
-    +     '<span>projected by day '+g.dim+', at '+money(rate)+'/day</span></div>'
+    +   '<div class="r"><span class="num'+(rem&&leftAtEnd<0?" overc":"")+'">'
+    +     money(Math.abs(rem?leftAtEnd:g.headed))+'</span>'
+    +     '<span>'+(rem
+          ? (leftAtEnd<0?'projected over by day ':'projected to be left at day ')+g.dim
+          : 'projected by day '+g.dim)
+    +     ', at '+money(rate)+'/day</span></div>'
     +   (surplus!=null
         ? '<div class="r"><span class="num '+(surplus>=0?"pathc":"overc")+'">'
           + money(Math.abs(surplus))+'</span><span>projected cash '
@@ -2993,7 +3015,16 @@ function renderTrajectory(){
     + '<text x="'+(W-PR)+'" y="'+(H-7)+'" class="ax" text-anchor="end">'+g.dim+'</text>'
     + '<text x="'+(W-PR)+'" y="'+(Y(g.target)-4).toFixed(1)+'" class="ax" text-anchor="end">limit '
     +   money(g.target)+'</text>'
+    /* Scrub layer: a marker and a hit area covering the plot. The line is the
+       argument, so it has to be interrogable — tap any day and read what was
+       true then, not just what is true now. */
+    + '<line class="gsx" x1="0" y1="'+PT+'" x2="0" y2="'+(PT+ih)+'" stroke="var(--ink)" '
+    +   'stroke-width="1" opacity="0" pointer-events="none"/>'
+    + '<circle class="gsdot" r="4" fill="var(--card)" stroke="'+col+'" stroke-width="2" '
+    +   'opacity="0" pointer-events="none"/>'
+    + '<rect class="gshit" x="'+PL+'" y="'+PT+'" width="'+iw+'" height="'+ih+'" fill="transparent"/>'
     + '</svg>'
+    + '<div class="gsread" id="gsRead" hidden></div>'
     /* "Headed toward" and "Ends the month with" used to live here. Both are in
        the header now, so repeating them under the chart would be the same
        number twice on one card. What stays is only what the header cannot
