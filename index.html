@@ -316,6 +316,39 @@ label{display:block;margin-bottom:10px}
 .lrow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
 .lrow .sw{width:10px;height:10px;border-radius:3px;flex:none}
 .lrow .lk{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---- analysis views ---- */
+/* Calendar heatmap. Seven columns so the shape of a week is readable at a
+   glance; that is the whole reason not to use a bar per day. */
+.hgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:12px}
+.hgrid.head{margin-top:14px;gap:4px}
+.hdow{text-align:center;font-family:var(--mono);font-size:8px;letter-spacing:.1em;
+  color:var(--quiet)}
+.hcell{aspect-ratio:1;border-radius:5px;background:var(--track);display:flex;
+  align-items:flex-start;justify-content:flex-end;padding:3px}
+.hcell span{font-family:var(--mono);font-size:8px;color:var(--quiet);line-height:1}
+.hcell.pad{background:none}
+.hcell.l1{background:#D3E6ED}.hcell.l2{background:#82BCCF}
+.hcell.l3{background:#3E8AA8}.hcell.l4{background:#2F6E8F}
+.hcell.l2 span,.hcell.l3 span,.hcell.l4 span{color:rgba(255,255,255,.85)}
+
+/* Merchant + movers rows share one bar so the two views read as siblings. */
+.mrow{margin-top:12px}
+.mrow .lk{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mbar{height:6px;border-radius:3px;background:var(--track);margin-top:5px;overflow:hidden}
+.mbar i{display:block;height:100%;background:#3E8AA8;border-radius:3px}
+.mbar.up i{background:var(--over)}
+.mbar.down i{background:var(--path)}
+
+/* Weekday columns. Seven fixed bars, so the peak is positional not just
+   coloured — you learn the shape, not the label. */
+.dowwrap{display:flex;gap:6px;align-items:flex-end;height:120px;margin-top:14px}
+.dcolw{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.dbarw{height:100%;display:flex;align-items:flex-end}
+.dbarw i{display:block;width:100%;background:#82BCCF;border-radius:3px 3px 0 0;min-height:2px}
+.dbarw i.peak{background:#2F6E8F}
+.dlbl{text-align:center;font-family:var(--mono);font-size:9px;color:var(--quiet);margin-top:6px}
+.dlbl.peak{color:var(--ink);font-weight:600}
 .lrow .lv{font-size:13px}
 .miniseg{display:flex;gap:0;border:1px solid var(--rule);border-radius:7px;overflow:hidden}
 .miniseg button{border:0;background:var(--card);padding:4px 9px;font-family:var(--mono);font-size:9px;
@@ -326,6 +359,9 @@ label{display:block;margin-bottom:10px}
 .miniseg.wide{margin-top:9px}
 .miniseg.wide button{flex:1;padding:7px 4px;font-size:9.5px;letter-spacing:.05em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Four options need to fit a phone, so this variant trades letter-spacing for
+   room rather than truncating any of them. */
+#anaMode button{font-size:9px;letter-spacing:.03em;padding:7px 2px}
 .bill{display:flex;align-items:flex-start;gap:11px;padding:12px 0;border-bottom:1px solid var(--rule)}
 .bill:last-of-type{border-bottom:0}
 .bill.declared{cursor:pointer}
@@ -470,6 +506,16 @@ label{display:block;margin-bottom:10px}
   <section id="v-saving">
     <div class="card verdict" id="saveCard"></div>
     <div class="card" id="outlookCard"></div>
+    <div class="band"><span class="eyebrow">Analysis</span></div>
+    <div class="card">
+      <div class="miniseg wide" id="anaMode" role="group" aria-label="Analysis view">
+        <button data-a="heat" aria-pressed="true">Calendar</button>
+        <button data-a="merch" aria-pressed="false">Merchants</button>
+        <button data-a="dow" aria-pressed="false">Weekday</button>
+        <button data-a="movers" aria-pressed="false">Movers</button>
+      </div>
+      <div id="anaBox"></div>
+    </div>
   </section>
 
   <section id="v-review">
@@ -860,6 +906,7 @@ const DEFAULTS = {
   catchAllId: "flex",
   gsMode: "spent",
   catMode: "pace",       // ceilings card: "pace" or "remaining"
+  anaMode: "heat",       // analysis view: heat | merch | dow | movers
   catScope: "disc",      // spending-plan card: "disc" or "fixed" (non-discretionary)
   fixedCategories: [...FIXED_SEED],  // editable non-discretionary groups
   fixedMigrated: false,  // set once the old two-bucket model has been folded in
@@ -3699,6 +3746,218 @@ function reopen(id){
    COMMITTED
    ============================================================ */
 
+/* One ramp, darkest for the biggest slice. Not the verdict palette: green and
+   red carry meaning everywhere else in the app, and none of these groups is
+   good or bad — they are just where the money went. */
+const FIXED_RAMP=["#2F6E8F","#3E8AA8","#5AA3BC","#82BCCF","#AFD3E0","#D3E6ED"];
+function FIXED_COL(i){ return FIXED_RAMP[i%FIXED_RAMP.length]; }
+
+function fixedDonut(G){
+  const CX=64, CY=64, R=48, C=2*Math.PI*R;
+  const total=G.rows.reduce((a,r)=>a+Math.max(0,r.now),0);
+  if(total<=0) return '';
+  let off=0;
+  const ring=G.rows.map((r,i)=>{
+    const len=(Math.max(0,r.now)/total)*C;
+    const el='<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="'+FIXED_COL(i)+'" '
+      + 'stroke-width="20" stroke-dasharray="'+len.toFixed(2)+' '+(C-len).toFixed(2)+'" '
+      + 'stroke-dashoffset="'+(-off).toFixed(2)+'" transform="rotate(-90 '+CX+' '+CY+')"/>';
+    off+=len; return el;
+  }).join("");
+  const top=G.rows[0];
+  return '<svg viewBox="0 0 128 128" class="donut" role="img" '
+    + 'aria-label="Non-discretionary split by group">'
+    + '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="var(--track)" stroke-width="20"/>'
+    + ring
+    + '<text x="'+CX+'" y="'+(CY-2)+'" text-anchor="middle" class="dnum">'
+    +   Math.round((top.now/total)*100)+'%</text>'
+    + '<text x="'+CX+'" y="'+(CY+13)+'" text-anchor="middle" class="dlab">'
+    +   esc(top.cat.toUpperCase().slice(0,12))+'</text>'
+    + '</svg>';
+}
+
+/* ---------- ANALYSIS ----------
+   Four reads on the same transactions, none of which the rest of the app
+   answers. The ceilings say whether you are inside your limits; these say what
+   the spending actually looked like. Every one of them walks the live rows
+   directly rather than re-deriving from a total, so they cannot disagree with
+   the Ledger.
+
+   Discretionary only. Rent landing on the 1st would dominate a heatmap and a
+   merchant board alike, and it is not a spending pattern — it is a standing
+   order you already see on the Spending tab. */
+function analysisRows(ym){
+  return monthData(ym).live.filter(t=>
+    t.type!=="transfer" && t.type!=="income" && t.type!=="savings"
+    && !FC().includes(t.category));
+}
+
+/* 1 — the month as days, so clustering is visible. A line chart hides the fact
+   that four Saturdays carried a third of the month. */
+function spendByDay(ym){
+  const dim=daysIn(ym), days=new Array(dim+1).fill(0);
+  for(const t of analysisRows(ym)){
+    const i=Math.max(1,Math.min(dim,dayIndex(t.date,ym)));
+    days[i]+= t.type==="refund" ? -Math.abs(t.amount) : t.amount;
+  }
+  const vals=days.slice(1);
+  return { dim, days, max:Math.max(0,...vals),
+           total:vals.reduce((a,v)=>a+v,0),
+           firstDow:new Date(cycleFirst(ym)+"T12:00:00").getDay() };
+}
+
+/* 2 — the count matters as much as the total. $412 in one purchase is a
+   decision; $412 across eight is a habit, and only one of those is fixable. */
+function topMerchants(ym, n){
+  const by=new Map();
+  for(const t of analysisRows(ym)){
+    const k=splitKey(t.merchant);
+    if(!by.has(k)) by.set(k,{ name:t.merchant, total:0, n:0, cat:t.category });
+    const r=by.get(k);
+    r.total += t.type==="refund" ? -Math.abs(t.amount) : t.amount;
+    if(t.type!=="refund") r.n++;
+  }
+  return [...by.values()].filter(r=>r.total>0.005)
+    .sort((a,b)=>b.total-a.total).slice(0,n||10);
+}
+
+/* 4 — pooled across closed months, because one month of weekdays is noise.
+   Averaged per occurrence, not summed: a month with five Saturdays would
+   otherwise make Saturday look worse than it is. */
+function byWeekday(nMonths){
+  const cur=cycleOf(todayISO());
+  const ms=monthsWithData().filter(m=>m<cur).slice(-(nMonths||6));
+  const sum=new Array(7).fill(0), seen=new Array(7).fill(0);
+  for(const m of ms){
+    const dim=daysIn(m), counted=new Array(7).fill(0), tot=new Array(7).fill(0);
+    for(let i=1;i<=dim;i++){
+      const dow=new Date(cycleFirst(m)+"T12:00:00");
+      dow.setDate(dow.getDate()+i-1);
+      counted[dow.getDay()]++;
+    }
+    for(const t of analysisRows(m)){
+      const d=new Date(t.date+"T12:00:00").getDay();
+      tot[d]+= t.type==="refund" ? -Math.abs(t.amount) : t.amount;
+    }
+    for(let d=0;d<7;d++){ sum[d]+=tot[d]; seen[d]+=counted[d]; }
+  }
+  const avg=sum.map((v,d)=>seen[d]?v/seen[d]:0);
+  return { months:ms.length, avg, max:Math.max(0,...avg) };
+}
+
+/* 6 — the same delta idea as the non-discretionary groups, one level down.
+   Merchants that appear in only one of the two months still count: an expense
+   that stopped is as interesting as one that grew. */
+function biggestMovers(ym, n){
+  const prev=ymShift(ym,-1);
+  const now=new Map(topMerchants(ym,999).map(r=>[splitKey(r.name),r]));
+  const was=new Map(topMerchants(prev,999).map(r=>[splitKey(r.name),r]));
+  const keys=new Set([...now.keys(),...was.keys()]);
+  const rows=[...keys].map(k=>{
+    const a=now.get(k), b=was.get(k);
+    return { name:(a||b).name, now:a?a.total:0, was:b?b.total:0,
+             delta:(a?a.total:0)-(b?b.total:0),
+             isNew:!b, gone:!a };
+  }).filter(r=>Math.abs(r.delta)>1);
+  rows.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
+  return { prev, rows:rows.slice(0,n||8), comparable:monthsWithData().includes(prev) };
+}
+
+function renderAnalysis(){
+  const box=document.getElementById("anaBox");
+  if(!box) return;
+  const mode=["heat","merch","dow","movers"].includes(S.settings.anaMode)
+    ? S.settings.anaMode : "heat";
+  document.querySelectorAll("#anaMode button").forEach(b=>
+    b.setAttribute("aria-pressed", b.dataset.a===mode));
+
+  const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const foot=t=>'<p class="hint" style="margin:11px 0 0">'+t+'</p>';
+  let h="";
+
+  if(mode==="heat"){
+    const s2=spendByDay(cursor);
+    if(!s2.total) h='<div class="empty">Nothing discretionary this month yet.</div>';
+    else {
+      /* Padded to the weekday the month starts on, so columns line up as a
+         calendar rather than a run of 31 squares. */
+      const cells=[];
+      for(let i=0;i<s2.firstDow;i++) cells.push('<div class="hcell pad"></div>');
+      for(let d=1;d<=s2.dim;d++){
+        const v=s2.days[d];
+        const lvl=v<=0?0:Math.min(4,1+Math.floor((v/s2.max)*3.99));
+        cells.push('<div class="hcell l'+lvl+'" title="Day '+d+' \u00b7 '+money(v)+'">'
+          + '<span>'+d+'</span></div>');
+      }
+      const peak=s2.days.indexOf(s2.max);
+      h='<div class="hgrid head">'+DOW.map(d=>'<div class="hdow">'+d[0]+'</div>').join("")+'</div>'
+        + '<div class="hgrid">'+cells.join("")+'</div>'
+        + '<div class="spread" style="margin-top:11px"><span class="lt" style="margin:0">'
+        + 'Heaviest day</span><span class="num mid">day '+peak+' \u00b7 '+money(s2.max)+'</span></div>'
+        + foot("Darker is more spent. Discretionary only \u2014 rent landing on the 1st "
+          + "would drown out every other day and it is not a pattern you can change.");
+    }
+  }
+
+  if(mode==="merch"){
+    const rows=topMerchants(cursor,10);
+    if(!rows.length) h='<div class="empty">Nothing discretionary this month yet.</div>';
+    else {
+      const max=rows[0].total;
+      h=rows.map(r=>'<div class="mrow">'
+        + '<div class="spread"><span class="lk">'+esc(r.name)
+        +   ' <span class="tag one">'+r.n+'</span></span>'
+        +   '<span class="num">'+money(r.total)+'</span></div>'
+        + '<div class="mbar"><i style="width:'+((r.total/max)*100).toFixed(1)+'%"></i></div>'
+        + '</div>').join("")
+        + foot("The count is the interesting half. One large purchase is a decision; "
+          + "the same total across eight charges is a habit.");
+    }
+  }
+
+  if(mode==="dow"){
+    const w=byWeekday(6);
+    if(!w.months) h='<div class="empty">No closed month yet. This fills in once a '
+      + 'full month is behind you.</div>';
+    else {
+      const hi=w.avg.indexOf(w.max);
+      h='<div class="dowwrap">'+w.avg.map((v,d)=>'<div class="dcolw">'
+        + '<div class="dbarw"><i style="height:'+(w.max?(v/w.max)*100:0).toFixed(1)+'%"'
+        +   (d===hi?' class="peak"':'')+'></i></div>'
+        + '<div class="dlbl'+(d===hi?" peak":"")+'">'+DOW[d][0]+'</div></div>').join("")+'</div>'
+        + '<div class="spread" style="margin-top:11px"><span class="lt" style="margin:0">'
+        + 'Heaviest day</span><span class="num mid">'+DOW[hi]+' \u00b7 '+money(w.max)+'</span></div>'
+        + foot("Average per occurrence across your last "+w.months+" closed month"
+          + (w.months===1?"":"s")+" \u2014 averaged, not summed, so a month with five "
+          + "Saturdays doesn\u2019t make Saturday look worse than it is.");
+    }
+  }
+
+  if(mode==="movers"){
+    const m=biggestMovers(cursor,8);
+    if(!m.comparable) h='<div class="empty">Nothing to compare against yet. This needs '
+      + 'the month before this one.</div>';
+    else if(!m.rows.length) h='<div class="empty">Nothing moved much since '
+      + esc(cycleLabel(m.prev))+'.</div>';
+    else {
+      const max=Math.max(...m.rows.map(r=>Math.abs(r.delta)));
+      h=m.rows.map(r=>'<div class="mrow">'
+        + '<div class="spread"><span class="lk">'+esc(r.name)
+        +   (r.isNew?' <span class="tag dup">new</span>':'')
+        +   (r.gone?' <span class="tag one">stopped</span>':'')+'</span>'
+        +   '<span class="num '+(r.delta>0?"overc":"pathc")+'">'
+        +   (r.delta>0?"+":"\u2212")+money(Math.abs(r.delta))+'</span></div>'
+        + '<div class="mbar '+(r.delta>0?"up":"down")+'">'
+        +   '<i style="width:'+((Math.abs(r.delta)/max)*100).toFixed(1)+'%"></i></div>'
+        + '<div class="sm muted">'+money(r.was)+' \u2192 '+money(r.now)+'</div>'
+        + '</div>').join("")
+        + foot("Against "+esc(cycleLabel(m.prev))+". A merchant that stopped counts as "
+          + "much as one that grew.");
+    }
+  }
+  box.innerHTML=h;
+}
+
 function renderCommitted(){
   /* The point of this tab: how much non-discretionary went out this cycle,
      where it went, and what moved since last cycle. The steady/varies split
@@ -3726,13 +3985,20 @@ function renderCommitted(){
         : "no earlier month to compare against yet")+'</div>'
 
     /* Where the cash goes, largest first. Most rows read "unchanged" every
-       cycle by design — that is what makes the one that moved visible. */
-    + '<div class="vwhy" style="margin-top:12px">'
-    +   G.rows.map(r=>'<div class="r">'
-    +     '<span class="num mid" style="font-size:14px;min-width:74px">'+money(r.now)+'</span>'
-    +     '<span>'+esc(r.cat)+'</span>'
-    +     (G.comparable && r.hadPrev?'<span style="margin-left:auto">'+chg(r.delta)+'</span>':'')
-    +     '</div>').join("")
+       month by design — that is what makes the one that moved visible. The
+       ring answers a different question from the rows: the rows say how much
+       and what changed, the ring says what share. Rent dwarfing everything
+       else is the point, and a column of figures hides it. */
+    + '<div class="flowwrap">'
+    +   fixedDonut(G)
+    +   '<div class="legend2">'
+    +     G.rows.map((r,i)=>'<div class="lrow">'
+    +       '<span class="sw" style="background:'+FIXED_COL(i)+'"></span>'
+    +       '<span class="lk">'+esc(r.cat)+'</span>'
+    +       '<span class="num lv">'+money(r.now)+'</span>'
+    +       (G.comparable && r.hadPrev?'<span style="margin-left:8px">'+chg(r.delta)+'</span>':'')
+    +       '</div>').join("")
+    +   '</div>'
     + '</div>'
 
     + '<div class="vwhy" style="margin-top:10px">'
@@ -4488,7 +4754,7 @@ function renderHeader(){
   btn.setAttribute("aria-label", mainTabName()+" \u2014 "+v.word);
 }
 function renderAll(){ renderHeader(); renderDash(); renderReview(); renderLedger();
-  renderCommitted(); renderPlan(); renderProfile(); renderRules(); renderData(); }
+  renderCommitted(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData(); }
 function go(v){
   /* "bills" isn't a section of its own \u2014 it's the Bills half of the scope
      toggle on Spending. Anything that used to link straight to the old Bills
@@ -4601,6 +4867,9 @@ document.getElementById("addAsk").onclick=()=>{
 document.getElementById("mprev").onclick=()=>{ cursor=ymShift(cursor,-1); renderAll(); };
 document.getElementById("mnext").onclick=()=>{ cursor=ymShift(cursor,1); renderAll(); };
 
+document.querySelectorAll("#anaMode button").forEach(b=>b.onclick=()=>{
+  S.settings.anaMode=b.dataset.a; save(); renderAnalysis();
+});
 document.querySelectorAll("#ceilMode button").forEach(b=>b.onclick=()=>{
   S.settings.ceilingMode=b.dataset.k; save(); renderAll();
 });
