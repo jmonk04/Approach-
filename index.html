@@ -2704,8 +2704,24 @@ function parseStatement(text, account){
   const iDate = hasHeader?find(["date","transaction date","posting date"],0):0;
   const iDesc = hasHeader?find(["description","payee","merchant","appears on your statement as"],1):1;
   const iAmt  = hasHeader?find(["amount","transaction amount"],2):2;
-  const iDeb  = hasHeader?find(["debit"],-1):-1;
-  const iCre  = hasHeader?find(["credit"],-1):-1;
+  /* Split debit/credit AMOUNT columns, which some exports use instead of one
+     signed Amount. The substring search made this a trap: Navy Federal ships a
+     "Credit Debit Indicator" column holding the WORDS "Debit"/"Credit", and
+     both lookups matched it. parseFloat("Debit") is NaN, so every row was
+     dropped and the import reported "no transactions found in file" on a
+     perfectly good export. Require the header to be an amount column, not
+     merely to contain the word. */
+  const amtish = /(amount|amt|\$)/;
+  const isAmtCol = i => i>=0 && (head[i]==="debit" || head[i]==="credit" || amtish.test(head[i]));
+  let iDeb = hasHeader?find(["debit amount","debit"],-1):-1;
+  let iCre = hasHeader?find(["credit amount","credit"],-1):-1;
+  if(!isAmtCol(iDeb) || !isAmtCol(iCre) || iDeb===iCre){ iDeb=-1; iCre=-1; }
+
+  /* A separate indicator column ("Credit Debit Indicator") is how those files
+     actually sign a single Amount column. Read it rather than ignoring it, or
+     every deposit imports as spending. */
+  const iSign = hasHeader?find(["credit debit indicator","debit credit indicator",
+                                "credit/debit","dr/cr","transaction type indicator"],-1):-1;
   const iWho  = hasHeader?find(["card member","cardmember"],-1):-1;
   const iBal  = hasHeader?find(["balance","running balance","ending balance"],-1):-1;
   const body  = hasHeader?rows.slice(1):rows;
@@ -2720,6 +2736,14 @@ function parseStatement(text, account){
     } else {
       amount=parseFloat(String(r[iAmt]==null?"":r[iAmt]).replace(/[$,\s()]/g,""));
       if(/^\(.*\)$/.test(String(r[iAmt]||"").trim())) amount=-amount;
+      /* Amounts in these exports are unsigned; the indicator carries the sign.
+         Normalise to the file convention debits-positive, then let the usual
+         sign logic below map it onto the account. */
+      if(iSign>=0 && isFinite(amount)){
+        const ind=String(r[iSign]||"").trim().toLowerCase();
+        if(/^cr/.test(ind)) amount=-Math.abs(amount);
+        else if(/^d[re]?/.test(ind)) amount=Math.abs(amount);
+      }
     }
     if(!isFinite(amount)) continue;
     let balance=null;
@@ -2738,6 +2762,21 @@ function parseStatement(text, account){
   let conv = declared, convSource = "account";
   const neg = raw.filter(r=>r.amount<0).length;
   const pos = raw.length - neg;
+  /* An indicator column states the direction of every row outright, so the
+     signs are already known and the guess below must not run. Without this, a
+     paycheck-heavy export would trip the supermajority the other way and flip
+     every deposit into spending — the exact failure the heuristic exists to
+     avoid, reintroduced by the thing that fixed it. */
+  if (iSign>=0){
+    LAST_PARSE = { conv:"charge-positive", convSource:"indicator column",
+                   declared, rows: raw.length, neg };
+    const nf = raw.length>1 && raw[0].date > raw[raw.length-1].date;
+    return raw.map((r,i)=>({
+      seq: nf ? raw.length-1-i : i, balance:r.balance, date:r.date, amount:r.amount,
+      rawDesc:r.rawDesc,
+      person: r.rawPerson ? titleCase(r.rawPerson.split(/\s+/)[0]) : null,
+      rawPerson:r.rawPerson, account, source:"csv" }));
+  }
   if (raw.length>=8){
     const observed = neg >= raw.length*0.8 ? "debit-negative"
                    : pos >= raw.length*0.8 ? "charge-positive" : null;
