@@ -349,6 +349,22 @@ label{display:block;margin-bottom:10px}
 .dbarw i.peak{background:#2F6E8F}
 .dlbl{text-align:center;font-family:var(--mono);font-size:9px;color:var(--quiet);margin-top:6px}
 .dlbl.peak{color:var(--ink);font-weight:600}
+
+/* Month-by-month bars. Scrollable rather than squeezed: twelve months on a
+   phone would be four pixels each, and a bar you cannot compare is decoration. */
+.hbars{display:flex;gap:8px;align-items:flex-end;margin-top:14px;
+  overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.hcol{flex:0 0 46px;display:flex;flex-direction:column;align-items:center}
+.hbwrap{height:110px;width:100%;display:flex;align-items:flex-end}
+.hbwrap i{display:block;width:100%;border-radius:3px 3px 0 0;min-height:3px}
+.hbwrap i.met{background:var(--path)}
+.hbwrap i.miss{background:var(--hold)}
+.hbwrap i.neg{background:var(--over)}
+.hcol.open .hbwrap i{opacity:.55}
+.hlab{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:var(--quiet);
+  margin-top:6px;text-transform:uppercase}
+.hcol.open .hlab{color:var(--ink)}
+.hpct{font-family:var(--mono);font-size:10px;color:var(--quiet);margin-top:2px}
 .lrow .lv{font-size:13px}
 .miniseg{display:flex;gap:0;border:1px solid var(--rule);border-radius:7px;overflow:hidden}
 .miniseg button{border:0;background:var(--card);padding:4px 9px;font-family:var(--mono);font-size:9px;
@@ -435,7 +451,6 @@ label{display:block;margin-bottom:10px}
          leaves in cash. -->
     <div class="card verdict" id="trajCard"></div>
 
-    <div class="band"><span class="eyebrow">Where you are</span></div>
     <div class="card" id="catCard"></div>
 
     <!-- Bills lives here now, as the second half of the scope toggle above —
@@ -506,6 +521,7 @@ label{display:block;margin-bottom:10px}
   <section id="v-saving">
     <div class="card verdict" id="saveCard"></div>
     <div class="card" id="outlookCard"></div>
+    <div class="card" id="histCard"></div>
     <div class="band"><span class="eyebrow">Analysis</span></div>
     <div class="card">
       <div class="miniseg wide" id="anaMode" role="group" aria-label="Analysis view">
@@ -591,7 +607,7 @@ label{display:block;margin-bottom:10px}
       <p class="hint">Three ways to arrive at the numbers. You always type them
         yourself &mdash; this decides what the total is allowed to be, so you
         don&rsquo;t budget past what the month leaves you.</p>
-      <div class="miniseg wide" id="ceilMode" role="group" aria-label="How ceilings are set">
+      <div class="miniseg wide" id="ceilMode" role="group" aria-label="How spending limits are set">
         <button data-k="custom" aria-pressed="true">Custom</button>
         <button data-k="objective" aria-pressed="false">Objective</button>
         <button data-k="history" aria-pressed="false">History</button>
@@ -616,7 +632,7 @@ label{display:block;margin-bottom:10px}
            Collapsible because Planning is a long tab; open by default until the
            ceilings exist, since there is nothing to plan against without them. -->
       <details class="fold ceilfold" id="ceilFold">
-        <summary>Set the ceilings</summary>
+        <summary>Set the limits</summary>
         <p class="hint" style="margin-top:10px">Name them what you call them, set what
           each is allowed to be. Rename or remove any of them &mdash; nothing here is
           fixed, and another person&rsquo;s list need not match yours.</p>
@@ -790,7 +806,7 @@ label{display:block;margin-bottom:10px}
       <p class="hint">Your merchant rules and account definitions as one line to paste into
         <code>index.html</code>. Anyone installing from the repo &mdash; or this phone after
         iOS clears it &mdash; starts with imports already categorized and every account&rsquo;s
-        sign convention correct. <strong>No budget rides along:</strong> ceilings, take-home,
+        sign convention correct. <strong>No budget rides along:</strong> limits, take-home,
         declared bills and balances stay personal to each phone. Carries merchant names, so
         judge that against a public repo.</p>
       <button class="btn ghost" id="doSeed">Copy seed line</button>
@@ -1544,10 +1560,18 @@ function planKeys(){ return Object.keys(plans()).sort(); }
 /* The plan in force for a month: its own if it has one, else the latest one
    set before it, else the legacy globals. */
 function planFor(ym){
-  const P=plans();
+  const P=plans(), keys=planKeys();
   if(P[ym]) return P[ym];
-  const prior=planKeys().filter(k=>k<=ym);
+  const prior=keys.filter(k=>k<=ym);
   if(prior.length) return P[prior[prior.length-1]];
+  /* Nothing at or before this month. That happens when you import HISTORY
+     after the fact: migration stamped the months you had at the time, and a
+     July imported in August sits before every one of them. Falling through to
+     the legacy globals gave that month $0 limits and a "No limits set"
+     verdict — with no way to fix it, because a closed month is locked.
+     Inherit forwards instead: the oldest plan you ever set is the best
+     available answer for a month that predates all of them. */
+  if(keys.length) return P[keys[0]];
   return { targets:{...(S.settings.targets||{})},
            objective:Number(S.settings.objective||0) };
 }
@@ -1914,7 +1938,7 @@ function verdict(ym){
   const closed=pace>=1;
 
   if(!target){
-    return { state:"unset", word:"No ceilings set", figure:null, label:"",
+    return { state:"unset", word:"No limits set", figure:null, label:"",
              sub:"Path can't answer anything until it knows your limits.",
              why:[{ text:"Set your spending limits on Planning", goto:"plan" }] };
   }
@@ -1957,7 +1981,7 @@ function verdict(ym){
   if (b.toCome>0)
     why.push({ text:"in bills still expected this month", figure:b.toCome, goto:"bills" });
   if (overcommitted)
-    why.push({ text:"more than your ceilings are allowed to total", figure:al.excess,
+    why.push({ text:"more than your limits are allowed to total", figure:al.excess,
                goto:"plan" });
   if (d.refunds>0 && why.length<3)
     why.push({ text:"in refunds applied to this month", figure:d.refunds });
@@ -1987,7 +2011,7 @@ function verdict(ym){
     : state==="over"
       ? "Spending has to slow for the rest of the month to finish inside plan."
     : state==="overcommitted"
-      ? "Spending is fine. Your ceilings are the problem \u2014 they total more "
+      ? "Spending is fine. Your limits are the problem \u2014 they total more "
         + "than " + (al.mode==="history"?"you normally spend":"the objective leaves you") + "."
     : state==="tight"
       ? (surplus!=null && surplus<0
@@ -2955,12 +2979,12 @@ function recoveryHTML(p){
                          : money(c.capPerDay)+'/day left')+'</span></div>'
           + '<div class="sm muted" style="margin-top:-2px">'
           + (c.capLeft<0
-             ? 'already past its '+money(c.cap)+' ceiling \u2014 nothing more here'
+             ? 'already past its '+money(c.cap)+' limit \u2014 nothing more here'
              : 'heading for '+money(c.headed)+' against '+money(c.cap)
                + (c.cut>0?', so cut this one by '+Math.round(c.cut*100)+'%':''))
           + '</div>').join("")
       : '<p class="hint" style="margin-top:10px">No single category is over its own '
-        + 'ceiling \u2014 the total is high across the board, so the daily figure above '
+        + 'limit \u2014 the total is high across the board, so the daily figure above '
         + 'is the whole plan.</p>')
     + '</details>';
 }
@@ -3093,7 +3117,7 @@ function renderTrajectory(){
        number twice on one card. What stays is only what the header cannot
        say: the caveats that could move it. */
     + (v.overcommitted
-       ? '<div class="warn">Your ceilings total <strong class="num">'
+       ? '<div class="warn">Your limits total <strong class="num">'
          + money(v.allowance.excess)+'</strong> more than '
          + (v.allowance.mode==="history"?"you normally spend":"the objective leaves you")
          + '. The slope is fine; the plan is not. '
@@ -3286,7 +3310,7 @@ function setupSteps(){
       pane:"profile" },
     { key:"pillars",done:targetTotal()>0,
       label:"Set your spending limits",
-      why:"The ceilings this month stands on",
+      why:"The limits this month stands on",
       view:"plan" },
     { key:"income", done:Number(S.settings.income||0)>0,
       label:"Add your monthly take-home",
@@ -3437,7 +3461,7 @@ function renderDash(){
   }));
   const cm=S.settings.catMode==="remaining"?"remaining":"pace";
   const catEl=document.getElementById("catCard");
-  catEl.innerHTML='<div class="spread"><span class="eyebrow">Spending plan</span></div>'
+  catEl.innerHTML='<div class="spread"><span class="eyebrow">Spending breakdown</span></div>'
     /* Two long words don't share a row with Pace/Left without looking crammed,
        so the scope gets its own full-width row and the view toggle sits under
        it, right-aligned against the ribbons it controls. */
@@ -3449,7 +3473,7 @@ function renderDash(){
     /* Pace/Left only means something against a ceiling, so it goes with the
        ribbons when the scope has none. */
     +   (scope==="disc"
-        ? '<div class="miniseg" id="catMode" role="group" aria-label="Ceiling view">'
+        ? '<div class="miniseg" id="catMode" role="group" aria-label="Limit view">'
           + '<button data-c="pace" aria-pressed="'+(cm==="pace")+'">Pace</button>'
           + '<button data-c="remaining" aria-pressed="'+(cm==="remaining")+'">Left</button></div>'
         : '')
@@ -3461,7 +3485,7 @@ function renderDash(){
     +   (scope==="disc"
         ? 'Tap a category to see its transactions.'
         : 'Every non-discretionary line for this month is below. Bills are not '
-          + 'ceilings, so there is nothing to be over.')+'</p>';
+          + 'limits, so there is nothing to be over.')+'</p>';
   catEl.querySelectorAll("#catScope button").forEach(b=>{
     b.onclick=()=>{ S.settings.catScope=b.dataset.s; save(); renderDash(); };
   });
@@ -3879,6 +3903,60 @@ function biggestMovers(ym, n){
   return { prev, rows:rows.slice(0,n||8), comparable:monthsWithData().includes(prev) };
 }
 
+/* Every month you have, run through the SAME outlook() the hero card uses.
+   Not a parallel history calculation — a past month's bar and the figure that
+   month showed when it was current are the same number by construction. */
+function monthlyHistory(n){
+  const cur=cycleOf(todayISO());
+  const ms=monthsWithData().filter(m=>m<=cur).slice(-(n||12));
+  const rows=ms.map(m=>{
+    const o=outlook(m);
+    return { ym:m, surplus:o.surplus, rate:o.rate,
+             objective:objectiveFor(m)/100,
+             open:m===cur, income:o.stated };
+  }).filter(r=>r.surplus!=null);
+  return { rows, max:Math.max(0,...rows.map(r=>Math.abs(r.surplus))) };
+}
+
+function renderHistory(){
+  const el=document.getElementById("histCard");
+  if(!el) return;
+  const H=monthlyHistory(12);
+  if(H.rows.length<2){
+    el.innerHTML='<div class="eyebrow">Month by month</div>'
+      + '<div class="empty">One month of data so far. This fills in as soon as a '
+      + 'second month is loaded, and gets more useful with every one after that.</div>';
+    return;
+  }
+  const best=H.rows.reduce((a,r)=>r.surplus>a.surplus?r:a);
+  const avg=H.rows.filter(r=>!r.open).reduce((a,r)=>a+r.surplus,0)
+          / Math.max(1,H.rows.filter(r=>!r.open).length);
+  el.innerHTML='<div class="spread"><span class="eyebrow">Month by month</span>'
+    + '<span class="eyebrow">'+H.rows.length+' month'+(H.rows.length===1?'':'s')+'</span></div>'
+    + '<div class="hbars">'
+    +   H.rows.map(r=>{
+        const h=H.max? (Math.abs(r.surplus)/H.max)*100 : 0;
+        const met=r.objective>0 ? r.rate>=r.objective : r.surplus>=0;
+        const cls=r.surplus<0?"neg":met?"met":"miss";
+        return '<div class="hcol'+(r.open?" open":"")+'">'
+          + '<div class="hbwrap"><i class="'+cls+'" style="height:'+h.toFixed(1)+'%"></i></div>'
+          + '<div class="hlab">'+esc(cycleLabel(r.ym).split(" ")[0])+'</div>'
+          + '<div class="hpct'+(met?" pathc":"")+'">'+Math.round(r.rate*100)+'%</div>'
+          + '</div>';
+      }).join("")
+    + '</div>'
+    + '<div class="vwhy" style="margin-top:13px">'
+    +   '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+    +     money(avg)+'</span><span>average saved per closed month</span></div>'
+    +   '<div class="r"><span class="num mid pathc" style="font-size:14px;min-width:74px">'
+    +     money(best.surplus)+'</span><span>best month \u00b7 '+esc(cycleLabel(best.ym))+'</span></div>'
+    + '</div>'
+    + '<p class="hint" style="margin-top:11px">Each bar is that month\u2019s surplus, from the '
+    + 'same calculation the card above uses \u2014 so a past month reads exactly what it read '
+    + 'when it was current. Green cleared that month\u2019s objective, which can differ month '
+    + 'to month. The last bar is still open.</p>';
+}
+
 function renderAnalysis(){
   const box=document.getElementById("anaBox");
   if(!box) return;
@@ -4192,7 +4270,7 @@ function renderProject(){
   const already = r.gapActual!=null && r.gapActual<=0;
   let verdict, cls;
   if(already){ verdict="Your recent saving already gets you there."; cls="pathc"; }
-  else if(r.gapPlanned<=0){ verdict="Your current ceilings already get you there."; cls="pathc"; }
+  else if(r.gapPlanned<=0){ verdict="Your current limits already get you there."; cls="pathc"; }
   else if(r.feasible===false){ verdict="Out of reach on this timeline \u2014 even spending nothing "
     + "discretionary only frees "+money(r.maxPossible)+"/mo."; cls="overc"; }
   else if(r.shortfall>10){ verdict="Reachable only partly through spending cuts \u2014 "+money(r.shortfall)+"/mo would still be unaccounted for."; cls="overc"; }
@@ -4249,7 +4327,7 @@ function renderAllowance(){
   const box=document.getElementById("allowBox");
   const gap = a.limit!=null ? a.limit-a.committed : null;
   const head = mode==="custom"
-    ? '<p class="hint" style="margin:12px 0 0">No allowance in this mode. Your ceilings '
+    ? '<p class="hint" style="margin:12px 0 0">No allowance in this mode. Your limits '
       + 'are whatever you say they are, and nothing checks them against the month.</p>'
     : a.limit==null
       ? '<div class="empty">'+(mode==="objective"
@@ -4260,22 +4338,22 @@ function renderAllowance(){
         + '<span class="num mid">'+money(a.limit)+'</span></div>'
         + '<div class="sm muted" style="margin-top:-2px">'+esc(a.basis||"")+'</div>'
         + '<div class="spread" style="margin-top:10px;border-top:1px solid var(--rule);padding-top:10px">'
-        + '<span class="lt" style="margin:0">Your ceilings total</span>'
+        + '<span class="lt" style="margin:0">Your limits total</span>'
         + '<span class="num mid'+(a.excess>0.5?" overc":"")+'">'+money(a.committed)+'</span></div>'
         + '<div class="spread" style="margin-top:4px"><span class="lt" style="margin:0">'
         + (gap>=0?"Room left to allocate":"Over the allowance by")+'</span>'
         + '<span class="num mid '+(gap>=0?"pathc":"overc")+'">'+money(Math.abs(gap))+'</span></div>'
         + (a.excess>0.5
            ? '<p class="hint" style="margin:10px 0 0">Nothing has been overspent — the plan '
-             + 'itself is more than the month allows. Trim a ceiling below, or switch '
+             + 'itself is more than the month allows. Trim a limit below, or switch '
              + 'modes if this is the wrong yardstick.</p>'
-           : '<p class="hint" style="margin:10px 0 0">Set the ceilings below. This figure '
+           : '<p class="hint" style="margin:10px 0 0">Set the limits below. This figure '
              + 'moves as non-discretionary lands, so check it late in the month too.</p>');
 
   /* Per-category averages: the descriptive half. Useful in every mode —
      knowing you set $400 against a $612 habit is the point. */
   const rows = h.months
-    ? '<div class="eyebrow" style="margin:16px 0 6px">Ceiling vs your average</div>'
+    ? '<div class="eyebrow" style="margin:16px 0 6px">Limit vs your average</div>'
       + TC().map(c=>{
           const t=targetOf(cursor,c), av=h.byCat[c]||0;
           const off = t>0 && av>0 ? av-t : null;
@@ -4283,14 +4361,14 @@ function renderAllowance(){
             + '<span class="num">'+(t>0?money(t):"\\u2014")+' / '+money(av)+'</span></div>'
             + (off!=null && Math.abs(off)>1
                ? '<div class="sm '+(off>0?"overc":"muted")+'" style="margin-top:-2px">'
-                 + (off>0?"averages "+money(off)+" above the ceiling"
+                 + (off>0?"averages "+money(off)+" above the limit"
                         :money(-off)+" of headroom on average")+'</div>'
                : '');
         }).join("")
-      + '<p class="hint" style="margin-top:10px">Ceiling / average over the last '
+      + '<p class="hint" style="margin-top:10px">Limit / average over the last '
       + h.months+' closed month'+(h.months===1?"":"s")+'. The open month is excluded.</p>'
       + (mode==="history"
-         ? '<button class="btn ghost" id="useAvgs">Copy averages into my ceilings</button>':'')
+         ? '<button class="btn ghost" id="useAvgs">Copy averages into my limits</button>':'')
     : "";
 
   box.innerHTML=head+rows;
@@ -4300,7 +4378,7 @@ function renderAllowance(){
     const t={...targetsFor(cursor)};
     for(const c of TC()){ const v=h.byCat[c]||0; if(v>0) t[c]=Math.round(v/10)*10; }
     setPlan(cursor,{targets:t}); save(); renderAll();
-    toast("Ceilings set from your averages \u2014 "+cycleLabel(cursor));
+    toast("Limits set from your averages \u2014 "+cycleLabel(cursor));
   };
 }
 
@@ -4322,8 +4400,8 @@ function renderPlan(){
   if(sum){
     const own=!!plans()[cursor], locked=monthClosed(cursor);
     sum.textContent = locked
-      ? "Ceilings for "+cycleLabel(cursor)+" \u00b7 locked"
-      : "Set the ceilings for "+cycleLabel(cursor)+(own?"":" \u00b7 inherited");
+      ? "Limits for "+cycleLabel(cursor)+" \u00b7 locked"
+      : "Set the limits for "+cycleLabel(cursor)+(own?"":" \u00b7 inherited");
   }
   const inputsWrap=document.getElementById("targetInputs");
   if(inputsWrap) inputsWrap.classList.toggle("lockedplan", monthClosed(cursor));
@@ -4334,7 +4412,7 @@ function renderPlan(){
     const note = monthClosed(cursor)
       ? '<p class="hint" style="margin:0 0 11px">'+esc(cycleLabel(cursor))+' has closed. Its plan '
         + 'is kept as the record of what you were aiming at, so it can\u2019t be edited \u2014 '
-        + 'move to an open month to change ceilings.</p>'
+        + 'move to an open month to change limits.</p>'
       : !plans()[cursor]
       ? '<p class="hint" style="margin:0 0 11px">'+esc(cycleLabel(cursor))+' is running on the plan '
         + 'you last set. Change anything here and it becomes '+esc(cycleLabel(cursor))
@@ -4373,7 +4451,7 @@ function renderPlan(){
     ? '<div class="empty">Add monthly take-home above to size your rates.</div>'
     : line("Take-home",p.income)
       + line("\u2212 Non-discretionary",-p.fixed)
-      + line("\u2212 Discretionary ("+TC().length+" ceiling"+(TC().length===1?"":"s")+")",-p.ceilings)
+      + line("\u2212 Discretionary ("+TC().length+" limit"+(TC().length===1?"":"s")+")",-p.ceilings)
       + '<hr>'
       + line("Implied savings",p.savings,p.savings>=need?"pathc":"overc")
       + '<div class="spread" style="margin-top:6px"><span class="sm muted">as a rate</span>'
@@ -4779,7 +4857,7 @@ function renderHeader(){
   btn.setAttribute("aria-label", mainTabName()+" \u2014 "+v.word);
 }
 function renderAll(){ renderHeader(); renderDash(); renderReview(); renderLedger();
-  renderCommitted(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData(); }
+  renderCommitted(); renderHistory(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData(); }
 function go(v){
   /* "bills" isn't a section of its own \u2014 it's the Bills half of the scope
      toggle on Spending. Anything that used to link straight to the old Bills
@@ -5104,7 +5182,7 @@ document.getElementById("doClear").onclick=()=>{
   go(start); lastView=start;
   renderAll();
   if(wipedFromSeed)
-    toast("Storage was empty \u2014 rules and ceilings rebuilt from the seed");
+    toast("Storage was empty \u2014 rules and limits rebuilt from the seed");
 })();
 
 
