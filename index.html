@@ -2147,7 +2147,7 @@ function requiredFor(goal,targetDate){
   /* The real ceiling on saving is income minus the bills you cannot cancel.
      Anything at or under that is reachable; past it, nothing can get you there. */
   const rp=ratePlan();
-  const maxPossible = income>0 ? income-rp.committedOutside : 0;
+  const maxPossible = income>0 ? income-rp.fixed : 0;
   const feasible = income>0 ? need<=maxPossible : null;
   return { need, months:p.months, start:p.start, gapPlanned, gapActual,
            cuts, shortfall:remaining, feasible, maxPossible, project:p };
@@ -2226,26 +2226,42 @@ function committedMonthly(opts){
 }
 
 /* ---------- the rate-setting equation ---------- */
+/* What non-discretionary actually costs you in a normal month, averaged over
+   closed months. Your share, net of reimbursements — the equation is about
+   what is left for YOU to save, so the housemate's half of the rent was never
+   yours to save in the first place. */
+function avgNonDiscretionary(n){
+  const cur=cycleOf(todayISO());
+  const ms=monthsWithData().filter(m=>m<cur).slice(-(n||3));
+  if(!ms.length){
+    const b=billsThisMonth(cur);
+    return { months:0, amount:Math.max(0,b.posted+b.toCome-b.offsetTotal), live:true };
+  }
+  const tot=ms.reduce((a,m)=>{
+    const b=billsThisMonth(m);
+    return a+Math.max(0,b.posted+b.toCome-b.offsetTotal);
+  },0);
+  return { months:ms.length, amount:tot/ms.length, live:false };
+}
+
 function ratePlan(){
   const income = Number(S.settings.income||0);
-  const uncovered = billStatus().filter(b=>!b.detected)
-                    .reduce((a,b)=>{
-                      const per = b.cadence==="annual"?12 : b.cadence==="quarterly"?3
-                                : b.cadence==="weekly"?(1/4.33) : 1;
-                      return a+Number(b.amount||0)/per;
-                    },0);
-  const committed = committedMonthly() + uncovered;
-  const ceilings = targetTotal(cycleOf(todayISO()));
-  /* recurring charges that fall inside a target category are already
-     inside that ceiling — don't subtract them twice */
-  const recurring = detectRecurring().filter(x=>x.confirmed);
-  const insideCeilings = recurring
-    .filter(x=>TC().includes(x.category))
-    .reduce((a,x)=>a+x.monthly,0);
-  const committedOutside = committed - insideCeilings;
-  const planned = committedOutside + ceilings;
+  /* Non-discretionary used to be derived from the recurring SCHEDULE:
+     committedMonthly() plus every declared bill, amortised. That double-counted
+     anything both detected and declared, amortised annual charges into every
+     month, and needed a correction for recurring charges sitting inside a
+     ceiling. It read $5,371 against roughly $3,900 of actual spend.
+
+     It is measured now, not assembled — what non-discretionary really cost,
+     averaged over closed months. The double-count guard goes with it: actuals
+     are FC() categories and ceilings are TC() categories, so by construction
+     the two cannot overlap. */
+  const nd = avgNonDiscretionary(3);
+  const fixed = nd.amount;
+  const ceilings = targetTotal(cursor);
+  const planned = fixed + ceilings;
   const savings = income - planned;
-  return { income, committed, insideCeilings, committedOutside, ceilings, planned,
+  return { income, fixed, ndMonths:nd.months, ndLive:nd.live, ceilings, planned,
            savings, rate: income>0 ? savings/income : 0 };
 }
 
@@ -4356,8 +4372,8 @@ function renderPlan(){
   document.getElementById("rateBox").innerHTML= !p.income
     ? '<div class="empty">Add monthly take-home above to size your rates.</div>'
     : line("Take-home",p.income)
-      + line("\u2212 Committed (recurring, outside ceilings)",-p.committedOutside)
-      + line("\u2212 Your four ceilings",-p.ceilings)
+      + line("\u2212 Non-discretionary",-p.fixed)
+      + line("\u2212 Discretionary ("+TC().length+" ceiling"+(TC().length===1?"":"s")+")",-p.ceilings)
       + '<hr>'
       + line("Implied savings",p.savings,p.savings>=need?"pathc":"overc")
       + '<div class="spread" style="margin-top:6px"><span class="sm muted">as a rate</span>'
@@ -4368,9 +4384,13 @@ function renderPlan(){
           +'% objective with '+money(p.savings-need)+' to spare.</div>'
         : '<div class="overc sm">Hitting every limit still misses the objective by '
           + money(need-p.savings)+' a month. Lower a limit, cut a recurring charge, or move the objective.</div>')
-      + (p.insideCeilings>0?'<div class="sm muted" style="margin-top:8px">'
-        + money(p.insideCeilings)+'/mo of recurring charges already sit inside your limits and '
-        + 'are not double-counted here.</div>':'');
+      + '<div class="sm muted" style="margin-top:8px">Non-discretionary is your share of '
+      + (p.ndLive
+         ? 'this month so far, since no month has closed yet'
+         : 'what actually went out, averaged over your last '+p.ndMonths+' closed month'
+           + (p.ndMonths===1?'':'s'))
+      + ' \u2014 not the bill schedule, which amortises annual charges into every month '
+      + 'and reads high.</div>';
 
   renderAliases();
 }
