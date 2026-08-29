@@ -460,6 +460,13 @@ label{display:block;margin-bottom:10px}
    the transaction to Review — a destructive act on a scrolling list, with the
    whole row as the hit target and no confirmation. The tap now opens this,
    and every outcome including that one is an explicit button inside it. */
+/* [hidden] is display:none in the UA stylesheet, and ANY author rule that sets
+   display beats it. .sheetwrap sets display:flex, so `hidden` stopped hiding
+   it and a fixed, full-screen, z-index:70 overlay sat on top of the whole app
+   permanently — nav is z-index:30, so every tab and every button underneath
+   went dead while still being perfectly visible. The global rule below is the
+   guard: nothing in this file gets to out-specify `hidden` again. */
+[hidden]{display:none!important}
 .sheetwrap{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center}
 .sheetbg{position:absolute;inset:0;background:rgba(9,16,21,.45)}
 .sheet{position:relative;width:100%;max-width:460px;background:var(--card);
