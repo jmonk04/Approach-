@@ -1434,8 +1434,22 @@ function resolve(id, cat, teach){
   }
 }
 
-/* Old files used four fixed sub-categories; they are one bucket now. */
-const CAT_MIGRATION = { "Utilities":"Bills", "Insurance":"Bills", "Debt/Loan":"Bills" };
+/* Old files used four fixed sub-categories that were folded into one bucket.
+   That map then ran on every load, forever — and once the groups became
+   editable, "Insurance" came BACK as a real top-level group. The migration
+   kept rewriting it to "Bills", a name that no longer exists in FC(). Anything
+   filed to Insurance vanished from the breakdown and the donut while still
+   counting in the total, so the headline and the rows disagreed by exactly
+   that amount.
+
+   It only applies to names that are not live groups now. */
+const CAT_MIGRATION_RAW = { "Utilities":"Bills", "Insurance":"Bills", "Debt/Loan":"Bills" };
+function catMigrationFor(name){
+  const to=CAT_MIGRATION_RAW[name];
+  if(!to) return null;
+  if(FC().includes(name)||TC().includes(name)) return null;   // it is a real group again
+  return FC().includes(to) ? to : FC()[1] || to;              // "Bills" is now Bills/Utilities
+}
 function migrate(){
   let n=0;
   /* The plan was global, so every month you have ever had ran on today's
@@ -1515,13 +1529,15 @@ function migrate(){
   if(!catById(S.settings.catchAllId))
     S.settings.catchAllId=(catById("flex")||S.settings.categories[0]).id;
   for(const t of S.txns){
-    if(CAT_MIGRATION[t.category]){ t.category=CAT_MIGRATION[t.category]; n++; }
+    const to=catMigrationFor(t.category);
+    if(to){ t.category=to; n++; }
   }
   for(const b of (S.settings.bills||[])){
-    if(CAT_MIGRATION[b.category]) b.category=CAT_MIGRATION[b.category];
+    const to=catMigrationFor(b.category);
+    if(to) b.category=to;
   }
   const tg=S.settings.targets||{};
-  for(const k of Object.keys(CAT_MIGRATION)) delete tg[k];
+  for(const k of Object.keys(CAT_MIGRATION_RAW)) if(catMigrationFor(k)) delete tg[k];
   return n;
 }
 
@@ -1942,7 +1958,12 @@ function billsThisMonth(ym){
      id, not name) exists this cycle, so a declared "Rent" no longer waits on
      a bank export ever spelling it that way. */
   const known=rows.filter(r=>r.kind==="bill");
-  const pending=known.filter(r=>r.origin==="declared" ? r.missed : !seen.has(r.name))
+  /* Nothing is "still expected" in a month that already ended. February does
+     not get to be waiting on a bill in August — projecting one forward
+     inflated every closed month's total, and made the headline disagree with
+     the line items that only count what actually happened. */
+  const open = ym >= cycleOf(todayISO());
+  const pending=!open ? [] : known.filter(r=>r.origin==="declared" ? r.missed : !seen.has(r.name))
     .map(r=>({...r, estimate: r.varies?r.latest:r.amount}))
     .sort((a,b)=>a.day-b.day);
   const toCome=pending.reduce((a,r)=>a+r.estimate,0);
@@ -4191,7 +4212,11 @@ function categoryTrend(n){
   const rows=ms.map(m=>{
     const d=monthData(m), by={};
     for(const c of cats) by[c]=Math.max(0,d.byCat[c]||0);
-    const fixed=FC().reduce((a,c)=>a+Math.max(0,d.byCat[c]||0),0);
+    /* Same figure the non-discretionary card shows, including what is still
+       expected in an open month — otherwise the chart and the card disagree
+       about the month you are looking at. */
+    const b=billsThisMonth(m);
+    const fixed=Math.max(0, b.posted + b.toCome);
     return { ym:m, by, disc:cats.reduce((a,c)=>a+by[c],0), fixed, open:m===cur };
   });
   return { months:ms, cats, rows };
