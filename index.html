@@ -455,6 +455,25 @@ label{display:block;margin-bottom:10px}
 @media (prefers-reduced-motion:reduce){.billbar .bfill{transition:none}}
 .empty{text-align:center;color:var(--quiet);padding:26px 12px;font-size:14px}
 .hint{font-size:12px;color:var(--quiet);margin:-2px 0 10px}
+/* ---- edit sheet ----
+   The Ledger's only interaction used to be a bare tap on the row, which sent
+   the transaction to Review — a destructive act on a scrolling list, with the
+   whole row as the hit target and no confirmation. The tap now opens this,
+   and every outcome including that one is an explicit button inside it. */
+.sheetwrap{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center}
+.sheetbg{position:absolute;inset:0;background:rgba(9,16,21,.45)}
+.sheet{position:relative;width:100%;max-width:460px;background:var(--card);
+  border-radius:16px 16px 0 0;border:1px solid var(--rule);border-bottom:0;
+  max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:12px 16px calc(20px + env(safe-area-inset-bottom));
+  box-shadow:0 -8px 40px rgba(9,16,21,.22);
+  animation:sheetup .22s cubic-bezier(.22,.9,.3,1)}
+@keyframes sheetup{from{transform:translateY(18px)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}}
+.sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--rule);margin:0 auto 12px}
+.sheet .rawd{font-size:11px;color:var(--quiet);margin:2px 0 12px;padding:7px 9px;
+  background:var(--paper);border-radius:6px;word-break:break-word;font-family:var(--mono)}
+body.noscroll{overflow:hidden}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--rail) + 16px);z-index:60;
   background:var(--ink);color:var(--onink);padding:10px 16px;border-radius:9px;font-size:13px;box-shadow:var(--shadow);
   max-width:88%;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -756,8 +775,9 @@ label{display:block;margin-bottom:10px}
         <label style="margin-top:12px"><span class="lt">Monthly take-home</span>
           <input type="number" id="pIncome" inputmode="decimal" step="1"></label>
         <p class="hint">A W2 figure that doesn't move month to month, so it lives here
-          rather than being re-entered. Detected deposits still override it when they
-          come in higher.</p>
+          rather than being re-entered. Deposits found in an import never overwrite it &mdash;
+          they only time the cash forecast. Money the month genuinely gained on top of
+          salary goes in as <em>cash in</em> from Review.</p>
         <button class="btn" id="savePerson">Save profile</button>
       </div>
 
@@ -916,7 +936,14 @@ label{display:block;margin-bottom:10px}
     <span class="tabmark" aria-hidden="true"><span class="dot"></span>
       <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Data<span class="badge" id="reviewBadge" style="display:none">0</span></button>
 </nav>
-<div class="toast" id="toast"></div>
+<div class="sheetwrap" id="editSheet" hidden>
+  <div class="sheetbg" data-close="1"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+    <div class="grab" aria-hidden="true"></div>
+    <div id="editBody"></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
 /* ============================================================
    PATH — core logic
@@ -1119,6 +1146,14 @@ function paceOf(ym){
   if (ym<cur) return 1;
   if (ym>cur) return 0;
   return dayIndex(todayISO(), ym)/daysIn(ym);
+}
+/* One ordering for the whole app: newest first, ties broken by the order the
+   rows arrived in the file so a statement's own sequence survives. Every path
+   that adds or restores a transaction sorts through this, and the Ledger sorts
+   again on render — display order should not depend on which mutation ran last. */
+function byDateDesc(a,b){
+  if(a.date!==b.date) return a.date<b.date?1:-1;
+  return (a.seq||0)-(b.seq||0);
 }
 function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
 function titleCase(s){
@@ -1388,7 +1423,7 @@ function ingest(parts){
     if(a.billTxn) t.billMatch=a.billTxn;
   }
   S.txns = pool;
-  S.txns.sort((a,b)=> a.date<b.date?1 : a.date>b.date?-1 : 0);
+  S.txns.sort(byDateDesc);
   const held = fresh.filter(t=>t.pending).length;
   S.lastBatch = { id:batch, count:fresh.length, held, superseded,
                   at:new Date().toISOString(), displaced };
@@ -1408,7 +1443,7 @@ function undoBatch(){
     const have=new Set(S.txns.map(t=>t.id));
     for(const t of b.displaced) if(!have.has(t.id)) S.txns.push(t);
   }
-  S.txns.sort((a,b)=> a.date<b.date?1 : a.date>b.date?-1 : 0);
+  S.txns.sort(byDateDesc);
   S.lastBatch=null;
   return removed;
 }
@@ -2342,7 +2377,14 @@ function trailingSavings(n){
   const mid=Math.floor(vals.length/2);
   return { monthly: vals.length%2?vals[mid]:(vals[mid-1]+vals[mid])/2, months: rows.length };
 }
-function monthsBetween(fromISO,toISO_){
+/* Fractional months between two full ISO DATES — the projection arithmetic.
+   Named apart from monthsBetween(ym,ym) above: both were called
+   "monthsBetween", and a function declaration later in the file wins for the
+   whole scope, so the cycle-arithmetic one was dead and billDueThisCycle() was
+   silently running on this one. Its Math.max(0,...) floor turned every
+   negative gap into 0, and 0 % 3 === 0, so a quarterly or annual bill read as
+   due in every cycle BEFORE the one it was anchored to. */
+function monthsBetweenDates(fromISO,toISO_){
   const a=new Date(fromISO+"T12:00:00"), b=new Date(toISO_+"T12:00:00");
   let m=(b.getFullYear()-a.getFullYear())*12+(b.getMonth()-a.getMonth());
   m += (b.getDate()-a.getDate())/30.44;
@@ -2356,7 +2398,7 @@ function project(targetDate){
   const cash=cashOnHand();
   const start=cash?cash.amount:0;
   const from=cash?cash.date:todayISO();
-  const months=monthsBetween(from,targetDate);
+  const months=monthsBetweenDates(from,targetDate);
   const planned=ratePlan().savings;
   const actual=trailingSavings(3);
   return {
@@ -4068,7 +4110,7 @@ function renderLedger(){
     +(ledgerFilter===o)+'">'+esc(o)+'</button>').join("");
   fb.querySelectorAll("button").forEach(b=>b.onclick=()=>{ ledgerFilter=b.dataset.f; renderLedger(); });
 
-  let rows=d.live.slice();
+  let rows=d.live.slice().sort(byDateDesc);
   if(TC().includes(ledgerFilter)||FC().includes(ledgerFilter))
     rows=rows.filter(t=>t.category===ledgerFilter);
   else if(ledgerFilter==="Fixed") rows=rows.filter(t=>FC().includes(t.category));
@@ -4083,19 +4125,170 @@ function renderLedger(){
       +(t.type==="refund"?'<span class="tag ref">'+(t.linkedTo?"refund \u2192 origin":"refund")+'</span>':"")
       +(FC().includes(t.category)?'<span class="tag fix">committed</span>':"")
       +(t.oneTime?'<span class="tag one">one-time</span>':"")
-      +(t.provisional?'<span class="tag pend">pending</span>':"");
+      +(t.provisional?'<span class="tag pend">pending</span>':"")
+      /* An edited row says so. A ledger that lets you change a figure has to
+         show which figures were changed, or it stops being a record. */
+      +(t.edited?'<span class="tag one">edited</span>':"");
     return '<div class="txn" data-id="'+t.id+'"><div class="body">'
       + '<div class="name">'+esc(t.merchant)+tags+'</div>'
       + '<div class="meta">'+t.date+' \u00b7 '+esc(personOf(t))+' \u00b7 '+esc(withIcon(t.category))+'</div></div>'
       + '<div class="amt '+(signed<0?"pathc":"")+'">'+money2(signed)+'</div></div>';
   }).join("");
-  el.querySelectorAll(".txn").forEach(r=>r.onclick=()=>reopen(r.dataset.id));
+  el.querySelectorAll(".txn").forEach(r=>r.onclick=()=>openEditor(r.dataset.id));
 }
 function reopen(id){
   const t=S.txns.find(x=>x.id===id); if(!t) return;
   t.pending=true; t.reason="reopened";
   REASON_TEXT["reopened"]="You sent this back for another look";
   save(); renderAll(); go("review"); toast("Sent to review");
+}
+
+/* ============================================================
+   EDIT A TRANSACTION
+   ============================================================
+   The app told you to fix a variable utility "in the Ledger" and then gave you
+   nowhere to do it: a tap only threw the row back into Review, which asks
+   about category and has no opinion about amount. Confirm-posted always posts
+   the DECLARED figure, so a bill that came in at $302 against a declared $215
+   had no correction path at all short of deleting and retyping it.
+
+   What an edit deliberately does NOT do: re-run assess(). You have just told
+   the app what this row is, by hand; holding it for review immediately
+   afterwards would be the app second-guessing an answer it asked for. Sending
+   it back is a button, not a side effect.
+
+   rawDesc is never editable. It is what the bank actually said, it is what the
+   dedup hash and every merchant rule are derived from, and a record you can
+   rewrite is not provenance. */
+const EDIT_TYPES=[
+  ["spend",   "Spending",              "Counts against a category limit."],
+  ["refund",  "Refund",                "Comes off the charge it belongs to, in that charge's month."],
+  ["cashout", "Cash out",              "Money left the account with no category yet \u2014 an ATM run."],
+  ["cashin",  "Cash in",               "A reimbursement, sale or gift. Adds to this month's take-home."],
+  ["transfer","Transfer / card payment","Excluded from every total, so a card payment isn't counted twice."],
+  ["income",  "Income",                "A detected deposit. Times the cash forecast; never sets take-home."],
+  ["savings", "Savings",               "Money moved to savings, not spent."]
+];
+const EDIT_CAT_TYPES=new Set(["spend","refund"]);
+let editId=null;
+
+function openEditor(id){
+  const t=S.txns.find(x=>x.id===id); if(!t) return;
+  editId=id;
+  const wrap=document.getElementById("editSheet"), b=document.getElementById("editBody");
+  const cats=[...TC(),...FC()];
+  const people=(S.settings.people||[]).slice();
+  const who=personOf(t);
+  if(!people.some(x=>x.toLowerCase()===String(who).toLowerCase())) people.unshift(who);
+  const opt=(v,l,sel)=>'<option value="'+esc(v)+'"'+(sel?' selected':'')+'>'+esc(l)+'</option>';
+
+  b.innerHTML='<div class="spread"><span class="eyebrow" id="editTitle">Edit transaction</span>'
+    + '<button class="link" data-close="1">Close</button></div>'
+    + (t.rawDesc?'<div class="rawd">'+esc(t.rawDesc)+'</div>':'<div style="height:8px"></div>')
+    + '<label><span class="lt">Merchant</span><input type="text" id="eMerch" value="'+esc(t.merchant)+'"></label>'
+    + '<div class="row" style="gap:8px;margin-bottom:10px">'
+    +   '<label style="flex:1;margin:0"><span class="lt">Amount</span>'
+    +     '<input type="number" id="eAmt" inputmode="decimal" step="0.01" value="'
+    +     Math.abs(Number(t.amount)||0).toFixed(2)+'"></label>'
+    +   '<label style="flex:1;margin:0"><span class="lt">Date</span>'
+    +     '<input type="date" id="eDate" value="'+esc(t.date)+'"></label></div>'
+    + '<label><span class="lt">This row is</span><select id="eType">'
+    +   EDIT_TYPES.map(([v,l])=>opt(v,l,(t.type||"spend")===v)).join("")+'</select></label>'
+    + '<p class="hint" id="eTypeHint"></p>'
+    + '<div id="eCatWrap"><label><span class="lt">Category</span><select id="eCat">'
+    +   cats.map(c=>opt(c,withIcon(c),t.category===c)).join("")+'</select></label></div>'
+    + '<div class="row" style="gap:8px;margin-bottom:10px">'
+    +   '<label style="flex:1;margin:0"><span class="lt">Person</span><select id="ePerson">'
+    +     people.map(x=>opt(x,x,x===who)).join("")+'</select></label>'
+    +   '<label style="flex:1;margin:0"><span class="lt">Paid from</span><select id="eAcct">'
+    +     accounts().map(a=>opt(a.id,a.name,a.id===t.account)).join("")+'</select></label></div>'
+    + (t.billId?'<p class="hint">Linked to a declared bill. Changing the amount here is what '
+       + 'a variable utility needs \u2014 the bill keeps its schedule and its link.</p>':'')
+    + '<button class="btn" id="eSave">Save changes</button>'
+    + '<div class="btn2" style="margin-top:8px">'
+    +   '<button class="btn ghost" id="eReview">Send to review</button>'
+    +   '<button class="btn danger" id="eDel">Delete</button></div>'
+    + '<p class="hint" style="margin-top:10px">Saving files this row as you have described it '
+    + '\u2014 it will not be held for review again on its way back in. Send it to review if you '
+    + 'want the app to ask about it instead.</p>';
+
+  const typeSel=b.querySelector("#eType");
+  const syncType=()=>{
+    const v=typeSel.value;
+    b.querySelector("#eCatWrap").hidden=!EDIT_CAT_TYPES.has(v);
+    b.querySelector("#eTypeHint").textContent=(EDIT_TYPES.find(x=>x[0]===v)||[])[2]||"";
+  };
+  typeSel.onchange=syncType; syncType();
+
+  b.querySelectorAll("[data-close]").forEach(x=>x.onclick=closeEditor);
+  wrap.querySelector(".sheetbg").onclick=closeEditor;
+  b.querySelector("#eSave").onclick=()=>{
+    const amt=Math.abs(Number(b.querySelector("#eAmt").value));
+    const date=b.querySelector("#eDate").value;
+    if(!isFinite(amt)||amt===0){ toast("Enter an amount"); return; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ toast("Enter a date"); return; }
+    const r=applyEdit(editId,{
+      merchant:b.querySelector("#eMerch").value.trim(),
+      amount:amt, date, type:typeSel.value,
+      category:EDIT_CAT_TYPES.has(typeSel.value)?b.querySelector("#eCat").value:null,
+      person:b.querySelector("#ePerson").value,
+      account:b.querySelector("#eAcct").value
+    });
+    closeEditor(); save(); renderAll();
+    toast(r&&r.orphanRefund ? "Saved \u2014 no charge found to attach this refund to" : "Saved");
+  };
+  b.querySelector("#eReview").onclick=()=>{ const id=editId; closeEditor(); reopen(id); };
+  b.querySelector("#eDel").onclick=()=>{
+    const t2=S.txns.find(x=>x.id===editId); if(!t2) return;
+    if(!confirm("Delete "+t2.merchant+" for "+money2(t2.amount)+" on "+t2.date+"?")) return;
+    const id=editId;
+    S.txns=S.txns.filter(x=>x.id!==id);
+    /* A refund pointing at a charge that no longer exists would keep filing
+       itself into a month it can no longer justify. */
+    for(const x of S.txns) if(x.linkedTo===id) x.linkedTo=null;
+    closeEditor(); save(); renderAll(); toast("Deleted");
+  };
+
+  wrap.hidden=false;
+  document.body.classList.add("noscroll");
+  b.querySelector("#eMerch").focus({preventScroll:true});
+}
+
+function closeEditor(){
+  editId=null;
+  document.getElementById("editSheet").hidden=true;
+  document.body.classList.remove("noscroll");
+}
+document.addEventListener("keydown",e=>{ if(e.key==="Escape" && editId) closeEditor(); });
+
+/* Every field an edit touches is one something downstream derives from, so the
+   derivations are rebuilt here rather than left to drift:
+     - amount is stored as a magnitude, since every reader takes Math.abs() of
+       it and reads direction off the type;
+     - the three system types own their category outright;
+     - a refund re-links, because which month it lands in is the linked
+       charge's month, not its own;
+     - the dedup hash is rebuilt from account, date and amount, or the next
+       import of the same statement would no longer recognise this row. */
+function applyEdit(id,p){
+  const t=S.txns.find(x=>x.id===id); if(!t) return null;
+  t.merchant=p.merchant||t.merchant;
+  t.amount=Math.abs(Number(p.amount))||0;
+  t.date=p.date;
+  t.type=p.type;
+  t.person=p.person;
+  t.account=p.account;
+  if(t.type==="transfer") t.category="Transfer";
+  else if(t.type==="income") t.category="Income";
+  else if(t.type==="savings") t.category="Savings";
+  else if(EDIT_CAT_TYPES.has(t.type)) t.category=p.category||catchAllName();
+  t.linkedTo=null;
+  if(t.type==="refund") linkRefund(t,S.txns.filter(x=>x.id!==t.id));
+  t.hash=[t.account,t.date,t.amount.toFixed(2),
+          String(t.rawDesc||"").toLowerCase().replace(/\s+/g,"").slice(0,28)].join("|");
+  t.edited=true;
+  S.txns.sort(byDateDesc);
+  return { orphanRefund: t.type==="refund" && !t.linkedTo };
 }
 
 
