@@ -6,8 +6,21 @@
 <meta name="theme-color" content="#F6F6F4">
 <title>Path</title>
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=1">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
 :root{
+  /* ---- type scale ----
+     There were eighteen distinct pixel sizes in this stylesheet, seven of them
+     under 13px, several separated by half a pixel — 9 and 9.5 next to each
+     other, 12 and 12.5 and 13 all doing the same job. Differences that small
+     are not read as hierarchy; they are read as inconsistency, and they make
+     every new element a fresh guess. Seven steps, each a clear jump from the
+     last, so there is one obvious answer for any piece of text.
+     f1 chart axes and tags · f2 labels, meta, nav · f3 hints and secondary
+     copy · f4 body and amounts · f5 headings · f6 secondary figures ·
+     f7 the one number the app exists to show. */
+  --f1:9px; --f2:11px; --f3:12.5px; --f4:15px; --f5:18px; --f6:22px; --f7:34px;
+
   --paper:#F6F6F4; --card:#FFFFFF; --ink:#12263A; --quiet:#5F717B; --rule:#DFE2DE;
   --path:#0B7A70; --hold:#93690F; --over:#A93A2C; --track:#E6E8E4;
   /* --path-line is the brand teal. It is used for strokes and fills only,
@@ -68,7 +81,7 @@ html[data-blur="on"][data-reveal="1"] .big,html[data-blur="on"][data-reveal="1"]
   html[data-blur="on"] .num,html[data-blur="on"] .display{transition:none}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
-body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:var(--f4);line-height:1.45;
   padding-bottom:calc(var(--rail) + env(safe-area-inset-bottom));-webkit-font-smoothing:antialiased}
 #app{max-width:460px;margin:0 auto;padding:0 16px}
 @media (min-width:520px){body{background:var(--wide)}
@@ -76,15 +89,15 @@ body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:
 /* Mono is now reserved for figures — balances, amounts, dates, percentages.
    Labels and chrome are set in the system sans, which is what stops the app
    reading as an instrument panel. */
-.eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--quiet)}
+.eyebrow{font-size:var(--f2);font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--quiet)}
 h1,h2{margin:0;font-weight:600}
-h1{font-family:var(--display);font-size:18px;font-weight:500;letter-spacing:.2em;
+h1{font-family:var(--display);font-size:var(--f5);font-weight:500;letter-spacing:.2em;
   text-transform:uppercase;padding-left:1px}
-h2{font-size:17px;letter-spacing:-.01em}
+h2{font-size:var(--f5);letter-spacing:-.01em}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.big{font-size:34px;font-weight:600;line-height:1}
-.mid{font-size:20px;font-weight:600}
-.sm{font-size:12.5px}
+.big{font-size:var(--f7);font-weight:600;line-height:1}
+.mid{font-size:var(--f6);font-weight:600}
+.sm{font-size:var(--f3)}
 .muted{color:var(--quiet)}
 .pathc{color:var(--path)}.holdc{color:var(--hold)}.overc{color:var(--over)}
 header{position:sticky;top:0;z-index:20;background:var(--paper);padding:14px 0 10px;
@@ -99,71 +112,77 @@ header{position:sticky;top:0;z-index:20;background:var(--paper);padding:14px 0 1
 .mark{height:23px;flex:none;display:flex;align-items:center;position:relative;color:var(--accent)}
 .mark svg{height:23px;width:auto;display:block}
 .monthpick{margin-left:auto;display:flex;align-items:center;gap:2px}
-.monthpick button{border:0;background:none;color:var(--ink);font-size:17px;padding:4px 8px;cursor:pointer;border-radius:6px}
+.monthpick button{border:0;background:none;color:var(--ink);font-size:var(--f5);padding:4px 8px;cursor:pointer;border-radius:6px}
 .monthpick button:disabled{opacity:.25}
-.monthpick .lbl{font-family:var(--mono);font-size:12px;letter-spacing:.06em;min-width:74px;text-align:center}
+.monthpick .lbl{font-family:var(--mono);font-size:var(--f3);letter-spacing:.06em;min-width:74px;text-align:center}
 .iconbtn{border:0;background:none;color:var(--ink);padding:4px;margin-left:2px;cursor:pointer;
   display:flex;align-items:center;border-radius:8px;position:relative;flex:none}
 .iconbtn .dotmark{position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:4px;
   background:var(--over);border:1.5px solid var(--paper)}
 .backrow{display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.backrow button{border:0;background:none;color:var(--quiet);font-size:10.5px;font-weight:600;
+.backrow button{border:0;background:none;color:var(--quiet);font-size:var(--f2);font-weight:600;
   letter-spacing:.1em;text-transform:uppercase;padding:6px 0;cursor:pointer}
 .subseg{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .subseg button{flex:none;border:1px solid var(--rule);background:var(--card);color:var(--quiet);
-  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  font-size:var(--f2);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
   padding:7px 13px;border-radius:20px;cursor:pointer}
 .subseg button[aria-pressed="true"]{background:var(--accent);color:var(--onaccent);border-color:var(--accent)}
 .rulerow{display:flex;align-items:center;gap:9px;padding:11px 0;border-top:1px solid var(--rule)}
 .rulerow:first-of-type{border-top:0}
 .rulerow .rn{flex:1;min-width:0}
-.rulerow .rn strong{display:block;font-size:14px;font-weight:600;white-space:nowrap;
+.rulerow .rn strong{display:block;font-size:var(--f4);font-weight:600;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
-.rulerow .rn .meta{font-size:11px;color:var(--quiet);font-family:var(--mono)}
-.rulerow select{width:auto;max-width:132px;padding:6px 7px;font-size:12px}
-.splitbtn{margin-top:6px;padding:0;font-size:11px}
+.rulerow .rn .meta{font-size:var(--f2);color:var(--quiet);font-family:var(--mono)}
+.rulerow select{width:auto;max-width:132px;padding:6px 7px;font-size:var(--f3)}
+.splitbtn{margin-top:6px;padding:0;font-size:var(--f2)}
 /* The group name reads as the meta line it replaced until you look for it —
    it should not shout, but it has to be obviously tappable. */
-.refile{display:block;padding:0;font-size:12px;color:var(--quiet);
+.refile{display:block;padding:0;font-size:var(--f3);color:var(--quiet);
   text-decoration:none;letter-spacing:.01em}
 .refile:hover{color:var(--ink)}
 .regroup{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 2px}
-.regroup .catbtn{font-size:11px;padding:6px 9px}
-.rulerow .x{border:0;background:none;color:var(--quiet);font-size:18px;padding:2px 4px;cursor:pointer;flex:none}
+.regroup .catbtn{font-size:var(--f2);padding:6px 9px}
+.rulerow .x{border:0;background:none;color:var(--quiet);font-size:var(--f5);padding:2px 4px;cursor:pointer;flex:none}
 .tick{width:20px;height:20px;flex:none;border-radius:10px;border:1.5px solid var(--rule);
-  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--onaccent)}
+  display:flex;align-items:center;justify-content:center;font-size:var(--f2);color:var(--onaccent)}
 .tick.on{background:var(--path);border-color:var(--path)}
 nav{position:fixed;left:0;right:0;bottom:0;z-index:30;height:calc(var(--rail) + env(safe-area-inset-bottom));
   padding-bottom:env(safe-area-inset-bottom);background:var(--navbg);
   -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--rule);
   display:flex;overflow:visible}
-nav button{flex:1;border:0;background:none;color:var(--quiet);font-size:9.5px;font-weight:600;
+nav button{flex:1;border:0;background:none;color:var(--quiet);font-size:var(--f2);font-weight:600;
   letter-spacing:.05em;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:4px;padding:0;position:relative}
-/* Every tab reserves the same 16px slot above its label. Closed tabs show a
-   dash; the open one shows the P. The mark is the app saying where you are,
-   so it is always the accent colour and never carries a reading of any kind. */
-nav button .tabmark{height:16px;display:flex;align-items:center;justify-content:center;flex:none}
-/* Five tabs, so the labels get less room than four had. */
-nav button{font-size:8.5px;letter-spacing:.05em}
-nav button.main .mlbl{font-size:8.5px;letter-spacing:.05em}
-nav button .dot{width:16px;height:3px;border-radius:2px;background:currentColor;opacity:.35}
-nav button .glyph{display:none;height:16px;width:auto;color:var(--accent)}
+/* Every tab carries its own glyph, always drawn — a bar you can navigate by
+   shape instead of by reading. The labels stay: an icon set nobody has learned
+   yet is a guessing game, and at this size the pair costs nothing.
+   Both grow when the tab is open, so the current tab is the heaviest thing in
+   the bar whether you are reading the word or the shape. */
+nav button .tabmark{height:22px;display:flex;align-items:center;justify-content:center;
+  flex:none;position:relative}
+nav button{font-size:var(--f2);letter-spacing:.04em;gap:3px}
+nav button .glyph{height:21px;width:21px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round;opacity:.62;
+  transition:opacity .16s ease,transform .16s ease}
 nav button[aria-current="true"]{color:var(--ink)}
-nav button[aria-current="true"] .dot{display:none}
-nav button[aria-current="true"] .glyph{display:block}
+nav button[aria-current="true"] .glyph{opacity:1;stroke-width:1.95;transform:scale(1.07)}
+nav button[aria-current="true"] .mlbl,
+nav button[aria-current="true"]{font-weight:700}
+@media (prefers-reduced-motion:reduce){nav button .glyph{transition:none}}
 
-/* Spending keeps the verdict, moved off the mark and onto its dash: green on
-   plan, amber tight, red over, plain grey when the review queue is big enough
-   that the honest answer is "can't say yet." It reads from any other screen,
-   and goes quiet when you are already on Spending and can see the number. */
-nav button.main .mlbl{font-size:9.5px;letter-spacing:.06em}
-nav button.main.ok .dot{background:var(--path);opacity:1}
-nav button.main.tight .dot{background:var(--hold);opacity:1}
-nav button.main.over .dot{background:var(--over);opacity:1}
-nav button.main.overcommitted .dot{background:var(--hold);opacity:1}
+/* Spending keeps the verdict: green on plan, amber tight, red over, and
+   nothing at all when the review queue is big enough that the honest answer is
+   "can't say yet." It reads from any other screen, and goes quiet when you are
+   already on Spending and can see the number itself. */
+nav button.main .pip{position:absolute;top:-1px;right:-3px;width:7px;height:7px;
+  border-radius:4px;border:1.5px solid var(--navbg);display:none}
+nav button.main.ok .pip{background:var(--path);display:block}
+nav button.main.tight .pip{background:var(--hold);display:block}
+nav button.main.overcommitted .pip{background:var(--hold);display:block}
+nav button.main.over .pip{background:var(--over);display:block}
+nav button.main[aria-current="true"] .pip{display:none}
 .badge{position:absolute;top:8px;right:50%;margin-right:-16px;background:var(--over);color:var(--onink);
-  font-size:9px;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;
+  font-size:var(--f1);min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;
   justify-content:center;padding:0 4px;letter-spacing:0}
 section{display:none;padding:16px 0 24px}
 section.on{display:block}
@@ -186,9 +205,9 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .ribbon .pace::after{content:"";position:absolute;left:-2px;top:-3px;border-left:3px solid transparent;
   border-right:3px solid transparent;border-top:4px solid var(--ink)}
 .ribbon .cap{position:absolute;right:-1px;top:-4px;bottom:-4px;width:2px;background:var(--rule)}
-.ribbon .legend{display:flex;justify-content:space-between;margin-top:7px;font-size:11px}
+.ribbon .legend{display:flex;justify-content:space-between;margin-top:7px;font-size:var(--f2)}
 @media (prefers-reduced-motion:reduce){.ribbon .fill{transition:none}}
-.warn{margin-top:12px;padding:10px;border-radius:8px;background:var(--warnbg);border:1px solid var(--warnrule);font-size:13px}
+.warn{margin-top:12px;padding:10px;border-radius:8px;background:var(--warnbg);border:1px solid var(--warnrule);font-size:var(--f3)}
 
 /* ---- hierarchy ----------------------------------------------------------
    Exactly one element on the home screen is allowed to be loud: .display,
@@ -203,13 +222,13 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .verdict.over{border-top-color:var(--over)}
 .verdict.unknown{border-top-color:var(--quiet)}
 .verdict.overcommitted{border-top-color:var(--hold)}
-.vword{font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:700}
+.vword{font-size:var(--f2);letter-spacing:.15em;text-transform:uppercase;font-weight:700}
 .display{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:clamp(40px,13vw,54px);
   font-weight:600;line-height:1;letter-spacing:-.035em;margin:9px 0 3px}
-.vsub{font-size:13.5px;color:var(--quiet);line-height:1.35}
+.vsub{font-size:var(--f4);color:var(--quiet);line-height:1.35}
 .vwhy{margin-top:13px;border-top:1px solid var(--rule);padding-top:10px;display:flex;
   flex-direction:column;gap:7px}
-.vwhy .r{display:flex;align-items:baseline;gap:9px;font-size:12.5px;color:var(--quiet)}
+.vwhy .r{display:flex;align-items:baseline;gap:9px;font-size:var(--f3);color:var(--quiet)}
 .vwhy .r .num{color:var(--ink)}
 .vwhy .r button{margin-left:auto}
 /* The sum line. A rule above it and the label in ink, so the list reads as
@@ -223,7 +242,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .wf{margin-top:12px}
 .wfrow{display:grid;grid-template-columns:1fr 34% auto;align-items:center;gap:9px;
   padding:5px 0}
-.wflab{font-size:12.5px;color:var(--quiet);overflow:hidden;text-overflow:ellipsis;
+.wflab{font-size:var(--f3);color:var(--quiet);overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap}
 .wftrack{position:relative;height:14px;border-radius:3px;background:var(--track)}
 .wftrack i{position:absolute;top:0;bottom:0;border-radius:3px;min-width:2px}
@@ -231,19 +250,19 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .wftrack i.out{background:var(--over);opacity:.85}
 .wftrack i.sum{background:var(--accent)}
 .wftrack i.neg{background:var(--over)}
-.wfamt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;
+.wfamt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:var(--f3);
   color:var(--ink);text-align:right;white-space:nowrap}
 .wfrow.total{border-top:1px solid var(--rule);margin-top:6px;padding-top:9px}
 .wfrow.total .wflab{color:var(--ink);font-weight:600}
-.wfrow.total .wfamt{font-size:15px;font-weight:600}
+.wfrow.total .wfamt{font-size:var(--f4);font-weight:600}
 .daycount{opacity:.55}
 /* "See the calculation" — the answer is the card; the accounting behind it is
    available, not imposed. */
 .reveal{margin-top:12px}
-.reveal>summary{list-style:none;cursor:pointer;font-size:12.5px;font-weight:600;
+.reveal>summary{list-style:none;cursor:pointer;font-size:var(--f3);font-weight:600;
   color:var(--quiet);padding:2px 0;display:flex;align-items:center;gap:6px}
 .reveal>summary::-webkit-details-marker{display:none}
-.reveal>summary::after{content:"\203A";font-size:15px;transition:transform .18s ease}
+.reveal>summary::after{content:"\203A";font-size:var(--f4);transition:transform .18s ease}
 .reveal[open]>summary::after{transform:rotate(90deg)}
 @media (prefers-reduced-motion:reduce){.reveal>summary::after{transition:none}}
 .fold{margin:0 0 12px}
@@ -251,7 +270,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
   padding:12px 14px;background:var(--card);border:1px solid var(--rule);border-radius:12px;
   box-shadow:var(--shadow)}
 .fold>summary::-webkit-details-marker{display:none}
-.fold>summary .chev{margin-left:auto;color:var(--quiet);font-size:15px;transition:transform .18s ease}
+.fold>summary .chev{margin-left:auto;color:var(--quiet);font-size:var(--f4);transition:transform .18s ease}
 .fold[open]>summary{border-radius:12px 12px 0 0;border-bottom-color:transparent;box-shadow:none}
 .fold[open]>summary .chev{transform:rotate(90deg)}
 .fold .inner{background:var(--card);border:1px solid var(--rule);border-top:0;
@@ -259,15 +278,15 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .fold .inner .card{background:none;border:0;border-top:1px solid var(--rule);border-radius:0;
   box-shadow:none;margin:0;padding:14px 0}
 .fold .inner .card:first-child{border-top:0}
-.fold .inner .big{font-size:22px}
+.fold .inner .big{font-size:var(--f6)}
 /* A disclosure INSIDE a card, so it drops the card chrome the standalone
    .fold carries — a bordered box inside a bordered box reads as two cards. */
 .ceilfold{margin:16px 0 0;border-top:1px solid var(--rule);padding-top:12px}
 .ceilfold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;
   gap:10px;padding:0;background:none;border:0;border-radius:0;box-shadow:none;
-  font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--quiet)}
+  font-size:var(--f2);letter-spacing:.15em;text-transform:uppercase;color:var(--quiet)}
 .ceilfold>summary::-webkit-details-marker{display:none}
-.ceilfold>summary::after{content:"\203A";margin-left:auto;font-size:15px;
+.ceilfold>summary::after{content:"\203A";margin-left:auto;font-size:var(--f4);
   transition:transform .18s ease}
 .ceilfold[open]>summary::after{transform:rotate(90deg)}
 /* A closed month's plan is readable but not editable — dimmed and inert
@@ -278,41 +297,41 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .recovery{margin:14px 0 0;border-top:1px solid var(--rule);padding-top:12px}
 .recovery>summary{list-style:none;cursor:pointer;display:flex;align-items:center;
   gap:10px;padding:0;background:none;border:0;border-radius:0;box-shadow:none;
-  font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--over)}
+  font-size:var(--f2);letter-spacing:.15em;text-transform:uppercase;color:var(--over)}
 .recovery>summary::-webkit-details-marker{display:none}
-.recovery>summary::after{content:"\203A";margin-left:auto;font-size:15px;
+.recovery>summary::after{content:"\203A";margin-left:auto;font-size:var(--f4);
   transition:transform .18s ease}
 .recovery[open]>summary::after{transform:rotate(90deg)}
 /* Scrub readout: one line under the chart, three facts, monospaced so the
    figures do not jitter as you drag across days. */
 .gsread{display:flex;align-items:baseline;gap:10px;margin-top:7px;
   padding:7px 10px;border-radius:8px;background:var(--track)}
-.gsread .num{font-size:15px}
+.gsread .num{font-size:var(--f4)}
 .gs .gshit{cursor:crosshair;touch-action:none}
 @media (prefers-reduced-motion:reduce){.fold>summary .chev{transition:none}}
-input,select,textarea,button{font-family:inherit;font-size:15px;color:var(--ink)}
+input,select,textarea,button{font-family:inherit;font-size:var(--f4);color:var(--ink)}
 input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--rule);border-radius:8px;background:var(--card)}
-textarea{min-height:100px;font-family:var(--mono);font-size:12.5px;line-height:1.5}
+textarea{min-height:100px;font-family:var(--mono);font-size:var(--f3);line-height:1.5}
 input[type=number],input[type=date]{font-family:var(--mono)}
 label{display:block;margin-bottom:10px}
-.lt{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+.lt{display:block;font-family:var(--mono);font-size:var(--f2);letter-spacing:.12em;text-transform:uppercase;
   color:var(--quiet);margin-bottom:5px}
 .btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:11px 14px;
   border:1px solid var(--accent);border-radius:9px;background:var(--accent);color:var(--onaccent);font-family:var(--mono);
-  font-size:11px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+  font-size:var(--f2);letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
 .btn.ghost{background:transparent;color:var(--ink)}
 .btn.danger{background:transparent;color:var(--over);border-color:var(--over)}
 .btn:active{transform:translateY(1px)}
 .btn2{display:flex;gap:8px}
-.link{border:0;background:none;padding:0;font-size:13px;text-decoration:underline;cursor:pointer;color:var(--ink)}
+.link{border:0;background:none;padding:0;font-size:var(--f3);text-decoration:underline;cursor:pointer;color:var(--ink)}
 :focus-visible{outline:2px solid var(--path);outline-offset:2px}
 .txn,.rec{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--rule);cursor:pointer}
 .txn:last-child,.rec:last-child{border-bottom:0}
 .txn .body,.rec .body{flex:1;min-width:0}
 .name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.meta{font-size:11px;color:var(--quiet);margin-top:2px;font-family:var(--mono);letter-spacing:.02em}
-.amt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:14px;white-space:nowrap}
-.tag{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+.meta{font-size:var(--f2);color:var(--quiet);margin-top:2px;font-family:var(--mono);letter-spacing:.02em}
+.amt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:var(--f4);white-space:nowrap}
+.tag{display:inline-block;font-family:var(--mono);font-size:var(--f1);letter-spacing:.1em;text-transform:uppercase;
   padding:2px 5px;border-radius:4px;background:var(--track);color:var(--quiet);margin-left:5px}
 .tag.xfer{background:var(--tag-x-bg);color:var(--tag-x-fg)}.tag.ref{background:var(--tag-r-bg);color:var(--path)}
 .tag.dup{background:var(--tag-d-bg);color:var(--over)}.tag.one{background:var(--tag-o-bg);color:var(--hold)}
@@ -320,31 +339,31 @@ label{display:block;margin-bottom:10px}
 .tag.pend{background:var(--tag-p-bg);color:var(--tag-p-fg)}
 .filters{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px}
 .chip{flex:none;padding:5px 11px;border:1px solid var(--rule);background:var(--card);border-radius:999px;
-  font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;color:var(--quiet)}
+  font-family:var(--mono);font-size:var(--f2);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;color:var(--quiet)}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--onaccent);border-color:var(--accent)}
-.review .rawd{font-size:11px;color:var(--quiet);margin-top:8px;padding:7px 9px;background:var(--paper);
+.review .rawd{font-size:var(--f2);color:var(--quiet);margin-top:8px;padding:7px 9px;background:var(--paper);
   border-radius:6px;word-break:break-word}
 .catgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px}
 .catbtn{padding:11px 8px;border:1px solid var(--rule);border-radius:8px;background:var(--card);cursor:pointer;
-  font-size:12.5px;font-weight:500;text-align:center;line-height:1.25}
+  font-size:var(--f3);font-weight:500;text-align:center;line-height:1.25}
 .catbtn:active{background:var(--ink);color:var(--onink)}
 /* The two non-category outcomes, set apart from the grid above so they do not
    read as just two more spending buckets. */
 .catgrid.alt{grid-template-columns:repeat(2,1fr);margin-top:7px}
 .catbtn.kind{border-style:dashed;color:var(--quiet)}
-.teach{display:flex;align-items:center;gap:7px;margin:0;font-size:12px;color:var(--quiet)}
+.teach{display:flex;align-items:center;gap:7px;margin:0;font-size:var(--f3);color:var(--quiet)}
 .teach input{width:auto;margin:0}
-.eq{margin-top:7px;font-size:14px}
+.eq{margin-top:7px;font-size:var(--f4)}
 .gs{width:100%;height:176px;display:block;margin:6px 0 2px;overflow:visible}
-.gs .ax{font-family:var(--mono);font-size:8px;fill:var(--quiet);letter-spacing:.06em}
+.gs .ax{font-family:var(--mono);font-size:var(--f1);fill:var(--quiet);letter-spacing:.06em}
 .twocol{display:flex;gap:12px}
 .twocol .col{flex:1;min-width:0}
 .flowwrap{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap}
 .donut{width:128px;height:128px;flex:none}
-.dnum{font-family:var(--mono);font-size:22px;font-weight:600;fill:var(--ink)}
-.dlab{font-family:var(--mono);font-size:8px;letter-spacing:.16em;fill:var(--quiet)}
+.dnum{font-family:var(--mono);font-size:var(--f6);font-weight:600;fill:var(--ink)}
+.dlab{font-family:var(--mono);font-size:var(--f1);letter-spacing:.16em;fill:var(--quiet)}
 .legend2{flex:1;min-width:150px}
-.lrow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
+.lrow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:var(--f3)}
 .lrow .sw{width:10px;height:10px;border-radius:3px;flex:none}
 .lrow .lk{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -353,11 +372,11 @@ label{display:block;margin-bottom:10px}
    glance; that is the whole reason not to use a bar per day. */
 .hgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:12px}
 .hgrid.head{margin-top:14px;gap:4px}
-.hdow{text-align:center;font-family:var(--mono);font-size:8px;letter-spacing:.1em;
+.hdow{text-align:center;font-family:var(--mono);font-size:var(--f1);letter-spacing:.1em;
   color:var(--quiet)}
 .hcell{aspect-ratio:1;border-radius:5px;background:var(--track);display:flex;
   align-items:flex-start;justify-content:flex-end;padding:3px}
-.hcell span{font-family:var(--mono);font-size:8px;color:var(--quiet);line-height:1}
+.hcell span{font-family:var(--mono);font-size:var(--f1);color:var(--quiet);line-height:1}
 .hcell.pad{background:none}
 .hcell.l1{background:#D3E6ED}.hcell.l2{background:#82BCCF}
 .hcell.l3{background:#3E8AA8}.hcell.l4{background:#2F6E8F}
@@ -378,7 +397,7 @@ label{display:block;margin-bottom:10px}
 .dbarw{height:100%;display:flex;align-items:flex-end}
 .dbarw i{display:block;width:100%;background:#82BCCF;border-radius:3px 3px 0 0;min-height:2px}
 .dbarw i.peak{background:#2F6E8F}
-.dlbl{text-align:center;font-family:var(--mono);font-size:9px;color:var(--quiet);margin-top:6px}
+.dlbl{text-align:center;font-family:var(--mono);font-size:var(--f1);color:var(--quiet);margin-top:6px}
 .dlbl.peak{color:var(--ink);font-weight:600}
 
 /* Month-by-month bars. Scrollable rather than squeezed: twelve months on a
@@ -392,10 +411,10 @@ label{display:block;margin-bottom:10px}
 .hbwrap i.miss{background:var(--hold)}
 .hbwrap i.neg{background:var(--over)}
 .hcol.open .hbwrap i{opacity:.55}
-.hlab{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:var(--quiet);
+.hlab{font-family:var(--mono);font-size:var(--f1);letter-spacing:.08em;color:var(--quiet);
   margin-top:6px;text-transform:uppercase}
 .hcol.open .hlab{color:var(--ink)}
-.hpct{font-family:var(--mono);font-size:10px;color:var(--quiet);margin-top:2px}
+.hpct{font-family:var(--mono);font-size:var(--f2);color:var(--quiet);margin-top:2px}
 
 /* Spending-over-time bars. Stacked segments build from the bottom up, so the
    stack is column-reverse: the first category renders nearest the axis and the
@@ -410,7 +429,7 @@ label{display:block;margin-bottom:10px}
   overflow:hidden;min-height:3px}
 .tstack i{display:block;width:100%}
 .tcol.open .tstack{opacity:.55}
-.tlab{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:var(--quiet);
+.tlab{font-family:var(--mono);font-size:var(--f1);letter-spacing:.08em;color:var(--quiet);
   margin-top:6px;text-transform:uppercase}
 .tcol.open .tlab{color:var(--ink)}
 
@@ -419,9 +438,9 @@ label{display:block;margin-bottom:10px}
 .kpigrid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;margin-top:13px;
   background:var(--rule);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
 .kpi{background:var(--card);padding:11px 12px}
-.kv{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:19px;
+.kv{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:var(--f5);
   font-weight:600;letter-spacing:-.02em;line-height:1.1}
-.kl{font-size:10px;color:var(--quiet);margin-top:3px;line-height:1.25}
+.kl{font-size:var(--f2);color:var(--quiet);margin-top:3px;line-height:1.25}
 
 /* Small multiples: one row per category, each scaled to its own maximum. */
 .sm-row{margin-top:14px}
@@ -429,23 +448,23 @@ label{display:block;margin-bottom:10px}
 .sparkbars{display:flex;gap:2px;align-items:flex-end;height:34px;margin-top:6px}
 .sparkbars i{flex:1;background:#3E8AA8;border-radius:1.5px 1.5px 0 0;min-height:2px}
 .sparkbars i.open{opacity:.45}
-.lrow .lv{font-size:13px}
+.lrow .lv{font-size:var(--f3)}
 .miniseg{display:flex;gap:0;border:1px solid var(--rule);border-radius:7px;overflow:hidden}
-.miniseg button{border:0;background:var(--card);padding:4px 9px;font-family:var(--mono);font-size:9px;
+.miniseg button{border:0;background:var(--card);padding:4px 9px;font-family:var(--mono);font-size:var(--f1);
   letter-spacing:.08em;text-transform:uppercase;color:var(--quiet);cursor:pointer}
 .miniseg button[aria-pressed="true"]{background:var(--accent);color:var(--onaccent)}
 /* Full-width variant: two equal halves, so "Discretionary" and
    "Non-discretionary" read as a pair rather than one word crowding the other. */
 .miniseg.wide{margin-top:9px}
-.miniseg.wide button{flex:1;padding:7px 4px;font-size:9.5px;letter-spacing:.05em;
+.miniseg.wide button{flex:1;padding:7px 4px;font-size:var(--f2);letter-spacing:.05em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Four options need to fit a phone, so this variant trades letter-spacing for
    room rather than truncating any of them. */
-#anaMode button{font-size:9px;letter-spacing:.03em;padding:7px 2px}
+#anaMode button{font-size:var(--f1);letter-spacing:.03em;padding:7px 2px}
 .bill{display:flex;align-items:flex-start;gap:11px;padding:12px 0;border-bottom:1px solid var(--rule)}
 .bill:last-of-type{border-bottom:0}
 .bill.declared{cursor:pointer}
-.bill .bday{width:26px;flex:none;text-align:center;font-size:13px;color:var(--quiet);
+.bill .bday{width:26px;flex:none;text-align:center;font-size:var(--f3);color:var(--quiet);
   background:var(--paper);border-radius:6px;padding:3px 0;margin-top:1px}
 .bill .body{flex:1;min-width:0}
 .bill .bamt{text-align:right;flex:none}
@@ -453,8 +472,34 @@ label{display:block;margin-bottom:10px}
 .billbar .bfill{position:absolute;left:0;top:0;bottom:0;background:#5F8090;border-radius:3px;
   transition:width .5s cubic-bezier(.22,.9,.3,1)}
 @media (prefers-reduced-motion:reduce){.billbar .bfill{transition:none}}
-.empty{text-align:center;color:var(--quiet);padding:26px 12px;font-size:14px}
-.hint{font-size:12px;color:var(--quiet);margin:-2px 0 10px}
+.empty{text-align:center;color:var(--quiet);padding:26px 12px;font-size:var(--f4)}
+.hint{font-size:var(--f3);color:var(--quiet);margin:-2px 0 10px}
+/* A hint that is one tap away instead of always on. Deliberately quiet: it is
+   a footnote marker, not a call to action. */
+details.tuck{margin:6px 0 0}
+details.tuck>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;
+  gap:4px;font-size:var(--f2);color:var(--quiet);letter-spacing:.04em;
+  text-transform:uppercase;padding:2px 0;-webkit-tap-highlight-color:transparent}
+details.tuck>summary::-webkit-details-marker{display:none}
+details.tuck>summary::after{content:"";width:5px;height:5px;border-right:1.4px solid currentColor;
+  border-bottom:1.4px solid currentColor;transform:rotate(45deg) translateY(-1px);
+  transition:transform .16s ease}
+details.tuck[open]>summary::after{transform:rotate(-135deg) translateY(-1px)}
+details.tuck>.hint{margin-top:4px}
+@media (prefers-reduced-motion:reduce){details.tuck>summary::after{transition:none}}
+
+/* A resolved card collapses out of the list rather than the list being rebuilt
+   under the thumb. The height is pinned in JS first, because a card animating
+   from `auto` animates from nothing. */
+.review.leaving{overflow:hidden;padding-top:0;padding-bottom:0;margin-bottom:0;
+  opacity:0;transition:height .22s ease,opacity .16s ease,padding .22s ease,margin .22s ease}
+@media (prefers-reduced-motion:reduce){.review.leaving{transition:none}}
+/* When a tap is about to move more than one row, the label saying so is the
+   most important thing on the card. It gets a box. */
+.batchline{margin-top:10px;padding:9px 10px;border-radius:8px;background:var(--paper);
+  border:1px dashed var(--rule);align-items:flex-start;line-height:1.4;display:flex;gap:8px}
+.batchline strong{color:var(--ink);font-variant-numeric:tabular-nums}
+
 /* ---- edit sheet ----
    The Ledger's only interaction used to be a bare tap on the row, which sent
    the transaction to Review — a destructive act on a scrolling list, with the
@@ -478,11 +523,11 @@ label{display:block;margin-bottom:10px}
 @keyframes sheetup{from{transform:translateY(18px)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){.sheet{animation:none}}
 .sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--rule);margin:0 auto 12px}
-.sheet .rawd{font-size:11px;color:var(--quiet);margin:2px 0 12px;padding:7px 9px;
+.sheet .rawd{font-size:var(--f2);color:var(--quiet);margin:2px 0 12px;padding:7px 9px;
   background:var(--paper);border-radius:6px;word-break:break-word;font-family:var(--mono)}
 body.noscroll{overflow:hidden}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--rail) + 16px);z-index:60;
-  background:var(--ink);color:var(--onink);padding:10px 16px;border-radius:9px;font-size:13px;box-shadow:var(--shadow);
+  background:var(--ink);color:var(--onink);padding:10px 16px;border-radius:9px;font-size:var(--f3);box-shadow:var(--shadow);
   max-width:88%;opacity:0;pointer-events:none;transition:opacity .2s}
 .toast.show{opacity:1}
 </style>
@@ -503,6 +548,21 @@ body.noscroll{overflow:hidden}
       <rect x="18.6" y="12" width="4" height="35" fill="currentColor"/>
       <path d="M20.6,14H29.5A7.5,7.5 0 0 1 29.5,29H20.6" fill="none" stroke="currentColor" stroke-width="4"/>
     </g>
+    <!-- Tab icons. Five silhouettes chosen to be told apart at 22px in
+         peripheral vision, which is how a bottom bar is actually read: an arc,
+         a box, two rows, four uprights, a tray. Same stroke weight and cap
+         style as the header icons so the bar reads as one family. The P mark
+         used to be the only glyph in the bar — it said WHERE you are, which is
+         the one thing the ink colour and the label already say, while leaving
+         every tab looking identical to every other. -->
+    <g id="ic-dash"><path d="M4.2 17.4a8.6 8.6 0 0 1 15.6 0" /><path d="M12 17.4 16.1 10.6"/></g>
+    <g id="ic-saving"><rect x="3.6" y="4.6" width="16.8" height="14.8" rx="3.2"/>
+      <circle cx="12" cy="12" r="3.5"/><path d="M12 4.6v2.9M12 16.5v2.9"/></g>
+    <g id="ic-plan"><path d="M3.4 8.4h17.2M3.4 15.6h17.2"/>
+      <circle cx="9.1" cy="8.4" r="2.5"/><circle cx="15.1" cy="15.6" r="2.5"/></g>
+    <g id="ic-analysis"><path d="M4.4 19.4V12M9.6 19.4V6.2M14.8 19.4v-9.1M20 19.4v-5"/></g>
+    <g id="ic-review"><path d="M3.6 13.4h4.2l1.5 2.6h5.4l1.5-2.6h4.2"/>
+      <path d="M3.6 13.4 6.1 5.6h11.8l2.5 7.8v3.4a2.6 2.6 0 0 1-2.6 2.6H6.2a2.6 2.6 0 0 1-2.6-2.6Z"/></g>
   </defs>
 </svg>
 <div id="app">
@@ -658,16 +718,10 @@ body.noscroll{overflow:hidden}
     <div id="reviewList"></div>
     <!-- Import lives on this tab now, not in Settings. Bringing data in is not
          configuration you set once; it is the thing you come here to do. -->
-    <div class="card">
-      <div class="eyebrow">Importing into</div>
-      <div class="card" id="previewCard" hidden style="margin:0 0 12px;padding:14px"></div>
-      <div class="filters" id="acctPick" style="padding-top:8px"></div>
-      <p class="hint">CSV, OFX, QFX or QIF. The column layout is read from the file, so
-        any bank's export works without special handling. What the file can't always tell
-        us is the sign convention &mdash; Chase writes purchases negative, Amex writes them
-        positive &mdash; so that's set per account below.</p>
-      <input type="file" id="csvFile" accept=".csv,.ofx,.qfx,.qif,.txt,text/csv,text/plain">
-    </div>
+    <!-- Paste leads. Getting a CSV off a bank site and onto a phone is the
+         hardest thing this app asks of anyone; a screenshot and a long-press is
+         the path the device actually makes easy. File import stays right under
+         it for the laptop case, where it is the better tool. -->
     <div class="card">
       <div class="eyebrow">Paste</div>
       <h2 style="margin:4px 0 6px">From a screen or a screenshot</h2>
@@ -680,6 +734,16 @@ body.noscroll{overflow:hidden}
         <span>These are pending charges &mdash; replace them when the real ones post</span>
       </label>
       <button class="btn" id="doPaste" style="margin-top:10px">Add lines</button>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Importing into</div>
+      <div class="card" id="previewCard" hidden style="margin:0 0 12px;padding:14px"></div>
+      <div class="filters" id="acctPick" style="padding-top:8px"></div>
+      <p class="hint">For a laptop, or a real export. CSV, OFX, QFX or QIF — the column
+        layout is read from the file, so any bank's export works without special handling. What the file can't always tell
+        us is the sign convention &mdash; Chase writes purchases negative, Amex writes them
+        positive &mdash; so that's set per account below.</p>
+      <input type="file" id="csvFile" accept=".csv,.ofx,.qfx,.qif,.txt,text/csv,text/plain">
     </div>
     <div class="card">
       <div class="eyebrow">Single entry</div>
@@ -816,7 +880,8 @@ body.noscroll{overflow:hidden}
         <label style="margin-top:12px"><span class="lt">Open on</span>
           <select id="pLaunch">
             <option value="dash">Spending</option><option value="saving">Saving</option>
-            <option value="plan">Planning</option><option value="review">Data</option>
+            <option value="plan">Planning</option><option value="review">Review</option>
+            <option value="analysis">Analysis</option>
             <option value="ledger">Ledger</option><option value="bills">Bills</option></select></label>
         <label style="margin-top:12px"><span class="lt">Card member for unlabelled imports</span>
           <input type="text" id="pDefPerson" placeholder="Your name"></label>
@@ -926,22 +991,28 @@ body.noscroll{overflow:hidden}
 </div>
 <nav>
   <button data-v="dash" class="main" aria-current="true">
-    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
-      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>
+    <span class="tabmark" aria-hidden="true">
+      <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-dash"/></svg>
+      <!-- The verdict lived on this tab's dash: green on plan, amber tight,
+           red over, readable from any screen. Real icons take the dash's slot,
+           so the reading moves to a pip on the corner of the glyph. It is a
+           status light, not the icon's colour — the icon still has to say
+           "Spending" first. -->
+      <span class="pip" id="verdictPip"></span></span>
     <span class="mlbl" id="navMain">Spending</span>
   </button>
   <button data-v="saving">
-    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
-      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Saving</button>
+    <span class="tabmark" aria-hidden="true">
+      <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-saving"/></svg></span>Saving</button>
   <button data-v="plan">
-    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
-      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Planning</button>
+    <span class="tabmark" aria-hidden="true">
+      <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-plan"/></svg></span>Planning</button>
   <button data-v="analysis">
-    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
-      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Analysis</button>
+    <span class="tabmark" aria-hidden="true">
+      <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-analysis"/></svg></span>Analysis</button>
   <button data-v="review">
-    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
-      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Data<span class="badge" id="reviewBadge" style="display:none">0</span></button>
+    <span class="tabmark" aria-hidden="true">
+      <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-review"/></svg></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
 </nav>
 <div class="sheetwrap" id="editSheet" hidden>
   <div class="sheetbg" data-close="1"></div>
@@ -3102,6 +3173,120 @@ function money2(n){
 }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 let toastT;
+/* ---------- offline ----------
+   Everything the app knows lives in this browser. A home-screen icon that
+   shows an error page with no signal is not an app anyone trusts with their
+   money, and this file has no dependencies at all — so offline is purely a
+   caching question, and answerable.
+
+   Registration is deliberately unguarded by anything: if it throws, if the
+   browser has no support, if the file 404s because only index.html got pasted,
+   the app carries on exactly as before. A service worker is an improvement to
+   this app, never a requirement of it. */
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("sw.js").then(reg=>{
+      /* A new version lands on the next launch, not mid-session. Saying so is
+         better than swapping the app out from under someone who is halfway
+         through a review queue. */
+      reg.addEventListener("updatefound",()=>{
+        const w=reg.installing;
+        if(!w) return;
+        w.addEventListener("statechange",()=>{
+          if(w.state==="installed" && navigator.serviceWorker.controller)
+            toast("Update ready \u2014 opens next launch");
+        });
+      });
+    }).catch(()=>{});
+  });
+}
+
+/* ---------- motion ----------
+   The app had none. Not a stylistic gap: the hero is a single number that
+   changes when you file something, and a number that teleports gives you no
+   idea whether it moved a little or a lot. Counting it makes the size of the
+   change legible, which is the actual information.
+
+   Everything here is decoration over a DOM that is already correct — if any of
+   it is skipped, the right value is on screen either way. That is the rule for
+   the whole file: never animate toward the truth, animate having arrived. */
+const REDUCED=()=>window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const lastCount=new Map();
+
+/* Roll a figure from what it last read to what it reads now. Keyed by id, so
+   an element that re-renders unchanged does not re-animate — filing a charge
+   in Groceries should not make the Saving figure twitch for no reason. */
+function countUp(el){
+  const to=Number(el.dataset.count);
+  const key=el.dataset.countKey||"";
+  const from=lastCount.has(key)?lastCount.get(key):null;
+  lastCount.set(key,to);
+  if(!isFinite(to)) return;
+  if(from===null||from===to||REDUCED()) return;      /* first paint or no change: leave it */
+  const t0=performance.now(), dur=Math.min(560,340+Math.abs(to-from)/12);
+  const ease=x=>1-Math.pow(1-x,3);
+  const fmt=el.dataset.countFmt==="abs" ? (v)=>money(Math.abs(v)) : money;
+  el.textContent=fmt(from);
+  const step=now=>{
+    const k=Math.min(1,(now-t0)/dur);
+    el.textContent=fmt(from+(to-from)*ease(k));
+    if(k<1) requestAnimationFrame(step);
+    else el.textContent=fmt(to);
+  };
+  requestAnimationFrame(step);
+}
+function runCounts(root){
+  (root||document).querySelectorAll("[data-count]").forEach(countUp);
+}
+
+/* The trajectory line draws itself the first time you land on Spending in a
+   session. Once — a chart that redraws every time you file a charge is a
+   distraction, and you are reading it, not watching it. */
+let drewLine=false;
+function drawLine(){
+  if(drewLine||REDUCED()) return;
+  const path=document.querySelector("#trajCard .gs path.actual");
+  if(!path||!path.getTotalLength) return;
+  const len=path.getTotalLength();
+  if(!len) return;
+  drewLine=true;
+  path.style.strokeDasharray=len+" "+len;
+  path.style.strokeDashoffset=len;
+  requestAnimationFrame(()=>{
+    path.style.transition="stroke-dashoffset .62s cubic-bezier(.3,.8,.35,1)";
+    path.style.strokeDashoffset="0";
+  });
+  setTimeout(()=>{ path.style.strokeDasharray=""; path.style.transition=""; },900);
+}
+
+/* ---------- hint density ----------
+   Forty-nine hint paragraphs, median twenty-five words, several over fifty.
+   Every one of them is well written and most of them are right, and together
+   they are the reason every screen reads like documentation with a number on
+   it. A card that needs twenty-five words of explanation to be understood is
+   a card doing too much — but the explanation is still worth having the first
+   time, or when something surprises you. So it stays, one tap away.
+
+   Done as a pass over rendered output rather than by rewriting forty-nine
+   strings, so it covers the hints built at runtime too and stays true as more
+   are added. Short hints are left alone: under the threshold they are labels,
+   not essays, and hiding a nine-word clarification behind a disclosure costs
+   more than it saves. */
+const TUCK_WORDS=16;
+function tuckHints(root){
+  (root||document).querySelectorAll("p.hint").forEach(p=>{
+    if(p.dataset.tucked) return;
+    if(p.closest("details")) return;                  /* already behind a disclosure */
+    if(p.textContent.trim().split(/\s+/).length<=TUCK_WORDS){ p.dataset.tucked="short"; return; }
+    const d=document.createElement("details");
+    d.className="tuck";
+    d.innerHTML='<summary>Why</summary>';
+    p.parentNode.insertBefore(d,p);
+    d.appendChild(p);
+    p.dataset.tucked="1";
+  });
+}
+
 function toast(m){
   const e=document.getElementById("toast");
   e.textContent=m; e.classList.add("show");
@@ -3368,7 +3553,8 @@ function renderTrajectory(){
     /* The toggle has to move the hero, not just the chart. In Left it read
        "spent so far" while the segment said LEFT and the line descended — the
        one figure you came for was the only one the mode didn't change. */
-    + '<div class="display '+(headline<0?"overc":tone)+'">'
+    + '<div class="display '+(headline<0?"overc":tone)+'" data-count="'+headline+'"'
+    +   ' data-count-key="hero" data-count-fmt="abs">'
     +   money(Math.abs(headline))+'</div>'
     + '<div class="sm muted">'
     +   (rem
@@ -3404,7 +3590,7 @@ function renderTrajectory(){
     +   '" stroke="var(--ink)" stroke-width="1.25" stroke-dasharray="4 3" opacity=".55"/>'
     + (area?'<path d="'+area+'" fill="'+col+'" opacity=".10"/>':'')
     + (proj?'<path d="'+proj+'" fill="none" stroke="'+col+'" stroke-width="1.5" stroke-dasharray="3 3" opacity=".55"/>':'')
-    + (actual?'<path d="'+actual+'" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>':'')
+    + (actual?'<path class="actual" d="'+actual+'" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>':'')
     + (g.today>0?'<circle cx="'+X(g.today).toFixed(1)+'" cy="'+Y(val(g.run)).toFixed(1)
         +'" r="3.5" fill="'+col+'" stroke="var(--card)" stroke-width="1.5"/>':'')
     + '<text x="'+PL+'" y="'+(H-7)+'" class="ax">1</text>'
@@ -3437,7 +3623,7 @@ function renderTrajectory(){
        ? '<div class="warn"><strong class="num">'+money(g.heldAmt)+'</strong> is held for review and '
          + 'is not on this slope'
          + (Math.abs(g.heldAmt)>Math.abs(g.delta)?' \u2014 enough to change which side of pace you are on':'')
-         + '. <button class="link" data-goto="review">Open Data</button></div>'
+         + '. <button class="link" data-goto="review">Open Review</button></div>'
        : '')
     /* Only in the state that has actually failed. "Spend less" is not an
        instruction, so the plan names the daily number AND the categories the
@@ -3617,27 +3803,34 @@ function renderOutlook(){
 function setupSteps(){
   const p=pro();
   const cash=accounts().filter(a=>a.kind==="cash").length;
+  /* Order matters more than it looks. This used to end on "import your first
+     statement" — getting a CSV off a bank site and onto an iPhone, which is
+     the hardest single thing the app asks of anyone, sitting at step five
+     where the person has already spent ten minutes and seen no number. It now
+     opens with the phone-native path instead: screenshot the bank app, paste,
+     done in about ninety seconds, and the app has something to say. Everything
+     else is easier and can follow. */
   return [
-    { key:"name",   done:!!(p.name||"").trim(),
-      label:"Tell it your name",
-      why:"Attributes your charges on a shared card",
-      pane:"profile" },
+    { key:"import", done:S.txns.length>0,
+      label:"Add your first charges",
+      why:"Screenshot your bank app and paste it \u2014 about a minute. File import is there too",
+      view:"review", focus:"pasteBox" },
     { key:"pillars",done:targetTotal()>0,
       label:"Set your spending limits",
       why:"The limits this month stands on",
       view:"plan" },
+    { key:"account",done:accounts().some(a=>S.txns.some(t=>t.account===a.id)) || accounts().length>ACCOUNT_SEED.length,
+      label:"Add your card or bank",
+      why:"Only for file imports \u2014 it says which way that bank signs purchases",
+      pane:"accounts" },
+    { key:"name",   done:!!(p.name||"").trim(),
+      label:"Tell it your name",
+      why:"Attributes your charges on a shared card",
+      pane:"profile" },
     { key:"income", done:Number(S.settings.income||0)>0,
       label:"Add your monthly take-home",
       why:"Optional \u2014 powers save rate and the cash outlook",
-      pane:"profile", optional:true },
-    { key:"account",done:accounts().some(a=>S.txns.some(t=>t.account===a.id)) || accounts().length>ACCOUNT_SEED.length,
-      label:"Add your card or bank",
-      why:"Tell it which way that bank signs purchases",
-      pane:"accounts" },
-    { key:"import", done:S.txns.length>0,
-      label:"Import your first statement",
-      why:"CSV, OFX, QFX or QIF \u2014 you see it before it lands",
-      view:"review" }
+      pane:"profile", optional:true }
   ];
 }
 
@@ -3675,7 +3868,18 @@ function renderSetup(){
     const key=b.closest("[data-step]").dataset.step;
     const step=setupSteps().find(x=>x.key===key);
     /* Some steps are settings panes, some are now tabs in their own right. */
-    if(step.view){ go(step.view); openCeilings(); }
+    if(step.view){
+      go(step.view);
+      if(step.key==="pillars") openCeilings();
+      /* Landing on the tab is not the same as landing on the thing. */
+      if(step.focus){
+        const f=document.getElementById(step.focus);
+        if(f) requestAnimationFrame(()=>{
+          f.scrollIntoView({block:"center",behavior:"smooth"});
+          f.focus({preventScroll:true});
+        });
+      }
+    }
     else { go("settings"); setGo(step.pane); }
   });
 }
@@ -3951,6 +4155,58 @@ function renderRecurring(){
   });
 }
 
+/* resolve() has always swept: tick "Remember this for X" and every other held
+   row from X is filed to the same category in the same tap. Good behaviour,
+   invisible — the label promised a rule for NEXT time and said nothing about
+   the five charges sitting behind this one. Silent bulk action is the one
+   thing this app is not supposed to do. batchMates() exists so the label can
+   name what the tap is actually about to do.
+
+   Only new-merchant sweeps, and that is correct rather than incidental. An
+   ambiguous merchant is ambiguous precisely because its charges differ — that
+   is why it is on the list — so Target twice is two questions. A duplicate or
+   an outlier is a question about one specific row: answering "yes, this $840
+   charge is real" says nothing about the $12 one behind it. */
+function batchMates(t){
+  if(!t || t.reason!=="new-merchant") return [];
+  return S.txns.filter(x=>x.pending && x.id!==t.id && x.reason==="new-merchant"
+    && x.merchant===t.merchant);
+}
+
+/* Take one card out without rebuilding the list. The queue is the one screen
+   where scroll position is the user's place in a task rather than a viewport
+   offset: rebuilding innerHTML under a thumb that is mid-tap shortens the list,
+   reflows the page, and moves the next card out from under the finger. That is
+   how a forty-row backfill gets abandoned halfway. */
+function dropReviewCard(id){
+  const card=document.querySelector('.review[data-id="'+id+'"]');
+  if(!card){ renderReview(); return; }
+  const done=()=>{
+    card.remove();
+    if(!S.txns.some(t=>t.pending)) renderReview();   /* draw the empty state */
+    else refreshQueueHeader();
+  };
+  if(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches){ done(); return; }
+  card.style.height=card.offsetHeight+"px";
+  card.classList.add("leaving");
+  requestAnimationFrame(()=>{ card.style.height="0px"; });
+  setTimeout(done,240);
+}
+
+/* The two figures above the queue are the only things outside a card that
+   change when one is resolved. */
+function refreshQueueHeader(){
+  const held=S.txns.filter(t=>t.pending);
+  const badge=document.getElementById("reviewBadge");
+  badge.textContent=held.length; badge.style.display=held.length?"":"none";
+  const tot=document.getElementById("heldTotal");
+  if(tot) tot.textContent=money(held.filter(t=>t.type!=="transfer")
+    .reduce((a,t)=>a+Math.abs(t.amount),0));
+  const dupes=held.filter(t=>t.reason==="duplicate"||t.reason==="near-duplicate");
+  const db=document.getElementById("dropDupes");
+  if(db){ db.hidden=dupes.length<2; db.textContent="Discard "+dupes.length+" duplicates"; }
+}
+
 function renderReview(){
   renderBillSort();
   renderRecurring();
@@ -3962,7 +4218,7 @@ function renderReview(){
     el.innerHTML='<div class="card"><div class="empty">'
       + (billsToSort().length
          ? "Nothing held. Anything on this tab is optional \u2014 every figure is already correct."
-         : "Nothing waiting. Every transaction is filed.")+'</div></div>';
+         : "Reviewed to zero. Every transaction is filed.")+'</div></div>';
     return;
   }
   const total=held.filter(t=>t.type!=="transfer").reduce((a,t)=>a+Math.abs(t.amount),0);
@@ -3970,12 +4226,13 @@ function renderReview(){
   const lb=S.lastBatch;
   el.innerHTML='<div class="card tight"><div class="spread">'
     + '<span class="eyebrow">Held out of every total</span>'
-    + '<span class="num mid">'+money(total)+'</span></div>'
+    + '<span class="num mid" id="heldTotal">'+money(total)+'</span></div>'
     /* Six overlapping statements produce a wall of duplicates. One tap each is
        how a backfill gets abandoned halfway through. */
     + (dupes.length>1
         ? '<button class="btn ghost" id="dropDupes" style="margin-top:10px">Discard '
-          + dupes.length+' duplicates</button>' : '')
+          + dupes.length+' duplicates</button>'
+        : '<button class="btn ghost" id="dropDupes" style="margin-top:10px" hidden></button>')
     + (lb && lb.count
         ? '<button class="btn ghost" id="undoBatchBtn" style="margin-top:8px">Undo last import ('
           + lb.count+' rows)</button>' : '')
@@ -4001,6 +4258,7 @@ function renderReview(){
           +   '<button class="btn ghost" style="flex:1" data-billdup="keep">Different \u2014 keep both</button>'
           + '</div></div>';
       }
+      const mates=batchMates(t);
       return '<div class="card review" data-id="'+t.id+'">'
         + '<div class="spread"><span class="eyebrow overc">'+esc(REASON_TEXT[t.reason]||"Needs a decision")+'</span></div>'
         + '<div class="spread" style="margin:6px 0 2px"><strong>'+esc(t.merchant)+'</strong>'
@@ -4018,13 +4276,24 @@ function renderReview(){
         +   '<button class="catbtn kind" data-kind="cashout">Cash out</button>'
         +   '<button class="catbtn kind" data-kind="cashin">Cash in</button>'
         + '</div>'
-        + '<div class="spread" style="margin-top:10px">'
-        +   '<label class="teach"><input type="checkbox" class="teachbox"'
-        +     (t.reason==="ambiguous-merchant"?"":" checked")+'> '
-        +     '<span>'+(t.reason==="ambiguous-merchant"
-                ? "Stop asking about "+esc(t.merchant)
-                : "Remember this for "+esc(t.merchant))+'</span></label>'
-        +   '<button class="link overc" data-drop="1">Discard</button></div>'
+        + (mates.length
+           /* Six charges, one decision. The consequence goes in the label, not
+              in a second checkbox that could contradict the first. */
+           ? '<label class="teach batchline"><input type="checkbox" class="teachbox" checked> '
+             + '<span>Remember '+esc(t.merchant)+' \u2014 and file the <strong>'
+             + mates.length+'</strong> other held charge'+(mates.length>1?'s':'')
+             + ' from it here too \u00b7 '
+             + money(mates.reduce((a,x)=>a+Math.abs(x.amount),0))+'</span></label>'
+             + '<div class="spread" style="margin-top:8px">'
+             + '<span class="lt">Untick to file only this one</span>'
+             + '<button class="link overc" data-drop="1">Discard</button></div>'
+           : '<div class="spread" style="margin-top:10px">'
+             + '<label class="teach"><input type="checkbox" class="teachbox"'
+             + (t.reason==="ambiguous-merchant"?"":" checked")+'> '
+             + '<span>'+(t.reason==="ambiguous-merchant"
+                 ? "Stop asking about "+esc(t.merchant)
+                 : "Remember this for "+esc(t.merchant))+'</span></label>'
+             + '<button class="link overc" data-drop="1">Discard</button></div>')
         + '</div>';
     }).join("");
 
@@ -4041,7 +4310,22 @@ function renderReview(){
   };
   el.querySelectorAll(".review").forEach(card=>{
     const id=card.dataset.id;
+    /* One tap can resolve more than one row, because resolve() sweeps the
+       merchant. Rather than predicting which, snapshot what was held, act, and
+       retire whatever stopped being held. That stays correct no matter which
+       mechanism did the resolving, now or later. */
+    const held=()=>new Set(S.txns.filter(x=>x.pending).map(x=>x.id));
+    const settle=(before,one,many)=>{
+      save();
+      const after=held();
+      const gone=[...before].filter(x=>!after.has(x));
+      gone.forEach(dropReviewCard);
+      refreshQueueHeader();          /* badge and total move now, not after the animation */
+      renderRest();
+      toast(gone.length>1 ? many(gone.length) : one);
+    };
     card.querySelectorAll(".catbtn").forEach(b=>b.onclick=()=>{
+      const before=held();
       const teach=card.querySelector(".teachbox").checked;
       const t=S.txns.find(x=>x.id===id);
       if(teach && t && t.reason==="ambiguous-merchant"){
@@ -4049,22 +4333,27 @@ function renderReview(){
           !t.merchant.toLowerCase().includes(a.toLowerCase()));
       }
       resolve(id,b.dataset.cat,teach);
-      save(); renderAll(); toast("Filed to "+b.dataset.cat);
+      settle(before, "Filed to "+b.dataset.cat,
+             n=>n+" charges filed to "+b.dataset.cat);
     });
     card.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>{
+      const before=held();
       const teach=card.querySelector(".teachbox").checked;
       resolveKind(id,b.dataset.kind,teach);
-      save(); renderAll();
-      toast(b.dataset.kind==="cashout" ? "Filed as cash out" : "Added to take-home");
+      const one=b.dataset.kind==="cashout" ? "Filed as cash out" : "Added to take-home";
+      settle(before, one, n=>n+" charges filed as "
+             +(b.dataset.kind==="cashout"?"cash out":"take-home"));
     });
     const dropBtn=card.querySelector("[data-drop]");
     if(dropBtn) dropBtn.onclick=()=>{
+      /* Discard never batches. Deleting six rows on one tap, from a checkbox
+         whose label talks about filing, is not a thing the queue gets to do. */
       S.txns=S.txns.filter(x=>x.id!==id);
-      save(); renderAll(); toast("Discarded");
+      save(); dropReviewCard(id); refreshQueueHeader(); renderRest(); toast("Discarded");
     };
     card.querySelectorAll("[data-billdup]").forEach(b=>b.onclick=()=>{
       resolveBillDuplicate(id, b.dataset.billdup);
-      save(); renderAll();
+      save(); dropReviewCard(id); refreshQueueHeader(); renderRest();
       toast(b.dataset.billdup==="replace" ? "Replaced with the imported charge" : "Kept both");
     });
   });
@@ -4256,6 +4545,7 @@ function openEditor(id){
     closeEditor(); save(); renderAll(); toast("Deleted");
   };
 
+  tuckHints(b);
   wrap.hidden=false;
   document.body.classList.add("noscroll");
   b.querySelector("#eMerch").focus({preventScroll:true});
@@ -5733,9 +6023,19 @@ function renderHeader(){
   btn.className="main "+v.state;
   btn.setAttribute("aria-label", mainTabName()+" \u2014 "+v.word);
 }
+/* Everything EXCEPT the review list. Resolving a card has to update the rest
+   of the app — the hero moves, the badge moves, the ledger gains a row — but
+   rebuilding the queue's innerHTML underneath a thumb that is mid-tap is how a
+   forty-row backfill gets abandoned: the list shortens, the page reflows, and
+   the next card is no longer where you were looking. */
+function renderRest(){ renderHeader(); renderDash(); renderLedger();
+  renderCommitted(); renderKPIs(); renderTrend(); renderSmallMultiples();
+  renderHistory(); renderCreep(); renderProject(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData();
+  tuckHints(); runCounts(); }
 function renderAll(){ renderHeader(); renderDash(); renderReview(); renderLedger();
   renderCommitted(); renderKPIs(); renderTrend(); renderSmallMultiples();
-  renderHistory(); renderCreep(); renderProject(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData(); }
+  renderHistory(); renderCreep(); renderProject(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData();
+  tuckHints(); runCounts(); }
 function go(v){
   /* "bills" isn't a section of its own \u2014 it's the Bills half of the scope
      toggle on Spending. Anything that used to link straight to the old Bills
@@ -5747,6 +6047,7 @@ function go(v){
   document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-current",x.dataset.v===v));
   document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));
   window.scrollTo({top:0,behavior:"instant"});
+  if(v==="dash") drawLine();
 }
 
 let saveT;
