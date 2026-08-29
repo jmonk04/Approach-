@@ -144,6 +144,9 @@ nav button{flex:1;border:0;background:none;color:var(--quiet);font-size:9.5px;fo
    dash; the open one shows the P. The mark is the app saying where you are,
    so it is always the accent colour and never carries a reading of any kind. */
 nav button .tabmark{height:16px;display:flex;align-items:center;justify-content:center;flex:none}
+/* Five tabs, so the labels get less room than four had. */
+nav button{font-size:8.5px;letter-spacing:.05em}
+nav button.main .mlbl{font-size:8.5px;letter-spacing:.05em}
 nav button .dot{width:16px;height:3px;border-radius:2px;background:currentColor;opacity:.35}
 nav button .glyph{display:none;height:16px;width:auto;color:var(--accent)}
 nav button[aria-current="true"]{color:var(--ink)}
@@ -365,6 +368,39 @@ label{display:block;margin-bottom:10px}
   margin-top:6px;text-transform:uppercase}
 .hcol.open .hlab{color:var(--ink)}
 .hpct{font-family:var(--mono);font-size:10px;color:var(--quiet);margin-top:2px}
+
+/* Spending-over-time bars. Stacked segments build from the bottom up, so the
+   stack is column-reverse: the first category renders nearest the axis and the
+   legend order matches what you see. */
+.trendchips{margin-top:12px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+.trendchips .chip{flex:none}
+.trendwrap{display:flex;gap:6px;align-items:flex-end;margin-top:14px;
+  overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.tcol{flex:0 0 40px;display:flex;flex-direction:column;align-items:center}
+.tbw{height:130px;width:100%;display:flex;align-items:flex-end}
+.tstack{width:100%;display:flex;flex-direction:column-reverse;border-radius:3px 3px 0 0;
+  overflow:hidden;min-height:3px}
+.tstack i{display:block;width:100%}
+.tcol.open .tstack{opacity:.55}
+.tlab{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:var(--quiet);
+  margin-top:6px;text-transform:uppercase}
+.tcol.open .tlab{color:var(--ink)}
+
+/* KPI grid. Two columns on a phone; three would put six-figure money at a size
+   nobody can read. */
+.kpigrid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;margin-top:13px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.kpi{background:var(--card);padding:11px 12px}
+.kv{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:19px;
+  font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.kl{font-size:10px;color:var(--quiet);margin-top:3px;line-height:1.25}
+
+/* Small multiples: one row per category, each scaled to its own maximum. */
+.sm-row{margin-top:14px}
+.sm-row .lk{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sparkbars{display:flex;gap:2px;align-items:flex-end;height:34px;margin-top:6px}
+.sparkbars i{flex:1;background:#3E8AA8;border-radius:1.5px 1.5px 0 0;min-height:2px}
+.sparkbars i.open{opacity:.45}
 .lrow .lv{font-size:13px}
 .miniseg{display:flex;gap:0;border:1px solid var(--rule);border-radius:7px;overflow:hidden}
 .miniseg button{border:0;background:var(--card);padding:4px 9px;font-family:var(--mono);font-size:9px;
@@ -521,7 +557,6 @@ label{display:block;margin-bottom:10px}
   <section id="v-saving">
     <div class="card verdict" id="saveCard"></div>
     <div class="card" id="outlookCard"></div>
-    <div class="card" id="histCard"></div>
     <!-- Moved off Planning. Every other card there is scoped to the month in
          the header; this one never reads the cursor, because "when do I reach
          $X" is not a question about a month. Sitting between two month-aware
@@ -542,7 +577,18 @@ label{display:block;margin-bottom:10px}
         <input type="number" id="projGoal" inputmode="decimal" step="100"></label>
       <div id="projOut"></div>
     </div>
-    <div class="band"><span class="eyebrow">Analysis</span></div>
+  </section>
+
+  <!-- Everything that reads across months lives here. On Saving these cards
+       sat under a hero about the current month, which framed a trend as a
+       footnote to today. This tab opens with the numbers first, the way a
+       board pack does. -->
+  <section id="v-analysis">
+    <div class="card" id="kpiCard"></div>
+    <div class="card" id="trendCard"></div>
+    <div class="card" id="smallMultCard"></div>
+    <div class="card" id="histCard"></div>
+    <div class="card" id="creepCard"></div>
     <div class="card">
       <div class="miniseg wide" id="anaMode" role="group" aria-label="Analysis view">
         <button data-a="heat" aria-pressed="true">Calendar</button>
@@ -835,6 +881,9 @@ label{display:block;margin-bottom:10px}
   <button data-v="plan">
     <span class="tabmark" aria-hidden="true"><span class="dot"></span>
       <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Planning</button>
+  <button data-v="analysis">
+    <span class="tabmark" aria-hidden="true"><span class="dot"></span>
+      <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Analysis</button>
   <button data-v="review">
     <span class="tabmark" aria-hidden="true"><span class="dot"></span>
       <svg class="glyph" viewBox="6.4 9.6 49.4 44.3"><use href="#pathmark"/></svg></span>Data<span class="badge" id="reviewBadge" style="display:none">0</span></button>
@@ -1144,9 +1193,25 @@ function assess(t, pool){
   }
 
   if (t.type==="spend"){
+    /* A bill you declared by hand, then the bank's own copy of it arriving on
+       import. Matching on CATEGORY alone missed the common case: the import
+       calls it "Payment To Sallie Mae Bank" where you typed "Sallie Mae", so
+       it is an unrecognised merchant, lands in the catch-all category, and the
+       categories no longer agree. It was held as new-merchant, filed by hand,
+       and quietly counted twice.
+
+       Match on the merchant name instead, and treat the category as one more
+       way to match rather than a requirement. Names are compared after
+       stripping the payment verbs banks prepend, and either containing the
+       other counts — "Sallie Mae" inside "Payment To Sallie Mae Bank". */
+    const near=(a,b)=>{
+      a=billNameKey(a); b=billNameKey(b);
+      return !!a && !!b && (a===b || a.includes(b) || b.includes(a));
+    };
     const billTxn=pool.find(x=>x.id!==t.id && x.billId && !x.pending
-      && x.category===t.category && monthOf(x)===monthOf(t)
-      && Math.abs(x.amount-t.amount)<=Math.max(x.amount,t.amount,1)*0.15);
+      && monthOf(x)===monthOf(t)
+      && Math.abs(x.amount-t.amount)<=Math.max(x.amount,t.amount,1)*0.15
+      && (near(x.merchant,t.merchant) || x.category===t.category));
     if (billTxn) return { ok:false, reason:"bill-duplicate", billTxn:billTxn.id };
   }
 
@@ -1758,6 +1823,19 @@ function postBill(bill, ym){
     rawDesc: bill.name, amount: Math.abs(Number(bill.amount)||0), category: bill.category,
     account: importAccount, source: "bill", billId: bill.id
   }]);
+}
+
+/* Merchant names for duplicate matching. Banks prepend a payment verb and
+   append an entity suffix to the same biller, so "Payment to Sallie Mae Bank"
+   and "Sallie Mae" have to reduce to the same thing before they can be
+   compared. Deliberately narrow: only the wrappers, never words that could
+   distinguish two real merchants. */
+function billNameKey(name){
+  return String(name||"").toLowerCase()
+    .replace(/[^a-z0-9 ]+/g," ")
+    .replace(/\b(payment|payments|pmt|autopay|auto pay|bill pay|billpay|ach|eft|to|from|the)\b/g," ")
+    .replace(/\b(bank|na|inc|llc|corp|co|company|services|svcs|com)\b/g," ")
+    .replace(/\s+/g," ").trim();
 }
 
 function splitKey(name){ return String(name||"").toLowerCase().trim(); }
@@ -3702,9 +3780,10 @@ function renderReview(){
     + '</div>'
     + held.map(t=>{
       const cats=[...TC(),...FC()];
-      /* Not "which category" \u2014 that part is already settled, it matched a
-         bill by category and amount. The actual question is whether this IS
-         that bill arriving from the bank, or a second real charge beside it. */
+      /* Not "which category" \u2014 the match is on merchant name (or category)
+         plus amount, so the identity is already settled. The actual question is
+         whether this IS that bill arriving from the bank, or a second real
+         charge beside it. */
       if(t.reason==="bill-duplicate"){
         const bt=S.txns.find(x=>x.id===t.billMatch);
         return '<div class="card review" data-id="'+t.id+'">'
@@ -3781,7 +3860,32 @@ function renderReview(){
 function resolveBillDuplicate(id, mode){
   const t=S.txns.find(x=>x.id===id);
   if(!t) return;
-  if(mode==="replace") S.txns=S.txns.filter(x=>x.id!==t.billMatch);
+  if(mode==="replace"){
+    const bt=S.txns.find(x=>x.id===t.billMatch);
+    /* The import wins on amount — it is what actually cleared — but the
+       placeholder knew things the bank line does not. Without this the row
+       kept the catch-all category it landed in as an unknown merchant, so
+       confirming "same bill" quietly moved a loan payment into discretionary
+       spending. Carry the category and the schedule link across, and teach the
+       merchant rule so next month's import files itself. */
+    if(bt){
+      if(bt.category) t.category=bt.category;
+      if(bt.billId) t.billId=bt.billId;
+      if(t.merchant) S.settings.rules[ruleKey(t.merchant)]=t.category;
+      S.txns=S.txns.filter(x=>x.id!==bt.id);
+    }
+  }
+  if(mode==="keep"){
+    /* "Different" means this is a second, real charge — so it still needs the
+       category question that the duplicate prompt replaced. Releasing it here
+       filed an unrecognised merchant straight into the catch-all with no
+       prompt, which is worse than the double-count this feature exists to
+       stop. Send it back to the queue it would have been in. */
+    const a=autoCategory(t);
+    t.billMatch=null;
+    if(!a.cat){ t.pending=true; t.reason="new-merchant"; return; }
+    t.category=a.cat;
+  }
   t.pending=false; t.reason=""; t.billMatch=null;
 }
 
@@ -4001,6 +4105,301 @@ function renderHistory(){
     + 'same calculation the card above uses \u2014 so a past month reads exactly what it read '
     + 'when it was current. Green cleared that month\u2019s objective, which can differ month '
     + 'to month. The last bar is still open.</p>';
+}
+
+/* Spend per month, broken out by category. The app could already answer "what
+   did I spend in March" — but only by navigating to March, which makes a trend
+   something you have to hold in your head across eight taps. */
+function categoryTrend(n){
+  const cur=cycleOf(todayISO());
+  const ms=monthsWithData().filter(m=>m<=cur).slice(-(n||12));
+  const cats=TC();
+  const rows=ms.map(m=>{
+    const d=monthData(m), by={};
+    for(const c of cats) by[c]=Math.max(0,d.byCat[c]||0);
+    const fixed=FC().reduce((a,c)=>a+Math.max(0,d.byCat[c]||0),0);
+    return { ym:m, by, disc:cats.reduce((a,c)=>a+by[c],0), fixed, open:m===cur };
+  });
+  return { months:ms, cats, rows };
+}
+
+/* Series for whichever slice is selected, plus the numbers worth stating in
+   words: the average, and where it is heading. Trend is first half vs second
+   half rather than first month vs last — one unusual month at either end
+   should not get to name the direction. */
+function trendSeries(sel){
+  const T=categoryTrend(12);
+  const val=r => sel==="all" ? r.disc
+              : sel==="__fixed" ? r.fixed
+              : (r.by[sel]||0);
+  const pts=T.rows.map(r=>({ ym:r.ym, v:val(r), open:r.open }));
+  const closed=pts.filter(p=>!p.open);
+  const avg=closed.length ? closed.reduce((a,p)=>a+p.v,0)/closed.length : 0;
+  let dir=null;
+  if(closed.length>=4){
+    const h=Math.floor(closed.length/2);
+    const a=closed.slice(0,h).reduce((x,p)=>x+p.v,0)/h;
+    const b=closed.slice(-h).reduce((x,p)=>x+p.v,0)/h;
+    if(a>0) dir={ pct:(b-a)/a, from:a, to:b };
+  }
+  return { T, pts, avg, dir, max:Math.max(0,...pts.map(p=>p.v)) };
+}
+
+/* ---------- ANALYSIS: the numbers a CFO opens with ----------
+   Rates and averages, not this month's totals. Everything here is measured over
+   CLOSED months only: an open month is a partial period and mixing it into an
+   average drags every figure toward zero for no reason. */
+function analyticsKPIs(n){
+  const cur=cycleOf(todayISO());
+  const ms=monthsWithData().filter(m=>m<cur).slice(-(n||12));
+  if(!ms.length) return { months:0 };
+  let txns=0, spend=0, noSpend=0, days=0, biggest=null;
+  const merchMonths=[], sizes=[];
+  for(const m of ms){
+    const rows=analysisRows(m);
+    const dim=daysIn(m), byDay=new Array(dim+1).fill(0);
+    const names=new Set();
+    for(const t of rows){
+      const amt=t.type==="refund"?-Math.abs(t.amount):t.amount;
+      if(t.type!=="refund"){ txns++; sizes.push(t.amount);
+        if(!biggest||t.amount>biggest.amount) biggest={amount:t.amount,merchant:t.merchant,date:t.date}; }
+      spend+=amt;
+      byDay[Math.max(1,Math.min(dim,dayIndex(t.date,m)))]+=amt;
+      names.add(splitKey(t.merchant));
+    }
+    merchMonths.push(names.size);
+    for(let i=1;i<=dim;i++){ days++; if(byDay[i]<=0.005) noSpend++; }
+  }
+  sizes.sort((a,b)=>a-b);
+  const median = sizes.length ? sizes[Math.floor(sizes.length/2)] : 0;
+  /* Recurring share: how much of a month is charges you make every month.
+     It is the ceiling on what is even available to cut. */
+  const rec=detectRecurring().filter(r=>r.confirmed && TC().includes(r.category));
+  const recMonthly=rec.reduce((a,r)=>a+r.monthly,0);
+  const avgSpend=spend/ms.length;
+  return { months:ms.length,
+    avgSpend, avgTxns:txns/ms.length, avgSize:txns?spend/txns:0, median,
+    noSpendPerMonth:noSpend/ms.length, dayCount:days,
+    avgMerchants:merchMonths.reduce((a,v)=>a+v,0)/merchMonths.length,
+    biggest, recMonthly, recShare:avgSpend>0?Math.min(1,recMonthly/avgSpend):0 };
+}
+
+/* Subscriptions and bills whose amount is drifting upward. Nothing else in the
+   app catches this: each individual charge looks normal, and the increase only
+   exists across months. */
+function priceCreep(){
+  const cur=cycleOf(todayISO());
+  const by=new Map();
+  for(const t of S.txns){
+    if(t.pending||t.type==="transfer"||t.type==="income"||t.type==="savings"||t.type==="refund") continue;
+    const m=monthOf(t); if(m>=cur) continue;
+    const k=splitKey(t.merchant);
+    if(!by.has(k)) by.set(k,{ name:t.merchant, cat:t.category, hits:[] });
+    by.get(k).hits.push({ m, amount:t.amount });
+  }
+  const out=[];
+  for(const r of by.values()){
+    /* One charge per month, at least four months: that shape is a subscription
+       or a fixed bill. Anything lumpier is ordinary spending that happens to
+       vary, and flagging it would bury the real ones. */
+    const perMonth=new Map();
+    let lumpy=false;
+    for(const h of r.hits){
+      if(perMonth.has(h.m)){ lumpy=true; break; }
+      perMonth.set(h.m,h.amount);
+    }
+    if(lumpy||perMonth.size<4) continue;
+    /* A subscription is a STEP function: the same amount for months, then a
+       new amount held for months. Ordinary spending at a merchant you happen
+       to visit monthly varies continuously. Without this test a grocery run
+       that grew from $360 to $480 read as "TJ is charging you more" — which is
+       false, and burying a real $30/yr Netflix rise under it is worse than
+       showing nothing. Require a plateau: few distinct amounts, and at least
+       one of them held for two months or more. */
+    const counts=new Map();
+    for(const v of perMonth.values()){
+      const key=v.toFixed(2);
+      counts.set(key,(counts.get(key)||0)+1);
+    }
+    const distinct=counts.size, repeat=Math.max(...counts.values());
+    if(distinct > Math.ceil(perMonth.size/2) || repeat < 2) continue;
+    const ms=[...perMonth.keys()].sort();
+    const first=perMonth.get(ms[0]), last=perMonth.get(ms[ms.length-1]);
+    if(first<=0) continue;
+    const pct=(last-first)/first;
+    if(pct<=0.03 || last-first<0.5) continue;
+    /* Rises, not noise: the last value must be the highest seen. */
+    if(last < Math.max(...perMonth.values())-0.005) continue;
+    out.push({ name:r.name, cat:r.cat, first, last, pct, months:ms.length,
+               from:ms[0], to:ms[ms.length-1], annual:(last-first)*12 });
+  }
+  return out.sort((a,b)=>(b.last-b.first)-(a.last-a.first)).slice(0,8);
+}
+
+function renderKPIs(){
+  const el=document.getElementById("kpiCard");
+  if(!el) return;
+  const k=analyticsKPIs(12);
+  if(!k.months){
+    el.innerHTML='<div class="eyebrow">At a glance</div>'
+      + '<div class="empty">No closed month yet. These are rates and averages, so '
+      + 'they need at least one finished month.</div>';
+    return;
+  }
+  const tile=(v,l,tone)=>'<div class="kpi"><div class="kv '+(tone||"")+'">'+v+'</div>'
+    + '<div class="kl">'+l+'</div></div>';
+  el.innerHTML='<div class="spread"><span class="eyebrow">At a glance</span>'
+    + '<span class="eyebrow">'+k.months+' closed month'+(k.months===1?'':'s')+'</span></div>'
+    + '<div class="kpigrid">'
+    + tile(money(k.avgSpend),"discretionary / month")
+    + tile(Math.round(k.avgTxns),"transactions / month")
+    + tile(money(k.avgSize),"average charge")
+    + tile(money(k.median),"median charge")
+    + tile(Math.round(k.avgMerchants),"merchants / month")
+    + tile(k.noSpendPerMonth.toFixed(1),"no-spend days / month")
+    + '</div>'
+    + '<div class="vwhy" style="margin-top:13px">'
+    + (k.recMonthly>0
+      ? '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+        + Math.round(k.recShare*100)+'%</span><span>of a typical month is recurring \u2014 '
+        + money(k.recMonthly)+'/mo you cannot cut without cancelling something</span></div>'
+      : '')
+    + (k.biggest
+      ? '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+        + money(k.biggest.amount)+'</span><span>largest single charge \u00b7 '
+        + esc(k.biggest.merchant)+' on '+k.biggest.date+'</span></div>' : '')
+    + '</div>'
+    + '<p class="hint" style="margin-top:10px">Averages over closed months only. The open '
+    + 'month is a partial period and would drag every figure down.</p>';
+}
+
+/* One chart per category. A stacked bar answers "what is the mix"; it cannot
+   answer "is Personal creeping up", because a rising slice looks flat when the
+   whole bar grows with it. Each category gets its own baseline. */
+function renderSmallMultiples(){
+  const el=document.getElementById("smallMultCard");
+  if(!el) return;
+  const T=categoryTrend(12);
+  if(T.rows.length<2){
+    el.innerHTML='<div class="eyebrow">Each category over time</div>'
+      + '<div class="empty">Two months and these appear.</div>';
+    return;
+  }
+  const series=[...T.cats.map(c=>({key:c,label:c})),
+                {key:"__fixed",label:"Non-discretionary"}];
+  el.innerHTML='<div class="spread"><span class="eyebrow">Each category over time</span>'
+    + '<span class="eyebrow">'+T.rows.length+' months</span></div>'
+    + series.map(sd=>{
+      const s2=trendSeries(sd.key);
+      const mx=s2.max||1;
+      const spark=s2.pts.map(p=>'<i style="height:'+((p.v/mx)*100).toFixed(1)+'%"'
+        +(p.open?' class="open"':'')+'></i>').join("");
+      const d=s2.dir;
+      return '<div class="sm-row">'
+        + '<div class="spread"><span class="lk">'+esc(sd.label)+'</span>'
+        +   '<span class="num">'+money(s2.avg)+'<span class="sm muted">/mo</span>'
+        +   (d?' <span class="'+(d.pct>0?"overc":"pathc")+'">'
+              +(d.pct>0?"+":"\u2212")+Math.abs(Math.round(d.pct*100))+'%</span>':'')
+        +   '</span></div>'
+        + '<div class="sparkbars">'+spark+'</div></div>';
+    }).join("")
+    + '<p class="hint" style="margin-top:11px">Each row is scaled to its own maximum, so a '
+    + 'small category is as readable as a large one \u2014 compare shapes here, not heights. '
+    + 'The percentage is the recent half against the earlier half.</p>';
+}
+
+function renderCreep(){
+  const el=document.getElementById("creepCard");
+  if(!el) return;
+  const rows=priceCreep();
+  if(!rows.length){
+    el.innerHTML='<div class="eyebrow">Price creep</div>'
+      + '<div class="empty">Nothing charging you more than it used to. This looks at '
+      + 'merchants billing once a month for four months or more.</div>';
+    return;
+  }
+  const annual=rows.reduce((a,r)=>a+r.annual,0);
+  el.innerHTML='<div class="spread"><span class="eyebrow">Price creep</span>'
+    + '<span class="num mid overc">'+money(annual)+'/yr</span></div>'
+    + '<p class="hint" style="margin:6px 0 0">Merchants billing you more than when they '
+    + 'started. Each charge looks normal on its own; the rise only exists across months.</p>'
+    + rows.map(r=>'<div class="mrow">'
+      + '<div class="spread"><span class="lk">'+esc(r.name)+'</span>'
+      +   '<span class="num overc">+'+Math.round(r.pct*100)+'%</span></div>'
+      + '<div class="sm muted">'+money2(r.first)+' \u2192 '+money2(r.last)
+      +   ' since '+esc(cycleLabel(r.from))+' \u00b7 '+money(r.annual)+'/yr more</div>'
+      + '</div>').join("");
+}
+
+function renderTrend(){
+  const el=document.getElementById("trendCard");
+  if(!el) return;
+  const T=categoryTrend(12);
+  if(T.rows.length<2){
+    el.innerHTML='<div class="eyebrow">Spending over time</div>'
+      + '<div class="empty">Two months of data and this fills in.</div>';
+    return;
+  }
+  const cats=T.cats;
+  let sel=S.settings.trendCat||"all";
+  if(sel!=="all" && sel!=="__fixed" && !cats.includes(sel)) sel="all";
+  const S2=trendSeries(sel);
+  const label = sel==="all" ? "All discretionary"
+              : sel==="__fixed" ? "Non-discretionary" : sel;
+
+  const chips='<div class="filters trendchips">'
+    + '<button class="chip" data-tc="all" aria-pressed="'+(sel==="all")+'">All</button>'
+    + cats.map(c=>'<button class="chip" data-tc="'+esc(c)+'" aria-pressed="'+(sel===c)+'">'
+        + esc(c)+'</button>').join("")
+    + '<button class="chip" data-tc="__fixed" aria-pressed="'+(sel==="__fixed")+'">Non-disc.</button>'
+    + '</div>';
+
+  /* Stacked only for "All": stacking one category against itself is a bar, and
+     a legend of one is noise. */
+  const stacked = sel==="all";
+  const bars=S2.pts.map((p,i)=>{
+    const r=T.rows[i];
+    const h=S2.max? (p.v/S2.max)*100 : 0;
+    const inner = stacked
+      ? cats.map((c,ci)=>{
+          const seg=p.v? ((r.by[c]||0)/p.v)*100 : 0;
+          return seg>0.4 ? '<i style="height:'+seg.toFixed(1)+'%;background:'
+            + FIXED_COL(ci)+'" title="'+esc(c)+' '+money(r.by[c]||0)+'"></i>' : '';
+        }).join("")
+      : '<i style="height:100%;background:'+FIXED_COL(0)+'"></i>';
+    return '<div class="tcol'+(p.open?" open":"")+'">'
+      + '<div class="tbw"><div class="tstack" style="height:'+h.toFixed(1)+'%">'+inner+'</div></div>'
+      + '<div class="tlab">'+esc(cycleLabel(p.ym).split(" ")[0])+'</div></div>';
+  }).join("");
+
+  const dir=S2.dir;
+  el.innerHTML='<div class="spread"><span class="eyebrow">Spending over time</span>'
+    + '<span class="eyebrow">'+T.rows.length+' months</span></div>'
+    + chips
+    + '<div class="trendwrap">'+bars+'</div>'
+    + '<div class="vwhy" style="margin-top:12px">'
+    +   '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+    +     money(S2.avg)+'</span><span>average per closed month \u00b7 '+esc(label)+'</span></div>'
+    +   (dir
+        ? '<div class="r"><span class="num mid '+(dir.pct>0?"overc":"pathc")
+          + '" style="font-size:14px;min-width:74px">'+(dir.pct>0?"+":"\u2212")
+          + Math.abs(Math.round(dir.pct*100))+'%</span><span>'
+          + (dir.pct>0?"higher":"lower")+' in the recent half than the earlier half</span></div>'
+        : '<div class="r"><span>Four closed months and a trend direction appears</span></div>')
+    + '</div>'
+    + (stacked
+      ? '<div class="legend2" style="margin-top:10px">'
+        + cats.map((c,ci)=>'<div class="lrow"><span class="sw" style="background:'+FIXED_COL(ci)+'"></span>'
+          + '<span class="lk">'+esc(c)+'</span></div>').join("")+'</div>'
+      : '')
+    + '<p class="hint" style="margin-top:10px">'
+    + (stacked ? "Each bar is a month\u2019s discretionary spend, split by category. "
+               : "Each bar is "+esc(label)+" for that month. ")
+    + 'Tap a category to isolate it. The last bar is still open.</p>';
+
+  el.querySelectorAll("[data-tc]").forEach(b=>b.onclick=()=>{
+    S.settings.trendCat=b.dataset.tc; save(); renderTrend();
+  });
 }
 
 function renderAnalysis(){
@@ -4902,7 +5301,8 @@ function renderHeader(){
   btn.setAttribute("aria-label", mainTabName()+" \u2014 "+v.word);
 }
 function renderAll(){ renderHeader(); renderDash(); renderReview(); renderLedger();
-  renderCommitted(); renderHistory(); renderProject(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData(); }
+  renderCommitted(); renderKPIs(); renderTrend(); renderSmallMultiples();
+  renderHistory(); renderCreep(); renderProject(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData(); }
 function go(v){
   /* "bills" isn't a section of its own \u2014 it's the Bills half of the scope
      toggle on Spending. Anything that used to link straight to the old Bills
