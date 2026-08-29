@@ -522,6 +522,26 @@ label{display:block;margin-bottom:10px}
     <div class="card verdict" id="saveCard"></div>
     <div class="card" id="outlookCard"></div>
     <div class="card" id="histCard"></div>
+    <!-- Moved off Planning. Every other card there is scoped to the month in
+         the header; this one never reads the cursor, because "when do I reach
+         $X" is not a question about a month. Sitting between two month-aware
+         cards it looked like it was describing that month, and it was showing
+         an August balance while you browsed May. Its inputs — your cash
+         balance and your surplus — both live on this tab, so the whole cash
+         picture is in one place now. -->
+    <div class="card">
+      <div class="eyebrow">Projection</div>
+      <h2 style="margin:4px 0 8px">Cash down range</h2>
+      <div id="cashLine" style="margin-bottom:12px"></div>
+      <div class="filters" id="projMode">
+        <button class="chip" data-m="forward" aria-pressed="true">What will I have?</button>
+        <button class="chip" data-m="reverse">How do I reach X?</button>
+      </div>
+      <label><span class="lt">By this date</span><input type="date" id="projDate"></label>
+      <label id="goalWrap" style="display:none"><span class="lt">Amount I want</span>
+        <input type="number" id="projGoal" inputmode="decimal" step="100"></label>
+      <div id="projOut"></div>
+    </div>
     <div class="band"><span class="eyebrow">Analysis</span></div>
     <div class="card">
       <div class="miniseg wide" id="anaMode" role="group" aria-label="Analysis view">
@@ -588,19 +608,6 @@ label{display:block;margin-bottom:10px}
   </section>
 
   <section id="v-plan">
-    <div class="card">
-      <div class="eyebrow">Projection</div>
-      <h2 style="margin:4px 0 8px">Cash down range</h2>
-      <div id="cashLine" style="margin-bottom:12px"></div>
-      <div class="filters" id="projMode">
-        <button class="chip" data-m="forward" aria-pressed="true">What will I have?</button>
-        <button class="chip" data-m="reverse">How do I reach X?</button>
-      </div>
-      <label><span class="lt">By this date</span><input type="date" id="projDate"></label>
-      <label id="goalWrap" style="display:none"><span class="lt">Amount I want</span>
-        <input type="number" id="projGoal" inputmode="decimal" step="100"></label>
-      <div id="projOut"></div>
-    </div>
     <div class="card">
       <div class="eyebrow">Spending</div>
       <h2 style="margin:4px 0 6px">Planning your discretionary spending</h2>
@@ -4383,7 +4390,6 @@ function renderAllowance(){
 }
 
 function renderPlan(){
-  renderProject();
   renderAllowance();
 
   /* The same allowance, repeated where the ceilings are actually typed. Not a
@@ -4857,7 +4863,7 @@ function renderHeader(){
   btn.setAttribute("aria-label", mainTabName()+" \u2014 "+v.word);
 }
 function renderAll(){ renderHeader(); renderDash(); renderReview(); renderLedger();
-  renderCommitted(); renderHistory(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData(); }
+  renderCommitted(); renderHistory(); renderProject(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData(); }
 function go(v){
   /* "bills" isn't a section of its own \u2014 it's the Bills half of the scope
      toggle on Spending. Anything that used to link straight to the old Bills
