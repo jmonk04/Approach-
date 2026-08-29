@@ -4740,7 +4740,12 @@ function setGo(p){
 function renderHeader(){
   document.getElementById("mlbl").textContent=
     cycleStart()===1 ? ymLabel(cursor) : ymLabel(cursor).split(" ")[0]+" \u00b7 "+cycleStart();
-  document.getElementById("mnext").disabled=cursor>=cycleOf(todayISO());
+  /* One month ahead is reachable, and only one. The per-month plan is the
+     whole reason: you cannot set September's ceilings from August if the
+     forward arrow stops at August. Further out is still blocked — a plan for
+     a month you have no visibility into is a guess, and the months between
+     would sit empty inheriting nothing useful. */
+  document.getElementById("mnext").disabled = cursor>=ymShift(cycleOf(todayISO()),1);
   /* a stale backup is the one thing behind the icon worth a dot on it */
   const live=S.txns.filter(t=>!t.pending).length;
   const lb=S.settings.lastBackup;
