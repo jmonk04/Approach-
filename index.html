@@ -987,6 +987,7 @@ const DEFAULTS = {
   fixedCategories: [...FIXED_SEED],  // editable non-discretionary groups
   fixedMigrated: false,  // set once the old two-bucket model has been folded in
   cashAcctAdded: false,  // set once the Cash account has been backfilled
+  billDupesMerged: false,// set once duplicate declared bills have been collapsed
   plans: {},             // ym -> { targets, objective } — the plan in force that month
   plansMigrated: false,  // set once the old global plan has been stamped onto history
   billsSorted: [],       // merchants already placed into a group, so Review stops asking
@@ -1470,6 +1471,25 @@ function migrate(){
       const cur=cycleOf(todayISO());
       if(!P[cur]) P[cur]={ targets:{...snap.targets}, objective:snap.objective };
       S.settings.plans=P;
+    }
+  }
+
+  /* Collapse duplicate declared bills. Before the guard above, declaring the
+     same bill from a different month appended another schedule entry, and each
+     one expected its own payment every month — rent counted two or three
+     times, forever, in every month. Keep the earliest entry, re-point any
+     transaction that referenced a discarded one, and drop the rest. */
+  if(!S.settings.billDupesMerged){
+    S.settings.billDupesMerged=true;
+    const seen=new Map(), keep=[], remap=new Map();
+    for(const b of (S.settings.bills||[])){
+      const k=splitKey(b.name)+"|"+(b.kind||"bill");
+      if(seen.has(k)){ remap.set(b.id, seen.get(k).id); continue; }
+      seen.set(k,b); keep.push(b);
+    }
+    if(keep.length!==(S.settings.bills||[]).length){
+      S.settings.bills=keep;
+      for(const t of S.txns) if(t.billId && remap.has(t.billId)) t.billId=remap.get(t.billId);
     }
   }
 
@@ -5577,12 +5597,30 @@ document.getElementById("addBill").onclick=()=>{
     /* the anchor a quarterly/annual bill's future due-cycles count from */
     startYM: cursor
   };
-  S.settings.bills=[...(S.settings.bills||[]),bill];
+  /* A declared bill is a SCHEDULE, one entry per recurring bill — not one entry
+     per month. Appending blindly meant declaring rent again because June looked
+     empty created a SECOND monthly rent, and every entry then expects its own
+     payment every month forever. Three entries read as $15,000 of rent.
+     Same name and kind means the same bill: update it, don't add another. */
+  const dupIdx=(S.settings.bills||[]).findIndex(x=>
+    splitKey(x.name)===splitKey(bill.name) && (x.kind||"bill")===bill.kind);
+  if(dupIdx>=0){
+    const prev=S.settings.bills[dupIdx];
+    bill.id=prev.id;                       // keep the id so posted rows stay linked
+    bill.startYM=prev.startYM||bill.startYM;
+    S.settings.bills=S.settings.bills.map((x,i)=>i===dupIdx?bill:x);
+  } else {
+    S.settings.bills=[...(S.settings.bills||[]),bill];
+  }
   /* "Counts immediately" — no waiting on an import to see it happen. */
-  const r=kind==="bill" ? postBill(bill,cursor) : null;
+  /* Only post a transaction for a genuinely new bill. Re-declaring an existing
+     one is an edit to the schedule, and posting again would put a second
+     charge in the month on top of the one already there. */
+  const r=(kind==="bill" && dupIdx<0) ? postBill(bill,cursor) : null;
   document.getElementById("bName").value=""; document.getElementById("bAmt").value="";
   save(); renderAll();
-  toast(kind==="pay"?"Paycheck scheduled":kind==="offset"?"Reimbursement added"
+  toast(dupIdx>=0 ? name+" already scheduled — updated it instead of adding a second"
+    : kind==="pay"?"Paycheck scheduled":kind==="offset"?"Reimbursement added"
     : r&&r.held ? name+" added — needs a look in Review" : name+" added, posted this month");
 };
 document.getElementById("saveSplit").onclick=()=>{
