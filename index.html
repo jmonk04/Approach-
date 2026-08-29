@@ -304,6 +304,10 @@ label{display:block;margin-bottom:10px}
 .catbtn{padding:11px 8px;border:1px solid var(--rule);border-radius:8px;background:var(--card);cursor:pointer;
   font-size:12.5px;font-weight:500;text-align:center;line-height:1.25}
 .catbtn:active{background:var(--ink);color:var(--onink)}
+/* The two non-category outcomes, set apart from the grid above so they do not
+   read as just two more spending buckets. */
+.catgrid.alt{grid-template-columns:repeat(2,1fr);margin-top:7px}
+.catbtn.kind{border-style:dashed;color:var(--quiet)}
 .teach{display:flex;align-items:center;gap:7px;margin:0;font-size:12px;color:var(--quiet)}
 .teach input{width:auto;margin:0}
 .eq{margin-top:7px;font-size:14px}
@@ -1158,6 +1162,9 @@ function baseType(t){
 }
 function autoCategory(t){
   const learned = S.settings.rules[ruleKey(t.merchant)];
+  /* A remembered cash-out/cash-in comes back as a type, not a category. */
+  if (learned==="__cashout") return { cat:null, kind:"cashout", why:"learned" };
+  if (learned==="__cashin")  return { cat:null, kind:"cashin",  why:"learned" };
   if (learned) return { cat: learned, why: "learned" };
   for (const [rx,,role] of RULES){
     if (!role) continue;
@@ -1220,6 +1227,10 @@ function assess(t, pool){
   if (amb) return { ok:false, reason:"ambiguous-merchant" };
 
   const a = autoCategory(t);
+  /* A merchant you already classified as cash out or cash in files itself, the
+     same as a learned category would. Without this the ATM asked again every
+     month and the rule you set was never used. */
+  if (a.kind) return { ok:true, reason:"", kind:a.kind };
   if (!a.cat) return { ok:false, reason:"new-merchant" };
 
   /* amount outlier vs this merchant's own history */
@@ -1348,6 +1359,7 @@ function ingest(parts){
     const a=assess(t,pool);
     t.pending=!a.ok;
     t.reason=a.reason;
+    if(a.kind) t.type=a.kind;
     if(a.billTxn) t.billMatch=a.billTxn;
   }
   S.txns = pool;
@@ -1386,6 +1398,25 @@ function discardDuplicates(){
 
 /* teaching: resolving one transaction settles the merchant for good,
    unless the merchant is on the always-ask list */
+/* Cash out / cash in are stored as a TYPE, not a category, so nothing
+   downstream has to special-case a category name. The remembered rule uses a
+   reserved key that cannot collide with a category, since a user could
+   legitimately name one "Cash". */
+const KIND_RULE={ cashout:"__cashout", cashin:"__cashin" };
+function resolveKind(id, kind, teach){
+  const t=S.txns.find(x=>x.id===id);
+  if(!t) return;
+  t.type=kind; t.pending=false; t.reason="";
+  if(teach){
+    S.settings.rules[ruleKey(t.merchant)]=KIND_RULE[kind];
+    S.txns.forEach(x=>{
+      if(x.pending && x.merchant===t.merchant && x.reason==="new-merchant"){
+        x.type=kind; x.pending=false; x.reason="";
+      }
+    });
+  }
+}
+
 function resolve(id, cat, teach){
   const t = S.txns.find(x=>x.id===id);
   if (!t) return;
@@ -1566,11 +1597,21 @@ function monthData(ym){
   const held = S.txns.filter(t=> t.pending && monthOf(t)===ym);
   const byCat={}, byPerson={};
   let discretionary=0, fixed=0, refunds=0, refundsDisc=0, refundsFixed=0,
-      transfers=0, extraIncome=0, savings=0;
+      transfers=0, extraIncome=0, savings=0, cashOut=0, cashIn=0;
   for (const t of live){
     if (t.type==="transfer"){ transfers+=Math.abs(t.amount); continue; }
     if (t.type==="income"){ extraIncome+=Math.abs(t.amount); continue; }
     if (t.type==="savings"){ savings+=Math.abs(t.amount); continue; }
+    /* Cash out of an ATM has left the account, so it has to count against the
+       month or the projected balance is wrong. But it is not spending on
+       anything yet — charging it to a discretionary limit would blame a
+       category for money whose destination is unknown. It sits in its own
+       line: money out, no category. */
+    if (t.type==="cashout"){ cashOut+=Math.abs(t.amount); continue; }
+    /* Money in that is NOT salary: a reimbursement, a sale, a gift. It adds to
+       what the month had to work with. Kept separate from detected salary
+       deposits, which would double-count the take-home you typed. */
+    if (t.type==="cashin"){ cashIn+=Math.abs(t.amount); continue; }
     const signed = t.type==="refund" ? -Math.abs(t.amount) : t.amount;
     const cat = t.type==="refund"
       ? (S.txns.find(x=>x.id===t.linkedTo)||{}).category || t.category
@@ -1590,7 +1631,7 @@ function monthData(ym){
   }
   const heldAmt = held.filter(t=>t.type!=="transfer")
                       .reduce((a,t)=>a+Math.abs(t.amount),0);
-  const net = discretionary + fixed - refunds;
+  const net = discretionary + fixed - refunds + cashOut;
   const discNet = discretionary - refundsDisc;
   /* Deposits found in the bank export and the take-home figure you typed are
      two views of the same money. Take the larger: a partial month shows only
@@ -1600,11 +1641,15 @@ function monthData(ym){
      old max() let an unusually large deposit month silently raise your income
      and flatter every rate built on it. Deposits are kept only for timing the
      cash forecast. */
-  const income = stated>0 ? stated : extraIncome;
+  /* Cash in ADDS, where a detected salary deposit does not: the deposit is the
+     take-home you already typed arriving, but a reimbursement is money the
+     month genuinely gained on top of it. */
+  const base = stated>0 ? stated : extraIncome;
+  const income = base + cashIn;
   const incomeSource = stated>0 ? "stated" : extraIncome>0 ? "bank" : "none";
   return { ym, live, held, heldAmt, byCat, byPerson, incomeSource, deposits: extraIncome,
            discretionary, discNet, fixed, refunds, refundsDisc, refundsFixed,
-           transfers, savings, net, income,
+           transfers, savings, net, income, cashOut, cashIn,
            saveRate: income>0 ? (income-net)/income : null };
 }
 function monthsWithData(){
@@ -1980,6 +2025,12 @@ function trajectory(ym){
   const today = ym<cur ? dim : ym>cur ? 0 : dayIndex(todayISO(),ym);
   const daily={};
   for(const t of d.live){
+    /* Filtering on CATEGORY alone let the new types leak onto the line: a
+       cash-out row keeps whatever category it happened to carry, so $140 out
+       of an ATM landed on the discretionary slope and moved the verdict. The
+       type decides first — these are not spending against a limit. */
+    if(t.type==="transfer"||t.type==="income"||t.type==="savings"
+       ||t.type==="cashout"||t.type==="cashin") continue;
     /* A refund is booked against the month, category and DAY of the charge it
        reverses — otherwise the line dips before the spend it cancels. */
     const origin = t.type==="refund" && t.linkedTo
@@ -2131,7 +2182,9 @@ function cashOnHand(){
 function outlook(ym){
   const d=monthData(ym), b=billsThisMonth(ym), g=trajectory(ym);
   const dim=daysIn(ym), closed=paceOf(ym)>=1;
-  const stated=Number(S.settings.income||0);
+  /* d.income, not the raw setting: cash in for this month is part of what it
+     had to work with, and the surplus is the one figure everything reads. */
+  const stated=d.income;
   const objPct=objectiveFor(ym);
   const notes=[];
 
@@ -2144,7 +2197,12 @@ function outlook(ym){
      expected, MINUS what Maja reimburses. A rent split is not income. */
   const fixedGross = (d.fixed - d.refundsFixed) + b.toCome;
   const fixedProj  = fixedGross - b.offsetTotal;
-  const surplus   = stated>0 ? stated - discProj - fixedProj : null;
+  /* Cash out is money that has left the account, so it has to come off the
+     surplus or the projected balance is wrong. Taken at face value rather than
+     projected forward: ATM withdrawals are lumpy, and running one $140 trip on
+     day 3 out to "$1,400 by month end" would be a worse guess than no guess. */
+  const cashOut   = d.cashOut||0;
+  const surplus   = stated>0 ? stated - discProj - fixedProj - cashOut : null;
   const rate      = stated>0 ? surplus/stated : null;
   const target    = stated>0 && objPct>0 ? stated*objPct/100 : null;
   const vsTarget  = target!=null ? surplus-target : null;
@@ -2587,7 +2645,8 @@ function fixedLines(ym){
     return byName.get(k);
   };
   for(const t of d.live){
-    if(t.type==="transfer"||t.type==="income"||t.type==="savings") continue;
+    if(t.type==="transfer"||t.type==="income"||t.type==="savings"
+       ||t.type==="cashout"||t.type==="cashin") continue;
     /* A refund belongs to the charge it reverses — same merchant, same day,
        same category — or the line it cancels never nets out. */
     const src = t.type==="refund" && t.linkedTo
@@ -3807,6 +3866,15 @@ function renderReview(){
         + '<div class="rawd num">'+esc(t.rawDesc)+'</div>'
         + '<div class="catgrid">'+cats.map(c=>
             '<button class="catbtn" data-cat="'+esc(c)+'">'+esc(c)+'</button>').join("")+'</div>'
+        /* Not every row is spending on something. An ATM withdrawal has no
+           category — the money left the account and where it went is unknown —
+           and a reimbursement is the month gaining money, not losing it.
+           Forcing either into a spending bucket is how a category gets blamed
+           for money it never saw. */
+        + '<div class="catgrid alt">'
+        +   '<button class="catbtn kind" data-kind="cashout">Cash out</button>'
+        +   '<button class="catbtn kind" data-kind="cashin">Cash in</button>'
+        + '</div>'
         + '<div class="spread" style="margin-top:10px">'
         +   '<label class="teach"><input type="checkbox" class="teachbox"'
         +     (t.reason==="ambiguous-merchant"?"":" checked")+'> '
@@ -3839,6 +3907,12 @@ function renderReview(){
       }
       resolve(id,b.dataset.cat,teach);
       save(); renderAll(); toast("Filed to "+b.dataset.cat);
+    });
+    card.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>{
+      const teach=card.querySelector(".teachbox").checked;
+      resolveKind(id,b.dataset.kind,teach);
+      save(); renderAll();
+      toast(b.dataset.kind==="cashout" ? "Filed as cash out" : "Added to take-home");
     });
     const dropBtn=card.querySelector("[data-drop]");
     if(dropBtn) dropBtn.onclick=()=>{
@@ -4191,7 +4265,8 @@ function priceCreep(){
   const cur=cycleOf(todayISO());
   const by=new Map();
   for(const t of S.txns){
-    if(t.pending||t.type==="transfer"||t.type==="income"||t.type==="savings"||t.type==="refund") continue;
+    if(t.pending||t.type==="transfer"||t.type==="income"||t.type==="savings"
+       ||t.type==="refund"||t.type==="cashout"||t.type==="cashin") continue;
     const m=monthOf(t); if(m>=cur) continue;
     const k=splitKey(t.merchant);
     if(!by.has(k)) by.set(k,{ name:t.merchant, cat:t.category, hits:[] });
