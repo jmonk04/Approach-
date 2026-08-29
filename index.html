@@ -212,6 +212,30 @@ hr{border:0;border-top:1px solid var(--rule);margin:12px 0}
 .vwhy .r{display:flex;align-items:baseline;gap:9px;font-size:12.5px;color:var(--quiet)}
 .vwhy .r .num{color:var(--ink)}
 .vwhy .r button{margin-left:auto}
+/* The sum line. A rule above it and the label in ink, so the list reads as
+   arithmetic that closes rather than a pile of related numbers. */
+.vwhy .r.totalrow{border-top:1px solid var(--rule);padding-top:8px;margin-top:2px;
+  color:var(--ink);font-weight:600}
+
+/* Waterfall. The track is the full take-home; each bar floats at the running
+   balance its step leaves behind, so the shape of the month is legible before
+   any figure is read. */
+.wf{margin-top:12px}
+.wfrow{display:grid;grid-template-columns:1fr 34% auto;align-items:center;gap:9px;
+  padding:5px 0}
+.wflab{font-size:12.5px;color:var(--quiet);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.wftrack{position:relative;height:14px;border-radius:3px;background:var(--track)}
+.wftrack i{position:absolute;top:0;bottom:0;border-radius:3px;min-width:2px}
+.wftrack i.in{background:var(--path)}
+.wftrack i.out{background:var(--over);opacity:.85}
+.wftrack i.sum{background:var(--accent)}
+.wftrack i.neg{background:var(--over)}
+.wfamt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;
+  color:var(--ink);text-align:right;white-space:nowrap}
+.wfrow.total{border-top:1px solid var(--rule);margin-top:6px;padding-top:9px}
+.wfrow.total .wflab{color:var(--ink);font-weight:600}
+.wfrow.total .wfamt{font-size:15px;font-weight:600}
 .daycount{opacity:.55}
 /* "See the calculation" — the answer is the card; the accounting behind it is
    available, not imposed. */
@@ -2283,12 +2307,25 @@ function outlook(ym){
   return { surplus, rate, target, vsTarget, stated, discProj, fixedProj, fixedGross,
            offsetTotal:b.offsetTotal,
            cash, cashEOM, asOfDay, lines, notes, closed, objPct,
-           breakdown:[
-             { label:"Take-home",                    amt:stated,    dir:"in"  },
-             { label:closed?"Discretionary":"Discretionary at this rate", amt:discProj, dir:"out" },
-             { label:"Bills, utilities and housing", amt:fixedGross, dir:"out" }
-           ].concat(b.offsetTotal>0
-             ? [{ label:"Reimbursed to you", amt:b.offsetTotal, dir:"in" }] : []) };
+           cashIn:d.cashIn||0, cashOut,
+           /* Every line that moves the surplus, in the order it moves it, so the
+              figure can be checked by adding up. Cash out was missing entirely:
+              $2,000 left the account, the surplus dropped by $2,000, and nothing
+              on any screen said why. "stated" already contains cash in, so the
+              take-home line has to show the base or the two double-count. */
+           breakdown:(function(){
+             const base=stated-(d.cashIn||0);
+             const rows=[{ label:"Take-home", amt:base, dir:"in" }];
+             if(d.cashIn>0) rows.push({ label:"Cash in", amt:d.cashIn, dir:"in" });
+             rows.push({ label:closed?"Discretionary spending":"Discretionary at this rate",
+                         amt:discProj, dir:"out" });
+             rows.push({ label:"Bills, utilities and housing", amt:fixedGross, dir:"out" });
+             if(b.offsetTotal>0) rows.push({ label:"Reimbursed to you", amt:b.offsetTotal, dir:"in" });
+             if(cashOut>0) rows.push({ label:"Cash out", amt:cashOut, dir:"out" });
+             rows.push({ label:(surplus>=0?"Surplus":"Deficit")+" for the month",
+                         amt:Math.abs(surplus||0), dir:surplus>=0?"in":"out", total:true });
+             return rows;
+           })() };
 }
 
 
@@ -3443,9 +3480,13 @@ function renderOutlook(){
     +   ((S.settings.cash&&S.settings.cash.date)||todayISO())+'"></label>'
     + '</div><button class="btn ghost" id="saveCash">Save balance</button>';
 
-  const row=(l,pre)=>'<div class="r">'
-    + '<span class="num mid '+(l.dir==="in"?"pathc":"")+'" style="font-size:14px;min-width:74px">'
-    + (pre?(l.dir==="in"?"+":"\u2212"):"")+money(Math.abs(l.amt))+'</span>'
+  /* The total row is the point of the whole list: it has to LOOK like a sum,
+     with a rule above it, or the figures read as unrelated facts rather than
+     as arithmetic you can check. */
+  const row=(l,pre)=>'<div class="r'+(l.total?" totalrow":"")+'">'
+    + '<span class="num mid '+(l.dir==="in"?"pathc":l.total?"overc":"")
+    + '" style="font-size:14px;min-width:74px">'
+    + (l.total?"=\u2009":(pre?(l.dir==="in"?"+":"\u2212"):""))+money(Math.abs(l.amt))+'</span>'
     + '<span>'+esc(l.label)+'</span></div>';
 
   let html='<div class="spread"><span class="eyebrow">Outlook</span>'
@@ -3660,7 +3701,19 @@ function renderDash(){
             + '<span>'+(ok.vsTarget>=0?"ahead of":"short of")+' your '
             + Math.round(obj*100)+'% objective</span></div>'
           : '')
-      + '</div>';
+      + '</div>'
+      /* The proof belongs on the card whose hero is the figure. $2,000 of cash
+         out silently lowered this number and nothing on the screen accounted
+         for it; a surplus you cannot check is one you have to take on faith. */
+      + '<details class="reveal"><summary>How this is calculated</summary>'
+      +   waterfallHTML(ok)
+      +   '<p class="hint" style="margin-top:10px">Each bar starts where the one above it '
+      +   'ended, so the width of a step is what it cost you and its position is what was '
+      +   'left at that point. Cash out is money that left the account with no category yet; '
+      +   'cash in is money the month gained that is not your salary.'
+      +   (ok.closed?'':' Discretionary is projected to the last day at the current rate.')
+      +   '</p>'
+      + '</details>';
   }
 
   /* the ceilings — readable two ways. Only the discretionary side has them.
@@ -4449,6 +4502,66 @@ function renderCreep(){
       + '<div class="sm muted">'+money2(r.first)+' \u2192 '+money2(r.last)
       +   ' since '+esc(cycleLabel(r.from))+' \u00b7 '+money(r.annual)+'/yr more</div>'
       + '</div>').join("");
+}
+
+/* The surplus as a waterfall. A column of +/- lines is arithmetic you can
+   check but not a shape you can read: it gives every line the same visual
+   weight, so a $2,000 cash withdrawal and a $450 reimbursement look alike. A
+   floating bar per step puts each one at the running balance it leaves behind,
+   so the drop that matters is the widest one and the eye finds it first.
+
+   Rotated to rows rather than the usual left-to-right columns: six labelled
+   steps across a phone gives each about 55px, which is not enough for a
+   number and a word. */
+function waterfallHTML(o){
+  const rows=o.breakdown||[];
+  if(!rows.length) return '';
+  const steps=rows.filter(r=>!r.total);
+  const total=rows.find(r=>r.total);
+  let run=0;
+  const laid=steps.map(r=>{
+    const from=run;
+    run += r.dir==="in" ? r.amt : -r.amt;
+    return { ...r, from, to:run };
+  });
+  /* Scale to the highest point the running balance ever reaches, so the first
+     bar is full width and every later one is honestly proportional to it. */
+  /* A deficit takes the running balance below zero, so the track has to span
+     from the lowest point to the highest, not from zero. Scaling to the peak
+     alone pushed the negative tail off the left edge, where it silently
+     disappeared instead of showing the month failing. */
+  const lows=laid.map(l=>Math.min(l.from,l.to)).concat(0);
+  const his =laid.map(l=>Math.max(l.from,l.to)).concat(0, run);
+  const floor=Math.min(...lows), ceil=Math.max(...his);
+  const span=Math.max(1, ceil-floor);
+  const pct=v=>((v-floor)/span)*100;
+
+  const bar=(l)=>{
+    const lo=Math.min(l.from,l.to), hi=Math.max(l.from,l.to);
+    const left=Math.max(0,Math.min(100,pct(lo)));
+    const width=Math.max(0.8,Math.min(100-left,pct(hi)-pct(lo)));
+    return '<div class="wfrow">'
+      + '<div class="wflab">'+esc(l.label)+'</div>'
+      + '<div class="wftrack">'
+      +   '<i class="'+(l.dir==="in"?"in":"out")+'" style="left:'+left.toFixed(1)
+      +   '%;width:'+width.toFixed(1)+'%"></i></div>'
+      + '<div class="wfamt '+(l.dir==="in"?"pathc":"")+'">'
+      +   (l.dir==="in"?"+":"\u2212")+money(Math.abs(l.amt))+'</div>'
+      + '</div>';
+  };
+  const totalBar = total
+    ? '<div class="wfrow total">'
+      + '<div class="wflab">'+esc(total.label)+'</div>'
+      /* The total is drawn from zero to the final balance, in whichever
+         direction that runs, so a deficit reads as a bar going the other way
+         rather than one pinned to the left edge and clipped. */
+      + '<div class="wftrack"><i class="'+(total.dir==="in"?"sum":"neg")+'" style="left:'
+      +   Math.max(0,Math.min(100,pct(Math.min(0,run)))).toFixed(1)+'%;width:'
+      +   Math.max(0.8,Math.min(100,Math.abs(pct(run)-pct(0)))).toFixed(1)+'%"></i></div>'
+      + '<div class="wfamt '+(total.dir==="in"?"pathc":"overc")+'">'
+      +   money(Math.abs(total.amt))+'</div></div>'
+    : '';
+  return '<div class="wf">'+laid.map(bar).join("")+totalBar+'</div>';
 }
 
 function renderTrend(){
