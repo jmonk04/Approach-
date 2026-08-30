@@ -17,7 +17,7 @@
    not have to — the revalidate path updates the file in place either way.
    The version below is a label, not a trigger. */
 
-const CACHE = "path-v1";
+const CACHE = "path-v2";
 const PRECACHE = ["./", "./index.html", "./manifest.webmanifest", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
@@ -47,16 +47,30 @@ self.addEventListener("fetch", e => {
      not end up in the app's cache. */
   if (new URL(req.url).origin !== self.location.origin) return;
 
-  e.respondWith(
-    caches.open(CACHE).then(async cache => {
-      const hit = await cache.match(req, { ignoreSearch: true });
-      const net = fetch(req)
-        .then(res => { if (res && res.ok) cache.put(req, res.clone()); return res; })
-        .catch(() => null);
-      /* Cache first so a cold launch on a bad connection is instant, network
-         only when there is nothing cached to answer with. */
-      return hit || (await net) || new Response("Offline", { status: 503 });
+  /* Started synchronously, and registered with waitUntil BEFORE respondWith
+     can settle. This is load-bearing. Cache-first means respondWith resolves
+     the instant there is a hit, and once it resolves the browser is free to
+     kill this worker — so a revalidation left running loose can be killed
+     before it writes, and this is the only path by which a new version ever
+     reaches the phone. Without waitUntil the app can sit on the first version
+     it ever cached, forever, while every deploy appears to succeed. */
+  const net = fetch(req)
+    .then(async res => {
+      if (res && res.ok) {
+        const cache = await caches.open(CACHE);
+        await cache.put(req, res.clone());
+      }
+      return res;
     })
+    .catch(() => null);
+  e.waitUntil(net);
+
+  /* Cache first, so a cold launch on a bad connection is instant. The network
+     answers only when there is nothing cached to answer with. */
+  e.respondWith(
+    caches.match(req, { ignoreSearch: true }).then(hit =>
+      hit || net.then(res => res || new Response("Offline", { status: 503 }))
+    )
   );
 });
 

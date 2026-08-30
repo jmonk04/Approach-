@@ -500,6 +500,29 @@ details.tuck>.hint{margin-top:4px}
   border:1px dashed var(--rule);align-items:flex-start;line-height:1.4;display:flex;gap:8px}
 .batchline strong{color:var(--ink);font-variant-numeric:tabular-nums}
 
+/* ---- month close ----
+   The one ritual a budgeting app has. Every figure in here was already being
+   computed; it was just never shown at the only moment it means anything. */
+.recapwrap{align-items:center}
+.recap{border-radius:16px;border-bottom:1px solid var(--rule);max-width:420px;
+  margin:0 14px;padding:22px 20px calc(20px + env(safe-area-inset-bottom));
+  text-align:center;animation:recapin .3s cubic-bezier(.2,.9,.3,1)}
+@keyframes recapin{from{transform:translateY(10px) scale(.985);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.recap{animation:none}}
+.recap .rmonth{font-size:var(--f2);letter-spacing:.14em;text-transform:uppercase;color:var(--quiet)}
+.recap .rbig{font-size:var(--f7);font-weight:600;line-height:1;margin:10px 0 4px}
+.recap .rsub{font-size:var(--f3);color:var(--quiet);line-height:1.45}
+.recap .rrow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:9px 0;border-top:1px solid var(--rule);text-align:left;font-size:var(--f3)}
+.recap .rrow .num{font-size:var(--f4)}
+.recap .rrows{margin:16px 0 4px}
+.recap .rflag{display:inline-block;margin-top:12px;padding:5px 10px;border-radius:999px;
+  font-size:var(--f2);letter-spacing:.05em;text-transform:uppercase;
+  background:var(--track);color:var(--ink)}
+.recap .rflag.best{background:var(--path);color:#fff}
+.recap .rwarn{margin-top:14px;padding:10px;border-radius:8px;background:var(--paper);
+  border:1px dashed var(--rule);font-size:var(--f3);color:var(--quiet);text-align:left;line-height:1.45}
+
 /* ---- edit sheet ----
    The Ledger's only interaction used to be a bare tap on the row, which sent
    the transaction to Review — a destructive act on a scrolling list, with the
@@ -1014,6 +1037,12 @@ body.noscroll{overflow:hidden}
     <span class="tabmark" aria-hidden="true">
       <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-review"/></svg></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
 </nav>
+<div class="sheetwrap recapwrap" id="recapSheet" hidden>
+  <div class="sheetbg"></div>
+  <div class="sheet recap" role="dialog" aria-modal="true" aria-labelledby="recapTitle">
+    <div id="recapBody"></div>
+  </div>
+</div>
 <div class="sheetwrap" id="editSheet" hidden>
   <div class="sheetbg" data-close="1"></div>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="editTitle">
@@ -1124,7 +1153,10 @@ const DEFAULTS = {
   targets: {},          // cat -> monthly ceiling
   rules: {},            // normalized merchant -> category (learned)
   ambiguous: [],
-  profile: { name:"", theme:"system", cycleStart:1, appName:"", mainTab:"",
+  /* recapSeen is a ym string, so it cannot get stuck true; zeroSince is the
+     date the review queue last went empty, cleared the moment anything lands. */
+  zeroSince: null,
+  profile: { name:"", theme:"system", cycleStart:1, appName:"", mainTab:"", recapSeen:"",
              accent:"ink", blur:false, launch:"dash", defaultPerson:"" },
   catIcons: {},         // pillar -> one glyph
   splitPct: 60,         // percent of a shared bill that is yours
@@ -3173,6 +3205,127 @@ function money2(n){
 }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 let toastT;
+/* ============================================================
+   MONTH CLOSE
+   ============================================================
+   A budgeting app has exactly one ritual, and this app was throwing it away.
+   Every figure below was already computed — kept, save rate, spent against
+   limit, best month — and none of it was ever shown at the only moment it
+   means anything, which is when the month is over and the number is final.
+
+   Rules this thing lives by:
+
+   1. It fires once per closed month and then never again. `recapSeen` is a ym
+      string, not a boolean, so it cannot get stuck and cannot repeat.
+   2. It never celebrates a figure it is not sure of. If charges from that
+      month are still in the review queue, the recap says so, names how much
+      could still move, and drops the congratulation entirely. An app that
+      cheers a number that is about to change is worse than one that says
+      nothing.
+   3. It never fires on a month with nothing in it. A fresh install does not
+      get a recap of a month it has no data for.
+   4. Dismissing is one tap and it is the default action. This is a moment, not
+      a gate. */
+
+function prevCycle(ym){ return ymShift(ym,-1); }
+
+/* The month that just closed, if it is worth showing and has not been seen. */
+function recapDue(){
+  const ym=prevCycle(cycleOf(todayISO()));
+  if(pro().recapSeen===ym) return null;
+  const d=monthData(ym);
+  if(!d.live.length) return null;
+  return ym;
+}
+
+/* Was this the best month on record, on the measure the user actually steers
+   by? Kept money if take-home is known, otherwise least discretionary spend.
+   Months still holding unreviewed charges are not eligible to win — a "best
+   month" awarded on incomplete data would be taken back later. */
+function isBestMonth(ym){
+  const all=monthsWithData().filter(m=>m<=ym);
+  if(all.length<2) return false;
+  const score=m=>{
+    const d=monthData(m);
+    if(d.held.length) return null;
+    return d.income>0 ? d.income-d.net : -d.discNet;
+  };
+  const mine=score(ym);
+  if(mine===null) return false;
+  return all.filter(m=>m!==ym).every(m=>{ const v=score(m); return v===null||v<mine; });
+}
+
+function openRecap(ym){
+  const d=monthData(ym), tgt=targetTotal(ym), obj=objectiveFor(ym);
+  const kept = d.income>0 ? d.income-d.net : null;
+  const unsure = d.held.length>0;
+  const best = !unsure && isBestMonth(ym);
+  const underLimit = tgt>0 && d.discNet<=tgt;
+  const metObjective = obj>0 && kept!==null && kept>=obj;
+
+  const hero = kept!==null ? kept : d.discNet;
+  const heroLabel = kept!==null ? "kept" : "spent on discretionary";
+  const tone = kept!==null ? (kept>=0?"pathc":"overc") : (underLimit?"pathc":"overc");
+
+  const row=(l,v,cls)=>'<div class="rrow"><span>'+l+'</span>'
+    + '<span class="num'+(cls?" "+cls:"")+'">'+v+'</span></div>';
+
+  const body=document.getElementById("recapBody");
+  body.innerHTML=
+      '<div class="rmonth" id="recapTitle">'+cycleLabel(ym)+' \u00b7 closed</div>'
+    + '<div class="rbig num '+tone+'">'+money(Math.abs(hero))+'</div>'
+    + '<div class="rsub">'+(kept!==null
+        ? (kept>=0?"kept out of "+money(d.income):"more than you brought in")
+        : heroLabel)+'</div>'
+    /* One gate for every flag rather than three separate ones — the first
+       draft gated "best month" and "finished under" on certainty and let
+       "objective met" through, which is the exact failure the rule exists to
+       stop. Nothing congratulatory renders while a figure can still move. */
+    + (unsure ? ''
+       : best         ? '<div class="rflag best">Best month yet</div>'
+       : metObjective ? '<div class="rflag">Objective met</div>'
+       : (underLimit&&tgt>0) ? '<div class="rflag">Finished under</div>'
+       : '')
+    + '<div class="rrows">'
+    +   (tgt>0?row("Discretionary",money(d.discNet)+" of "+money(tgt),
+             underLimit?"pathc":"overc"):"")
+    +   (d.fixed>0?row("Non-discretionary",money(d.fixed)):"")
+    +   (d.saveRate!=null?row("Save rate",Math.round(d.saveRate*100)+"%"):"")
+    +   (obj>0&&kept!==null?row("Objective",money(obj),metObjective?"pathc":""):"")
+    + '</div>'
+    /* The honest caveat, and it replaces the celebration rather than sitting
+       underneath it. */
+    + (unsure
+       ? '<div class="rwarn"><strong>'+d.held.length+' charge'
+         + (d.held.length>1?'s':'')+'</strong> from '+cycleLabel(ym)
+         + ' are still in Review, so these figures could move by up to '
+         + money(d.heldAmt)+'.</div>'
+       : '')
+    + '<button class="btn" id="recapDone" style="margin-top:16px">Done</button>'
+    + '<button class="btn ghost" id="recapOpen" style="margin-top:8px">See '
+      + cycleLabel(ym)+'</button>';
+
+  const close=(then)=>{
+    pro().recapSeen=ym;
+    save();
+    document.getElementById("recapSheet").hidden=true;
+    document.body.classList.remove("noscroll");
+    if(then) then();
+  };
+  body.querySelector("#recapDone").onclick=()=>close();
+  body.querySelector("#recapOpen").onclick=()=>close(()=>{
+    cursor=ym; renderAll(); go(unsure?"review":"dash");
+  });
+
+  document.getElementById("recapSheet").hidden=false;
+  document.body.classList.add("noscroll");
+}
+
+function maybeRecap(){
+  const ym=recapDue();
+  if(ym) openRecap(ym);
+}
+
 /* ---------- offline ----------
    Everything the app knows lives in this browser. A home-screen icon that
    shows an error page with no signal is not an app anyone trusts with their
@@ -4193,6 +4346,21 @@ function dropReviewCard(id){
   setTimeout(done,240);
 }
 
+/* How long the queue has been empty. One field, not a log: the date it last
+   went to zero, cleared the moment anything lands in it. That is the streak
+   worth having — not days opened, not charges filed, but "nothing is waiting
+   on me", which is the state this app is trying to leave you in.
+
+   It starts counting when the feature ships. Someone who happened to be at
+   zero for a month before this existed gets today's date, because there is no
+   record to recover the real one from and inventing one would be worse. */
+function markQueueState(){
+  const any=S.txns.some(t=>t.pending);
+  if(any){ if(S.settings.zeroSince){ S.settings.zeroSince=null; return true; } return false; }
+  if(!S.settings.zeroSince){ S.settings.zeroSince=todayISO(); return true; }
+  return false;
+}
+
 /* The two figures above the queue are the only things outside a card that
    change when one is resolved. */
 function refreshQueueHeader(){
@@ -4215,12 +4383,19 @@ function renderReview(){
   badge.textContent=held.length; badge.style.display=held.length?"":"none";
   const el=document.getElementById("reviewList");
   if(!held.length){
+    if(markQueueState()) save();
+    const since=S.settings.zeroSince;
     el.innerHTML='<div class="card"><div class="empty">'
       + (billsToSort().length
          ? "Nothing held. Anything on this tab is optional \u2014 every figure is already correct."
-         : "Reviewed to zero. Every transaction is filed.")+'</div></div>';
+         : "Reviewed to zero. Every transaction is filed.")
+      + (since? '<div class="lt" style="margin-top:6px">Clear since '
+          + new Date(since+"T12:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"})
+          + '</div>':'')
+      + '</div></div>';
     return;
   }
+  if(markQueueState()) save();
   const total=held.filter(t=>t.type!=="transfer").reduce((a,t)=>a+Math.abs(t.amount),0);
   const dupes=held.filter(t=>t.reason==="duplicate"||t.reason==="near-duplicate");
   const lb=S.lastBatch;
@@ -6380,6 +6555,11 @@ document.getElementById("doClear").onclick=()=>{
   renderAll();
   if(wipedFromSeed)
     toast("Storage was empty \u2014 rules and limits rebuilt from the seed");
+  /* Last, and only once the app behind it is fully drawn — the recap covers
+     the screen, so anything that would have shifted underneath it needs to
+     have settled first. A seed-rebuild toast also has something to say, and it
+     should not be buried under a celebration. */
+  else maybeRecap();
 })();
 
 
