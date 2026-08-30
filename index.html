@@ -549,10 +549,18 @@ details.tuck>.hint{margin-top:4px}
 .sheet .rawd{font-size:var(--f2);color:var(--quiet);margin:2px 0 12px;padding:7px 9px;
   background:var(--paper);border-radius:6px;word-break:break-word;font-family:var(--mono)}
 body.noscroll{overflow:hidden}
+.toast .tundo{margin-left:10px;cursor:pointer;background:none;border:0;padding:2px 0;
+  color:var(--card);font:inherit;font-weight:700;text-decoration:underline;
+  text-underline-offset:3px;-webkit-tap-highlight-color:transparent}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--rail) + 16px);z-index:60;
   background:var(--ink);color:var(--onink);padding:10px 16px;border-radius:9px;font-size:var(--f3);box-shadow:var(--shadow);
   max-width:88%;opacity:0;pointer-events:none;transition:opacity .2s}
+/* The toast stays click-through — it sits over the nav and must never eat a
+   tab tap — but an Undo inside it has to be tappable, so the button opts back
+   in for itself. Without this the button renders, looks live, and does
+   nothing: the same failure as the sheet overlay, one layer down. */
 .toast.show{opacity:1}
+.toast .tundo{pointer-events:auto}
 </style>
 </head>
 <body>
@@ -721,12 +729,22 @@ body.noscroll{overflow:hidden}
        footnote to today. This tab opens with the numbers first, the way a
        board pack does. -->
   <section id="v-analysis">
-    <div class="card" id="kpiCard"></div>
-    <div class="card" id="trendCard"></div>
-    <div class="card" id="smallMultCard"></div>
-    <div class="card" id="histCard"></div>
-    <div class="card" id="creepCard"></div>
-    <div class="card">
+    <!-- Six full chart cards stacked with nothing between them is a very long
+         scroll on a phone, and the two cheapest cards sat at the top while the
+         two most expensive ones nobody had scrolled to yet were drawn anyway.
+         Three groups, one on screen at a time, and only the group you are
+         looking at gets drawn. -->
+    <div class="miniseg" id="anaGroup" role="group" aria-label="Analysis section">
+      <button data-g="overview" aria-pressed="true">Overview</button>
+      <button data-g="categories" aria-pressed="false">Categories</button>
+      <button data-g="history" aria-pressed="false">History</button>
+    </div>
+    <div class="card anag" data-g="overview" id="kpiCard"></div>
+    <div class="card anag" data-g="overview" id="trendCard"></div>
+    <div class="card anag" data-g="categories" id="smallMultCard"></div>
+    <div class="card anag" data-g="categories" id="creepCard"></div>
+    <div class="card anag" data-g="history" id="histCard"></div>
+    <div class="card anag" data-g="history">
       <div class="miniseg wide" id="anaMode" role="group" aria-label="Analysis view">
         <button data-a="heat" aria-pressed="true">Calendar</button>
         <button data-a="merch" aria-pressed="false">Merchants</button>
@@ -790,6 +808,11 @@ body.noscroll{overflow:hidden}
   </section>
 
   <section id="v-ledger">
+    <!-- You reach this screen by tapping a category, which means you already
+         know roughly what you are looking for. Scrolling for it was the only
+         option. -->
+    <input type="search" id="ledgerSearch" placeholder="Search this month"
+           autocomplete="off" autocorrect="off" spellcheck="false">
     <div class="filters" id="ledgerFilters"></div>
     <div class="card" id="ledgerList"></div>
   </section>
@@ -1141,6 +1164,7 @@ const DEFAULTS = {
   gsMode: "spent",
   catMode: "pace",       // ceilings card: "pace" or "remaining"
   anaMode: "heat",       // analysis view: heat | merch | dow | movers
+  anaGroup: "overview",  // which third of the Analysis tab is on screen
   catScope: "disc",      // spending-plan card: "disc" or "fixed" (non-discretionary)
   fixedCategories: [...FIXED_SEED],  // editable non-discretionary groups
   fixedMigrated: false,  // set once the old two-bucket model has been folded in
@@ -1501,6 +1525,7 @@ function monthOf(t){
 
 /* ---------- ingest ---------- */
 function ingest(parts){
+  bumpData();
   /* Every import is a batch, so it can be taken back whole. Without this the
      only way out of a bad file is discarding rows one at a time. */
   const batch = "b"+uid();
@@ -1544,6 +1569,7 @@ function ingest(parts){
    superseded. Learned rules are untouched — resolving happens in Review, not
    on import, so there is nothing taught here to unteach. */
 function undoBatch(){
+  bumpData();
   const b=S.lastBatch;
   if(!b) return 0;
   const before=S.txns.length;
@@ -1574,6 +1600,7 @@ function discardDuplicates(){
    legitimately name one "Cash". */
 const KIND_RULE={ cashout:"__cashout", cashin:"__cashin" };
 function resolveKind(id, kind, teach){
+  bumpData();
   const t=S.txns.find(x=>x.id===id);
   if(!t) return;
   t.type=kind; t.pending=false; t.reason="";
@@ -1588,6 +1615,7 @@ function resolveKind(id, kind, teach){
 }
 
 function resolve(id, cat, teach){
+  bumpData();
   const t = S.txns.find(x=>x.id===id);
   if (!t) return;
   t.category = cat; t.pending = false; t.reason = "";
@@ -1727,6 +1755,8 @@ function migrate(){
   }
   const tg=S.settings.targets||{};
   for(const k of Object.keys(CAT_MIGRATION_RAW)) if(catMigrationFor(k)) delete tg[k];
+  for(const P of Object.values(plans()))
+    for(const k of Object.keys(CAT_MIGRATION_RAW)) if(catMigrationFor(k)) delete (P.targets||{})[k];
   return n;
 }
 
@@ -1797,7 +1827,29 @@ function personOf(t){
   const raw = t.rawPerson||t.person;
   return (S.settings.aliases&&S.settings.aliases[raw]) || t.person;
 }
+/* monthData walks every transaction in the file and does real work per row.
+   It is called dozens of times to draw one screen — the hero, the ribbon, each
+   category, the trajectory, the outlook, and twelve more times over for the
+   history and analysis cards — and it was recomputing the same month from
+   scratch every time. At eighteen months of data that is most of a second per
+   review tap, which is exactly the moment it must not be.
+
+   The cache is cleared wholesale, never selectively. Working out which months
+   an edit could have touched is the kind of cleverness that eventually gets a
+   month wrong, and recomputing everything on the next read costs a few
+   milliseconds. bumpData() is called from save() — which every mutation path
+   goes through — and again directly from each mutator, so a path that renders
+   before it saves still reads fresh. */
+let mdCache=new Map();
+function bumpData(){ mdCache.clear(); }
 function monthData(ym){
+  const hit=mdCache.get(ym);
+  if(hit) return hit;
+  const v=computeMonthData(ym);
+  mdCache.set(ym,v);
+  return v;
+}
+function computeMonthData(ym){
   const live = S.txns.filter(t=>!t.pending && monthOf(t)===ym);
   const held = S.txns.filter(t=> t.pending && monthOf(t)===ym);
   const byCat={}, byPerson={};
@@ -3193,6 +3245,10 @@ const KEY="approach:v2";
 
 let cursor = cycleOf(todayISO());
 let ledgerFilter = "all";
+/* Not persisted, and cleared when you leave the tab. A search is what you are
+   doing right now, not a setting: a ledger still filtered to "costco" when you
+   open it tomorrow is a ledger that appears to have lost your transactions. */
+let ledgerQuery = "";
 let importAccount = accounts()[0].id;
 
 function money(n){
@@ -3444,6 +3500,26 @@ function toast(m){
   const e=document.getElementById("toast");
   e.textContent=m; e.classList.add("show");
   clearTimeout(toastT); toastT=setTimeout(()=>e.classList.remove("show"),2600);
+}
+
+/* A toast that can be acted on. Deleting a transaction was guarded by a
+   confirm() dialog, which is the weaker of the two patterns: it interrupts you
+   every time to prevent a mistake you are usually not making, and it offers
+   nothing at all once the mistake IS made. An undo asks nothing on the way
+   through and fixes the one case that matters.
+
+   Ten seconds, and it survives navigating away — the undo is on the state, not
+   on the screen you were looking at when you deleted. */
+function toastUndo(m,fn){
+  const e=document.getElementById("toast");
+  e.textContent=m+"  ";
+  const b=document.createElement("button");
+  b.className="tundo"; b.textContent="Undo";
+  b.onclick=()=>{ clearTimeout(toastT); e.classList.remove("show"); fn(); };
+  e.appendChild(b);
+  e.classList.add("show");
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>{ e.classList.remove("show"); e.textContent=""; },10000);
 }
 
 /* ---------- ribbon: fill + pace tick + hatched unresolved exposure ----------
@@ -4523,8 +4599,13 @@ function renderReview(){
     if(dropBtn) dropBtn.onclick=()=>{
       /* Discard never batches. Deleting six rows on one tap, from a checkbox
          whose label talks about filing, is not a thing the queue gets to do. */
+      const row={...S.txns.find(x=>x.id===id)};
       S.txns=S.txns.filter(x=>x.id!==id);
-      save(); dropReviewCard(id); refreshQueueHeader(); renderRest(); toast("Discarded");
+      save(); dropReviewCard(id); refreshQueueHeader(); renderRest();
+      toastUndo("Discarded "+row.merchant, ()=>{
+        S.txns.push(row); S.txns.sort(byDateDesc);
+        save(); renderReview(); renderRest(); toast("Back in the queue");
+      });
     };
     card.querySelectorAll("[data-billdup]").forEach(b=>b.onclick=()=>{
       resolveBillDuplicate(id, b.dataset.billdup);
@@ -4539,6 +4620,7 @@ function renderReview(){
    and all. "Different" \u2014 they were never the same charge; the import
    simply resembled one, so it's released to stand on its own beside it. */
 function resolveBillDuplicate(id, mode){
+  bumpData();
   const t=S.txns.find(x=>x.id===id);
   if(!t) return;
   if(mode==="replace"){
@@ -4582,6 +4664,21 @@ function renderLedger(){
   fb.querySelectorAll("button").forEach(b=>b.onclick=()=>{ ledgerFilter=b.dataset.f; renderLedger(); });
 
   let rows=d.live.slice().sort(byDateDesc);
+  /* Matches merchant, category, the raw statement text and the amount, so
+     "trader", "groceries" and "41" all find the same row. Amount matches on the
+     digits either side of the decimal, which is how people search for one:
+     "41" finds $41.00 and $141.99, and "41.2" finds $41.20. */
+  const q=(ledgerQuery||"").trim().toLowerCase();
+  if(q){
+    rows=rows.filter(t=>{
+      const amt=Math.abs(Number(t.amount)||0).toFixed(2);
+      return String(t.merchant||"").toLowerCase().includes(q)
+          || String(t.category||"").toLowerCase().includes(q)
+          || String(t.rawDesc||"").toLowerCase().includes(q)
+          || String(t.date||"").includes(q)
+          || amt.includes(q);
+    });
+  }
   if(TC().includes(ledgerFilter)||FC().includes(ledgerFilter))
     rows=rows.filter(t=>t.category===ledgerFilter);
   else if(ledgerFilter==="Fixed") rows=rows.filter(t=>FC().includes(t.category));
@@ -4589,7 +4686,12 @@ function renderLedger(){
   else if(ledgerFilter!=="all") rows=rows.filter(t=>personOf(t)===ledgerFilter);
 
   const el=document.getElementById("ledgerList");
-  if(!rows.length){ el.innerHTML='<div class="empty">Nothing here for '+ymLabel(cursor)+'.</div>'; return; }
+  if(!rows.length){
+    el.innerHTML='<div class="empty">'
+      + (q ? 'Nothing in '+ymLabel(cursor)+' matches \u201c'+esc(q)+'\u201d.'
+           : 'Nothing here for '+ymLabel(cursor)+'.')+'</div>';
+    return;
+  }
   el.innerHTML=rows.map(t=>{
     const signed=t.type==="refund"?-Math.abs(t.amount):t.amount;
     const tags=(t.type==="transfer"?'<span class="tag xfer">'+(t.crossAccount?"card payment":"transfer")+'</span>':"")
@@ -4608,6 +4710,7 @@ function renderLedger(){
   el.querySelectorAll(".txn").forEach(r=>r.onclick=()=>openEditor(r.dataset.id));
 }
 function reopen(id){
+  bumpData();
   const t=S.txns.find(x=>x.id===id); if(!t) return;
   t.pending=true; t.reason="reopened";
   REASON_TEXT["reopened"]="You sent this back for another look";
@@ -4711,13 +4814,22 @@ function openEditor(id){
   b.querySelector("#eReview").onclick=()=>{ const id=editId; closeEditor(); reopen(id); };
   b.querySelector("#eDel").onclick=()=>{
     const t2=S.txns.find(x=>x.id===editId); if(!t2) return;
-    if(!confirm("Delete "+t2.merchant+" for "+money2(t2.amount)+" on "+t2.date+"?")) return;
     const id=editId;
+    /* Everything needed to put it back exactly as it was, including which
+       refunds were pointing at it — restoring the row but not its links would
+       leave those refunds filed into a month they can no longer justify. */
+    const row={...t2};
+    const linked=S.txns.filter(x=>x.linkedTo===id).map(x=>x.id);
     S.txns=S.txns.filter(x=>x.id!==id);
-    /* A refund pointing at a charge that no longer exists would keep filing
-       itself into a month it can no longer justify. */
     for(const x of S.txns) if(x.linkedTo===id) x.linkedTo=null;
-    closeEditor(); save(); renderAll(); toast("Deleted");
+    closeEditor(); save(); renderAll();
+    toastUndo("Deleted "+row.merchant, ()=>{
+      S.txns.push(row);
+      const back=new Set(linked);
+      for(const x of S.txns) if(back.has(x.id)) x.linkedTo=id;
+      S.txns.sort(byDateDesc);
+      save(); renderAll(); toast("Restored");
+    });
   };
 
   tuckHints(b);
@@ -4743,6 +4855,7 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape" && editId) closeEdi
      - the dedup hash is rebuilt from account, date and amount, or the next
        import of the same statement would no longer recognise this row. */
 function applyEdit(id,p){
+  bumpData();
   const t=S.txns.find(x=>x.id===id); if(!t) return null;
   t.merchant=p.merchant||t.merchant;
   t.amount=Math.abs(Number(p.amount))||0;
@@ -5769,14 +5882,22 @@ function renderPlan(){
   }
 
   const cats=S.settings.categories||CAT_ROLE_SEED;
+  const planTargets=targetsFor(cursor);
   document.getElementById("targetInputs").innerHTML=cats.map(c=>
     '<div class="spread" style="margin-bottom:9px;align-items:center;gap:7px" data-row="'+c.id+'">'
     + '<input type="text" maxlength="2" data-icon="'+c.id+'" aria-label="Glyph for '+esc(c.name)+'" '
     +   'style="width:38px;text-align:center;padding:9px 3px;flex:none" value="'+esc(catIcon(c.name))+'">'
     + '<input type="text" data-name="'+c.id+'" aria-label="Category name" '
     +   'style="flex:1;min-width:0" value="'+esc(c.name)+'">'
+    /* targetsFor(cursor), NOT S.settings.targets. The plan went per-month and
+       this one input was left reading the old global, which nothing has
+       written since. Every consequence followed from that: "Copy averages into
+       my limits" wrote the plan correctly and the boxes below it never moved,
+       and then Save read those stale boxes and wrote them straight back over
+       the copy. The feature worked for exactly as long as it took to press the
+       button underneath it. */
     + '<input type="number" inputmode="decimal" step="10" data-target="'+c.id+'" aria-label="Monthly limit for '+esc(c.name)+'" '
-    +   'style="width:84px;flex:none" value="'+(S.settings.targets[c.name]??"")+'">'
+    +   'style="width:84px;flex:none" value="'+(planTargets[c.name]??"")+'">'
     + (cats.length>1
         ? '<button type="button" class="link overc" data-del="'+c.id+'" aria-label="Remove '+esc(c.name)+'" '
           + 'style="flex:none;font-size:16px;text-decoration:none;padding:4px 2px">\u2715</button>'
@@ -5827,6 +5948,15 @@ function renameCategory(id, newName){
     toast("Another category is already named "+newName); return false;
   }
   S.txns.forEach(t=>{ if(t.category===old) t.category=newName; });
+  /* The limit is keyed by NAME inside every month's plan, so a rename has to
+     follow it into all of them. Rekeying only the legacy global left every
+     plan pointing at a name that no longer exists: the limit read as 0,
+     targetTotal collapsed, and the month's verdict flipped to "no limits set"
+     — from renaming a category. */
+  for(const P of Object.values(plans())){
+    const t=P.targets||{};
+    if(old in t){ t[newName]=t[old]; delete t[old]; }
+  }
   const tg=S.settings.targets||{};
   if(old in tg){ tg[newName]=tg[old]; delete tg[old]; }
   const ic=S.settings.catIcons||{};
@@ -5857,6 +5987,10 @@ function removeCategory(id){
 
   const dest=catchAllName();
   S.txns.forEach(t=>{ if(t.category===c.name) t.category=dest; });
+  /* Same reasoning as the rename: the limit lives in each month's plan. A
+     leftover entry under a category that no longer exists is invisible in the
+     editor and still sitting in the saved plan. */
+  for(const P of Object.values(plans())) delete (P.targets||{})[c.name];
   delete (S.settings.targets||{})[c.name];
   delete (S.settings.catIcons||{})[c.name];
   for(const k of Object.keys(S.settings.rules||{}))
@@ -6198,35 +6332,131 @@ function renderHeader(){
   btn.className="main "+v.state;
   btn.setAttribute("aria-label", mainTabName()+" \u2014 "+v.word);
 }
+/* ---------- render by section ----------
+   renderAll() drew all seventeen renderers on every call, and renderRest()
+   drew sixteen of them on every single review tap. Measured at eighteen months
+   of data that is ~690ms a tap, and where it goes is the whole story:
+
+     renderSmallMultiples  331ms
+     renderTrend           127ms
+     renderHistory          60ms
+     ...everything else     171ms combined
+
+   The three most expensive are the entire Analysis tab, which is not on screen
+   while you are tapping through a review queue. The fix is not to make them
+   faster. It is to not draw a screen nobody is looking at.
+
+   (The first attempt here was memoizing monthData, on the theory from the
+   audit that recomputing it dozens of times per render was the cost. It moved
+   728ms to 712ms. The memo is kept — it is correct and it makes the sections
+   that DO draw cheaper — but the diagnosis was wrong, and profiling took five
+   minutes where guessing had taken an hour.)
+
+   A section not drawn is marked dirty and drawn on the way in, so it is never
+   stale when you get there — only when nobody can see it. */
+const SECTION_RENDERERS={
+  /* renderDash() is a monolith: it draws the Spending cards AND the Saving
+     tab's saveCard and outlookCard. Splitting it is a real refactor for 43ms,
+     which is not a trade worth making, so both sections share it and Saving
+     redraws a little more than it needs to. The 518ms that mattered was all on
+     Analysis, and that is separated. */
+  dash:     ()=>{ renderDash(); renderCommitted(); renderProject(); },
+  saving:   ()=>{ renderDash(); renderProject(); },
+  plan:     ()=>{ renderPlan(); },
+  /* Only the visible group is drawn. Small multiples alone is 331ms; drawing
+     it because it happens to live on this tab, while the user is looking at
+     the KPI cards, is the whole reason this tab was slow. */
+  analysis: ()=>{
+    const g=anaGroup();
+    document.querySelectorAll("#v-analysis .anag").forEach(c=>c.hidden=c.dataset.g!==g);
+    document.querySelectorAll("#anaGroup button").forEach(b=>
+      b.setAttribute("aria-pressed", String(b.dataset.g===g)));
+    if(g==="overview"){ renderKPIs(); renderTrend(); }
+    if(g==="categories"){ renderSmallMultiples(); renderCreep(); }
+    if(g==="history"){ renderHistory(); renderAnalysis(); }
+  },
+  review:   ()=>{ renderReview(); },
+  ledger:   ()=>{ renderLedger(); },
+  settings: ()=>{ renderProfile(); renderRules(); renderData(); }
+};
+const dirty=new Set();
+function anaGroup(){
+  const g=S.settings.anaGroup;
+  return ["overview","categories","history"].includes(g) ? g : "overview";
+}
+
+/* Draw one section now and mark it clean. */
+function renderSection(v){
+  const f=SECTION_RENDERERS[v];
+  if(!f) return;
+  f(); dirty.delete(v);
+  /* tuckHints runs over the whole document, not just this section: the static
+     hints in the other tabs are in the DOM from page load, and scoping left
+     them loose until you happened to navigate there. It costs about 1ms for
+     all of them, so there is nothing to buy by being clever.
+     Counts are scoped — a figure nobody can see does not need to animate. */
+  tuckHints();
+  runCounts(document.getElementById("v-"+v)||undefined);
+}
+
+/* Draw what is on screen, and note that everything else needs redrawing before
+   it is next shown. The header is always drawn: the verdict pip and the review
+   badge are visible from every tab. */
+function renderVisible(){
+  renderHeader();
+  const cur=currentView();
+  Object.keys(SECTION_RENDERERS).forEach(v=>{ if(v!==cur) dirty.add(v); });
+  renderSection(cur);
+}
+function currentView(){
+  const on=document.querySelector("section.on");
+  return on ? on.id.replace(/^v-/,"") : "dash";
+}
+
 /* Everything EXCEPT the review list. Resolving a card has to update the rest
    of the app — the hero moves, the badge moves, the ledger gains a row — but
    rebuilding the queue's innerHTML underneath a thumb that is mid-tap is how a
    forty-row backfill gets abandoned: the list shortens, the page reflows, and
    the next card is no longer where you were looking. */
-function renderRest(){ renderHeader(); renderDash(); renderLedger();
-  renderCommitted(); renderKPIs(); renderTrend(); renderSmallMultiples();
-  renderHistory(); renderCreep(); renderProject(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData();
-  tuckHints(); runCounts(); }
-function renderAll(){ renderHeader(); renderDash(); renderReview(); renderLedger();
-  renderCommitted(); renderKPIs(); renderTrend(); renderSmallMultiples();
-  renderHistory(); renderCreep(); renderProject(); renderAnalysis(); renderPlan(); renderProfile(); renderRules(); renderData();
-  tuckHints(); runCounts(); }
+function renderRest(){
+  renderHeader();
+  const cur=currentView();
+  Object.keys(SECTION_RENDERERS).forEach(v=>{ if(v!==cur) dirty.add(v); });
+  /* Review is the one section renderRest must not touch: the caller is
+     removing a card from it by hand, and redrawing would undo that. */
+  dirty.add("review");
+  if(cur!=="review") renderSection(cur);
+}
+function renderAll(){ renderVisible(); }
 function go(v){
   /* "bills" isn't a section of its own \u2014 it's the Bills half of the scope
      toggle on Spending. Anything that used to link straight to the old Bills
      tab lands here instead, with that scope already selected. */
+  /* A search is a thing you are doing, not a setting. Leaving the box filled
+     means coming back to a ledger that appears to have lost most of your
+     transactions. */
+  if(v!=="ledger" && ledgerQuery){
+    ledgerQuery="";
+    const box=document.getElementById("ledgerSearch");
+    if(box) box.value="";
+    dirty.add("ledger");
+  }
   if(v==="bills"){
     if(S.settings.catScope!=="fixed"){ S.settings.catScope="fixed"; save(); renderDash(); }
     v="dash";
   }
   document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-current",x.dataset.v===v));
   document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));
+  /* Draw on the way in, so a section is never stale when it becomes visible —
+     only while nobody can see it. */
+  if(dirty.has(v)) renderSection(v);
   window.scrollTo({top:0,behavior:"instant"});
   if(v==="dash") drawLine();
 }
 
 let saveT;
 function save(){
+  bumpData();
   clearTimeout(saveT);
   saveT=setTimeout(async()=>{
     if(!await Store.set(KEY,JSON.stringify(S))) toast("Could not save \u2014 export a backup");
@@ -6324,6 +6554,21 @@ document.getElementById("addAsk").onclick=()=>{
 document.getElementById("mprev").onclick=()=>{ cursor=ymShift(cursor,-1); renderAll(); };
 document.getElementById("mnext").onclick=()=>{ cursor=ymShift(cursor,1); renderAll(); };
 
+document.querySelectorAll("#anaGroup button").forEach(b=>b.onclick=()=>{
+  S.settings.anaGroup=b.dataset.g; save(); renderSection("analysis");
+  window.scrollTo({top:0,behavior:"instant"});
+});
+
+/* Debounced, because re-filtering and rebuilding the list on every keystroke
+   of a search over a couple of thousand rows is exactly the kind of thing that
+   makes a phone keyboard feel like it is sticking. */
+let ledgerSearchT;
+const ledgerSearchEl=document.getElementById("ledgerSearch");
+if(ledgerSearchEl) ledgerSearchEl.oninput=()=>{
+  clearTimeout(ledgerSearchT);
+  ledgerSearchT=setTimeout(()=>{ ledgerQuery=ledgerSearchEl.value; renderLedger(); },140);
+};
+
 document.querySelectorAll("#anaMode button").forEach(b=>b.onclick=()=>{
   S.settings.anaMode=b.dataset.a; save(); renderAnalysis();
 });
@@ -6354,7 +6599,15 @@ document.getElementById("saveTargets").onclick=()=>{
     const c=catById(i.dataset.target); if(!c) return;
     const v=Number(i.value); if(v>0) t[c.name]=v;
   });
-  if(monthClosed(cursor)){ toast(cycleLabel(cursor)+" is closed \u2014 its plan is locked"); return; }
+  /* Renames and glyphs are not month-scoped and have already been applied
+     above, so a closed month refuses the LIMITS and keeps the rest. It used to
+     return here without saving at all, which left the renames applied in
+     memory and gone on the next reload. */
+  if(monthClosed(cursor)){
+    save(); renderAll();
+    toast(cycleLabel(cursor)+" is closed \u2014 names saved, limits left as they were");
+    return;
+  }
   setPlan(cursor,{targets:t}); save(); renderAll();
   toast("Plan saved for "+cycleLabel(cursor));
 };
