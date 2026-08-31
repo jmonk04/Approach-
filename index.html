@@ -500,6 +500,31 @@ details.tuck>.hint{margin-top:4px}
   border:1px dashed var(--rule);align-items:flex-start;line-height:1.4;display:flex;gap:8px}
 .batchline strong{color:var(--ink);font-variant-numeric:tabular-nums}
 
+/* ---- the planning row ----
+   Name, limit, and how the two compare, in one line. Sized so the number you
+   are editing is never the thing that wraps. */
+.crow{display:flex;align-items:center;gap:7px;padding:10px 0;border-top:1px solid var(--rule)}
+.crow:first-child{border-top:0;padding-top:2px}
+.crow .cicon{width:38px;flex:none;text-align:center;padding:9px 3px}
+.crow .cname{flex:1;min-width:0}
+.crow .cname input{width:100%}
+.crow .climit{width:84px;flex:none}
+.crow .cdel{flex:none;width:22px;font-size:var(--f5);text-decoration:none;padding:4px 2px;
+  background:none;border:0;text-align:center}
+/* The comparison, said without words: filled length is the limit, the tick is
+   what you actually average. Same scale on every row so they read against each
+   other, not each against itself. */
+.cbar{height:4px;border-radius:3px;background:var(--track);margin-top:7px;position:relative}
+.cbar i{position:absolute;top:0;bottom:0;left:0;border-radius:3px;background:var(--quiet);opacity:.5}
+.cbar u{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;
+  background:var(--ink);border-radius:2px}
+.cavg{font-size:var(--f2);color:var(--quiet);margin-top:5px;font-family:var(--mono)}
+.cavg.overc{color:var(--over)}
+/* The allocation meter that replaced three stacked totals. */
+.meter{height:8px;border-radius:5px;background:var(--track);overflow:hidden}
+.meter i{display:block;height:100%;border-radius:5px;transition:width .3s ease}
+@media (prefers-reduced-motion:reduce){.meter i{transition:none}}
+
 /* ---- month close ----
    The one ritual a budgeting app has. Every figure in here was already being
    computed; it was just never shown at the only moment it means anything. */
@@ -859,7 +884,16 @@ body.noscroll{overflow:hidden}
           <input type="text" id="newCat" placeholder="Kids, Travel, Boat fund&hellip;" style="flex:1">
           <button class="btn" id="addCat" style="width:auto;padding:11px 16px">Add</button>
         </div>
-        <button class="btn" id="saveTargets" style="margin-top:12px">Save</button>
+        <!-- "Copy averages into my limits" used to sit at the bottom of the
+             read-only comparison list, a screen above the inputs it fills. With
+             that list merged into these rows it belongs next to Save: both
+             buttons write the same thing, one from your typing and one from
+             your history. Only offered in history mode, where the averages are
+             the yardstick. -->
+        <div class="row" style="gap:8px;margin-top:12px">
+          <button class="btn ghost" id="useAvgs" hidden style="flex:1">Use my averages</button>
+          <button class="btn" id="saveTargets" style="flex:1">Save</button>
+        </div>
       </details>
     </div>
     <div class="card">
@@ -2441,6 +2475,52 @@ function cashOnHand(){
   return null;
 }
 
+/* The projection curve, pulled out of outlook() so it can be reasoned about
+   and tested at any point in a cycle rather than only at whatever today
+   happens to be. Pure: every input is passed in.
+
+     pace          fraction of the cycle elapsed, 0..1
+     discNet       discretionary that has actually gone out
+     discRate      what the observed rate extrapolates to by the last day
+     discBaseline  what you INTEND the month to cost — your limits, or your
+                   recent average when you have not set any. null if neither
+                   exists, in which case there is nothing to lean on and the
+                   observed rate is all there is.
+     fixedKnown    non-discretionary posted + declared and still to come
+     ndTypical     what non-discretionary normally costs you, from closed
+                   months. null when no month has closed.
+
+   The shape of it: at pace 0 there is nothing to measure and the plan is the
+   only evidence, at pace 1 the plan is irrelevant and the receipts are the
+   whole answer, and in between it slides linearly from one to the other. */
+function projectSpend({pace, closed, discNet, discRate, discBaseline, fixedKnown, ndTypical}){
+  const w = closed ? 1 : Math.min(1, Math.max(0, pace||0));
+  const discProj = (closed || discBaseline==null)
+    ? (closed ? discNet : discRate)
+    : Math.max(discNet, w*discRate + (1-w)*discBaseline);
+  /* Non-discretionary the app cannot see: rent that was never declared as a
+     bill still gets paid.
+
+     The first attempt decayed this gap by (1-pace), reasoning that a cost which
+     had not appeared by day 28 was probably not coming. Plotting the curve
+     killed it: with half the month posted the gap is half of $3,800, decaying
+     that by half gives $950, and the projection sagged to $2,850 in the middle
+     of a month that costs $3,800 every time. The decay double-counted — the
+     unposted remainder IS what is still coming, and discounting it assumes the
+     bills already landed AND that the rest will not.
+
+     No decay. While the cycle is open, non-discretionary is at least what a
+     month of yours normally costs. It converges the moment the month closes,
+     where only what actually happened counts.
+
+     This leans conservative on purpose: a month that genuinely has fewer bills
+     reads low on surplus until it closes. That is the right direction to be
+     wrong in, and the fix is in the user's hands — declare the recurring bills
+     and this becomes a schedule instead of an estimate. The card says so. */
+  const ndUnseen = (!closed && ndTypical!=null) ? Math.max(0, ndTypical - fixedKnown) : 0;
+  return { discProj, fixedProj: fixedKnown + ndUnseen, ndUnseen, weight:w };
+}
+
 function outlook(ym){
   const d=monthData(ym), b=billsThisMonth(ym), g=trajectory(ym);
   const dim=daysIn(ym), closed=paceOf(ym)>=1;
@@ -2451,14 +2531,44 @@ function outlook(ym){
   const notes=[];
 
   /* ---- 1. SURPLUS: a full-cycle P&L, not a bank balance. Take-home minus
-     everything that will have gone out by the last day. Discretionary is
-     PROJECTED, not spend-to-date, or the surplus flatters you every day of the
-     cycle until the last one. */
-  const discProj  = closed ? d.discNet : Math.max(g.headed, d.discNet);
+     everything that will have gone out by the last day.
+
+     Both sides used to be projected from what the app could SEE, and early in
+     a cycle it can see almost nothing. Discretionary ran off the spend rate so
+     far, which on day 3 is one lunch extrapolated over thirty days.
+     Non-discretionary counted what had posted plus what was DECLARED as a
+     bill — so every recurring cost that was never declared simply did not
+     exist yet. On $11,800 of take-home against a real $3,800 + $3,800 month,
+     that read as $8,400 saved on day 8. The number was not wrong about what
+     had happened; it was answering the wrong question, because the tab asks
+     what the month will END at.
+
+     Both sides now fall back on what a month of yours normally costs and
+     converge on what this one actually did, so the figure is reasonable on
+     day 1 and exact on day 30.
+
+     `pace` is the fraction of the cycle elapsed, and it is the weight. */
+  const pace2 = closed ? 1 : Math.min(1, Math.max(0, paceOf(ym)));
+  const tt    = targetTotal(ym);
+  const hist  = historyAvg(3);
+  const ndAvg = avgNonDiscretionary(3);
+  const ndTypical  = ndAvg.months && !ndAvg.live ? ndAvg.amount : null;
+
+  /* Discretionary: your own limits are the best statement of what you intend
+     this month to cost, and your recent average is the fallback when you have
+     not set any. Weighted against the observed rate by how much of the cycle
+     has actually happened — on day 1 the plan is the only evidence there is,
+     on day 30 the plan is irrelevant and the receipts are the answer. Never
+     below what has already gone out. */
+  const discBaseline = tt>0 ? tt : (hist.months ? hist.total : null);
+  const discRate = Math.max(g.headed, d.discNet);
   /* Your share of non-discretionary: what has posted, plus what is still
      expected, MINUS what Maja reimburses. A rent split is not income. */
   const fixedGross = (d.fixed - d.refundsFixed) + b.toCome;
-  const fixedProj  = fixedGross - b.offsetTotal;
+  const fixedKnown = fixedGross - b.offsetTotal;
+  const proj = projectSpend({ pace:pace2, closed, discNet:d.discNet, discRate,
+                              discBaseline, fixedKnown, ndTypical });
+  const discProj = proj.discProj, fixedProj = proj.fixedProj, ndUnseen = proj.ndUnseen;
   /* Cash out is money that has left the account, so it has to come off the
      surplus or the projected balance is wrong. Taken at face value rather than
      projected forward: ATM withdrawals are lumpy, and running one $140 trip on
@@ -2498,6 +2608,22 @@ function outlook(ym){
       notes.push("Scheduled paychecks total "+money(scheduledPay)+" against the "
         +money(stated)+" take-home in your profile. One of them is out of date.");
   }
+  /* Say out loud when the figure is leaning on history rather than on this
+     month's receipts, and how hard. Early in a cycle that is most of it. */
+  if(!closed && pace2<0.95){
+    const parts=[];
+    if(discBaseline!=null && pace2<0.9)
+      parts.push("discretionary is "+Math.round((1-pace2)*100)+"% "
+        +(tt>0?"your limits":"your recent average")+" and "
+        +Math.round(pace2*100)+"% this month's rate");
+    if(ndUnseen>0.5)
+      parts.push(money(ndUnseen)+" of non-discretionary is expected but has neither "
+        +"posted nor been declared as a bill \u2014 declare your recurring bills and this "
+        +"becomes a schedule instead of an estimate");
+    if(parts.length)
+      notes.push("Day "+Math.max(1,dayIndex(todayISO(),ym))+" of "+dim+", so this is still "
+        +"partly a forecast: "+parts.join("; ")+".");
+  }
   if(stated<=0) notes.push("No take-home set, so there is no surplus to compute. Add it in Profile.");
   if(d.heldAmt>0) notes.push(money(d.heldAmt)+" held for review is in neither figure.");
 
@@ -2514,9 +2640,21 @@ function outlook(ym){
              const base=stated-(d.cashIn||0);
              const rows=[{ label:"Take-home", amt:base, dir:"in" }];
              if(d.cashIn>0) rows.push({ label:"Cash in", amt:d.cashIn, dir:"in" });
-             rows.push({ label:closed?"Discretionary spending":"Discretionary at this rate",
+             /* The labels have to say WHICH number this is. "Discretionary at
+                this rate" was true of the old arithmetic and is no longer true
+                of this one, and a waterfall you cannot reconcile against the
+                hero is not proof of anything. */
+             rows.push({ label:closed ? "Discretionary spending"
+                           : (discBaseline!=null ? "Discretionary, projected"
+                                                 : "Discretionary at this rate"),
                          amt:discProj, dir:"out" });
              rows.push({ label:"Bills, utilities and housing", amt:fixedGross, dir:"out" });
+             /* Shown as its own step rather than folded into the bills line: it
+                is the one figure here that is an estimate about things the app
+                has not seen, and it should be the easiest to argue with. */
+             if(ndUnseen>0.5)
+               rows.push({ label:"Non-discretionary not yet posted",
+                           amt:ndUnseen, dir:"out" });
              if(b.offsetTotal>0) rows.push({ label:"Reimbursed to you", amt:b.offsetTotal, dir:"in" });
              if(cashOut>0) rows.push({ label:"Cash out", amt:cashOut, dir:"out" });
              rows.push({ label:(surplus>=0?"Surplus":"Deficit")+" for the month",
@@ -4193,7 +4331,10 @@ function renderDash(){
       +   'ended, so the width of a step is what it cost you and its position is what was '
       +   'left at that point. Cash out is money that left the account with no category yet; '
       +   'cash in is money the month gained that is not your salary.'
-      +   (ok.closed?'':' Discretionary is projected to the last day at the current rate.')
+      +   (ok.closed?''
+           :' Early in a month there is little to measure, so both spending sides start '
+            +'from what a month of yours normally costs and shift onto this month\u2019s '
+            +'actuals as it fills in. By the last day the figure is only what happened.')
       +   '</p>'
       + '</details>';
   }
@@ -5789,46 +5930,40 @@ function renderAllowance(){
       ? '<div class="empty">'+(mode==="objective"
           ? "Add your monthly take-home in Profile, and a savings objective below, and the allowance appears here."
           : "No closed month to average yet. Import a full month and this fills in.")+'</div>'
-      : '<div class="spread" style="margin-top:14px"><span class="lt" style="margin:0">'
-        + (mode==="objective"?"Discretionary can be":"You normally spend")+'</span>'
-        + '<span class="num mid">'+money(a.limit)+'</span></div>'
-        + '<div class="sm muted" style="margin-top:-2px">'+esc(a.basis||"")+'</div>'
-        + '<div class="spread" style="margin-top:10px;border-top:1px solid var(--rule);padding-top:10px">'
-        + '<span class="lt" style="margin:0">Your limits total</span>'
-        + '<span class="num mid'+(a.excess>0.5?" overc":"")+'">'+money(a.committed)+'</span></div>'
-        + '<div class="spread" style="margin-top:4px"><span class="lt" style="margin:0">'
-        + (gap>=0?"Room left to allocate":"Over the allowance by")+'</span>'
-        + '<span class="num mid '+(gap>=0?"pathc":"overc")+'">'+money(Math.abs(gap))+'</span></div>'
-        + (a.excess>0.5
-           ? '<p class="hint" style="margin:10px 0 0">Nothing has been overspent — the plan '
-             + 'itself is more than the month allows. Trim a limit below, or switch '
-             + 'modes if this is the wrong yardstick.</p>'
-           : '<p class="hint" style="margin:10px 0 0">Set the limits below. This figure '
-             + 'moves as non-discretionary lands, so check it late in the month too.</p>');
+      /* Three totals used to stack here — what you normally spend, what your
+         limits come to, and the difference. Any two of those imply the third,
+         so it was one fact printed three times, each behind its own uppercase
+         label. One line and one meter now: the figure you are setting, against
+         the figure it has to fit inside. */
+      : (function(){
+          const pct = a.limit>0 ? Math.min(1, a.committed/a.limit) : 0;
+          const over = a.excess>0.5;
+          return '<div class="spread" style="margin-top:14px;align-items:baseline">'
+            + '<span class="lt" style="margin:0">Allocated</span>'
+            + '<span><span class="num mid' + (over?" overc":"") + '">' + money(a.committed) + '</span>'
+            + '<span class="num" style="color:var(--quiet)"> of ' + money(a.limit) + '</span></span></div>'
+            + '<div class="meter" style="margin-top:9px"><i style="width:' + (pct*100).toFixed(1)
+            + '%;background:var(--' + (over?"over":"path") + ')"></i></div>'
+            + '<p class="hint" style="margin:9px 0 0">'
+            + (over
+               ? money(a.excess) + ' more than ' + esc(a.basis||"the allowance")
+                 + '. Nothing has been overspent — the plan itself is bigger than the month '
+                 + 'allows. Trim a limit below, or switch modes if this is the wrong yardstick.'
+               : money(gap) + ' still unallocated against ' + esc(a.basis||"your allowance") + '.')
+            + '</p>';
+        })();
 
-  /* Per-category averages: the descriptive half. Useful in every mode —
-     knowing you set $400 against a $612 habit is the point. */
-  const rows = h.months
-    ? '<div class="eyebrow" style="margin:16px 0 6px">Limit vs your average</div>'
-      + TC().map(c=>{
-          const t=targetOf(cursor,c), av=h.byCat[c]||0;
-          const off = t>0 && av>0 ? av-t : null;
-          return '<div class="spread eq"><span>'+esc(withIcon(c))+'</span>'
-            + '<span class="num">'+(t>0?money(t):"\\u2014")+' / '+money(av)+'</span></div>'
-            + (off!=null && Math.abs(off)>1
-               ? '<div class="sm '+(off>0?"overc":"muted")+'" style="margin-top:-2px">'
-                 + (off>0?"averages "+money(off)+" above the limit"
-                        :money(-off)+" of headroom on average")+'</div>'
-               : '');
-        }).join("")
-      + '<p class="hint" style="margin-top:10px">Limit / average over the last '
-      + h.months+' closed month'+(h.months===1?"":"s")+'. The open month is excluded.</p>'
-      + (mode==="history"
-         ? '<button class="btn ghost" id="useAvgs">Copy averages into my limits</button>':'')
-    : "";
+  /* The per-category comparison used to live here as a second, read-only list
+     of every category — sitting directly above an editable list of the same
+     categories. Four names, four pairs of figures and four sentences, then the
+     same four names again with inputs. It is one list now: the average rides on
+     the row you type the limit into. See renderCeilings(). */
+  box.innerHTML=head;
 
-  box.innerHTML=head+rows;
+  /* The button is static markup now rather than being rebuilt into this card,
+     so its visibility is toggled rather than its existence. */
   const ua=document.getElementById("useAvgs");
+  if(ua) ua.hidden = !(mode==="history" && h.months);
   if(ua) ua.onclick=()=>{
     if(monthClosed(cursor)){ toast(cycleLabel(cursor)+" is closed \u2014 its plan is locked"); return; }
     const t={...targetsFor(cursor)};
@@ -5881,28 +6016,61 @@ function renderPlan(){
       + ' / '+money(a.limit)+'</span></div>');
   }
 
+  /* ONE row per category. It used to be two lists: a read-only "Limit vs your
+     average" block naming every category with its two figures and a sentence
+     restating the arithmetic those two figures already showed, and then,
+     immediately below, an editable list of exactly the same categories. Four
+     names, then the same four names again.
+
+     The comparison now rides on the row you type into. The bar is the limit;
+     the mark is what you actually average. A mark sitting past the end of the
+     bar is a category you routinely overrun — which is the entire content of
+     the four sentences that used to be here, said once, per row, without
+     words. */
   const cats=S.settings.categories||CAT_ROLE_SEED;
   const planTargets=targetsFor(cursor);
-  document.getElementById("targetInputs").innerHTML=cats.map(c=>
-    '<div class="spread" style="margin-bottom:9px;align-items:center;gap:7px" data-row="'+c.id+'">'
-    + '<input type="text" maxlength="2" data-icon="'+c.id+'" aria-label="Glyph for '+esc(c.name)+'" '
-    +   'style="width:38px;text-align:center;padding:9px 3px;flex:none" value="'+esc(catIcon(c.name))+'">'
-    + '<input type="text" data-name="'+c.id+'" aria-label="Category name" '
-    +   'style="flex:1;min-width:0" value="'+esc(c.name)+'">'
-    /* targetsFor(cursor), NOT S.settings.targets. The plan went per-month and
-       this one input was left reading the old global, which nothing has
-       written since. Every consequence followed from that: "Copy averages into
-       my limits" wrote the plan correctly and the boxes below it never moved,
-       and then Save read those stale boxes and wrote them straight back over
-       the copy. The feature worked for exactly as long as it took to press the
-       button underneath it. */
-    + '<input type="number" inputmode="decimal" step="10" data-target="'+c.id+'" aria-label="Monthly limit for '+esc(c.name)+'" '
-    +   'style="width:84px;flex:none" value="'+(planTargets[c.name]??"")+'">'
-    + (cats.length>1
-        ? '<button type="button" class="link overc" data-del="'+c.id+'" aria-label="Remove '+esc(c.name)+'" '
-          + 'style="flex:none;font-size:16px;text-decoration:none;padding:4px 2px">\u2715</button>'
-        : '<span style="width:20px;flex:none"></span>')
-    + '</div>').join("");
+  const havg=historyAvg(3);
+  /* One scale across every row, so the bars are comparable to each other
+     rather than each being its own private 100%. */
+  const scale=Math.max(1, ...cats.map(c=>
+    Math.max(Number(planTargets[c.name]||0), havg.byCat[c.name]||0)));
+
+  document.getElementById("targetInputs").innerHTML=cats.map(c=>{
+    const t=Number(planTargets[c.name]||0), av=havg.months ? (havg.byCat[c.name]||0) : 0;
+    const over = t>0 && av>t+1;
+    const barW = Math.min(100, (t/scale)*100);
+    const markX = Math.min(100, (av/scale)*100);
+    return '<div class="crow" data-row="'+c.id+'">'
+      + '<input type="text" maxlength="2" data-icon="'+c.id+'" aria-label="Glyph for '+esc(c.name)+'" '
+      +   'class="cicon" value="'+esc(catIcon(c.name))+'">'
+      + '<div class="cname">'
+      +   '<input type="text" data-name="'+c.id+'" aria-label="Category name" value="'+esc(c.name)+'">'
+      +   (av>0
+          ? '<div class="cbar"><i style="width:'+barW.toFixed(1)+'%"></i>'
+            + '<u style="left:'+markX.toFixed(1)+'%" aria-hidden="true"></u></div>'
+            + '<div class="cavg'+(over?" overc":"")+'">averages '+money(av)+'</div>'
+          : '')
+      + '</div>'
+      /* targetsFor(cursor), NOT S.settings.targets. The plan went per-month and
+         this one input was left reading the old global, which nothing has
+         written since. Everything followed from that: "Copy averages into my
+         limits" wrote the plan correctly, the boxes below never moved, and Save
+         then wrote the stale boxes back over the copy. */
+      + '<input type="number" inputmode="decimal" step="10" data-target="'+c.id+'" '
+      +   'aria-label="Monthly limit for '+esc(c.name)+'" class="climit" '
+      +   'value="'+(planTargets[c.name]??"")+'">'
+      + (cats.length>1
+          ? '<button type="button" class="link overc cdel" data-del="'+c.id+'" '
+            + 'aria-label="Remove '+esc(c.name)+'">\u2715</button>'
+          : '<span class="cdel" aria-hidden="true"></span>')
+      + '</div>';
+  }).join("")
+   + (havg.months
+      ? '<p class="hint">The bar is your limit; the mark is your average over the last '
+        + havg.months+' closed month'+(havg.months===1?"":"s")+'. A mark past the end of the '
+        + 'bar is a category you normally overrun. The open month is excluded.</p>'
+      : '');
+
   document.querySelectorAll("#targetInputs [data-del]").forEach(b=>b.onclick=()=>removeCategory(b.dataset.del));
 
   /* the equation */
