@@ -5664,16 +5664,60 @@ function renderCommitted(){
     : '<span class="sm '+(x>0?"overc":"pathc")+' num">'+(x>0?"+":"\u2212")
       + money(Math.abs(x))+'</span>';
 
+  /* The hero used to be the HOUSEHOLD bill, and so did the comparison to last
+     month and the ring. Your own figure was a small line near the bottom.
+     Everywhere else in the app — the surplus, the outlook, the projection —
+     already spends your share, so this was the one card answering a different
+     question from the rest of the app, with the biggest number on the screen.
+
+     Your share is the hero now. The household bill stays beside it rather than
+     being demoted, because "where did the money go" is a real question and the
+     ring below answers it in household terms.
+
+     The comparison moved with the hero. A month where the household bill rose
+     while your share fell used to read "$579 more" — the opposite of what
+     happened to your money. Whatever the big number is, the delta under it has
+     to be about the same money. */
+  const shared = b.offsetTotal>0.5;
+  const gross  = b.posted+b.toCome;
+  const mine   = shared ? b.net : gross;
+
+  /* Your share last cycle, on the same basis, so the two are comparable. */
+  const pb     = billsThisMonth(G.prevYM);
+  const prevMine = pb.offsetTotal>0.5 ? pb.net : (pb.posted+pb.toCome);
+  const myDelta  = mine - prevMine;
+  const canCompare = G.comparable && prevMine>0.5;
+
+  const deltaLine = canCompare
+    ? (Math.abs(myDelta)<1
+       ? "level with "+esc(cycleLabel(G.prevYM))
+       : '<span class="'+(myDelta>0?"overc":"pathc")+'">'+money(Math.abs(myDelta))
+         + (myDelta>0?" more":" less")+'</span> than '+esc(cycleLabel(G.prevYM)))
+    : "no earlier month to compare against yet";
+
   document.getElementById("commitTop").innerHTML=
     '<div class="spread"><span class="eyebrow">Non-discretionary</span>'
     +   '<span class="eyebrow">'+esc(cycleLabel(cursor))+'</span></div>'
-    + '<div class="big num" style="margin:8px 0 2px">'+money(b.posted+b.toCome)+'</div>'
-    + '<div class="sm muted">'
-    +   (G.comparable
-        ? (Math.abs(G.delta)<1 ? "level with "+esc(cycleLabel(G.prevYM))
-           : '<span class="'+(G.delta>0?"overc":"pathc")+'">'+money(Math.abs(G.delta))
-             + (G.delta>0?" more":" less")+'</span> than '+esc(cycleLabel(G.prevYM)))
-        : "no earlier month to compare against yet")+'</div>'
+    /* With nothing split there is only one figure, and printing it twice under
+       two labels would be the same sin in a smaller font. */
+    + (shared
+       ? '<div class="spread" style="margin:8px 0 2px;align-items:flex-end">'
+         + '<div><div class="big num">'+money(mine)+'</div>'
+         + '<div class="lt" style="margin-top:5px">your share</div></div>'
+         + '<div style="text-align:right"><div class="num mid muted">'+money(gross)+'</div>'
+         + '<div class="lt">billed</div></div></div>'
+       : '<div class="big num" style="margin:8px 0 2px">'+money(mine)+'</div>')
+    + '<div class="sm muted" style="margin-top:'+(shared?"8px":"0")+'">'+deltaLine
+    + (shared
+       ? ' \u00b7 <span class="num">'+money(b.offsetTotal)+'</span> reimbursed to you'
+         /* The ratio is worth stating whenever anything is split. It used to
+            appear only when the split came from a DECLARED bill, so a
+            reimbursement derived from a shared merchant showed the money and
+            not the arrangement that produced it. */
+         + ' \u00b7 '+(b.sharedItems.length?b.sharedItems.length+' split ':'split ')
+         + myPct()+'/'+(100-myPct())
+       : '')
+    + '</div>'
 
     /* Where the cash goes, largest first. Most rows read "unchanged" every
        month by design — that is what makes the one that moved visible. The
@@ -5693,21 +5737,24 @@ function renderCommitted(){
     + '</div>'
 
     + '<div class="vwhy" style="margin-top:10px">'
-    +   (b.toCome>0.5?'<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
+    /* Still-expected stays: it is the one number here that is a forecast.
+       The reimbursement and "Your share" rows that used to sit below it are
+       gone — both are in the header now, and repeating them under their own
+       labels was the same duplication in a smaller font. */
+    +   (b.toCome>0.5?'<div class="r"><span class="num mid" style="min-width:74px">'
     +     money(b.toCome)+'</span><span>still expected \u00b7 '+b.pending.length+' item'
     +     (b.pending.length===1?"":"s")+'</span></div>':'')
-    +   (b.offsetTotal>0?'<div class="r"><span class="num mid pathc" style="font-size:14px;min-width:74px">'
-    +     '\u2212'+money(b.offsetTotal)+'</span><span>reimbursed to you'
-    +     (b.sharedItems.length?' \u00b7 '+b.sharedItems.length+' split '+myPct()+'/'+(100-myPct()):'')
-    +     '</span></div>':'')
     + '</div>'
-    + (b.offsetTotal>0
-        ? '<div class="spread" style="margin-top:12px;border-top:1px solid var(--rule);padding-top:10px">'
-          + '<span class="lt" style="margin:0">Your share</span>'
-          + '<span class="num mid">'+money(b.net)+'</span></div>'
-        : '')
     + '<p class="hint" style="margin:10px 0 0">Non-discretionary comes out before your '
-    + 'limits, never against them.</p>';
+    + 'limits, never against them.'
+    /* Two figures on one card is a choice that has to be defensible, so it is
+       explained where it is made rather than left to be inferred. */
+    + (shared
+       ? ' The ring and the rows below are the household bill, because they answer where '
+         + 'the money went. The figure above is what the rest of the app spends \u2014 the '
+         + 'surplus, the outlook and the projection all use it.'
+       : '')
+    + '</p>';
 
   const list=document.getElementById("billList");
   const lines=fixedLines(cursor);
