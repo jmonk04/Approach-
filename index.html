@@ -500,6 +500,11 @@ details.tuck>.hint{margin-top:4px}
   border:1px dashed var(--rule);align-items:flex-start;line-height:1.4;display:flex;gap:8px}
 .batchline strong{color:var(--ink);font-variant-numeric:tabular-nums}
 
+/* ---- ledger multi-select ---- */
+.txn.picked{background:var(--track);box-shadow:inset 3px 0 0 var(--accent)}
+.pickbar{position:sticky;top:8px;z-index:20;margin-bottom:10px;
+  border:1px solid var(--rule)}
+
 /* ---- the planning row ----
    Name, limit, and how the two compare, in one line. Sized so the number you
    are editing is never the thing that wraps. */
@@ -828,6 +833,10 @@ body.noscroll{overflow:hidden}
       <label><span class="lt">Paid from</span><select id="mAcct"></select></label>
       <button class="btn" id="doManual">Add transaction</button>
     </div>
+    <!-- Money the app filed as an internal transfer that repeats like a bill.
+         Nothing here was ever shown to you: transfers skip the review queue by
+         design, so a rent payment sent by Zelle left no trace anywhere. -->
+    <div id="xferSort"></div>
     <div id="billSort"></div>
     <div id="recSort"></div>
   </section>
@@ -836,9 +845,16 @@ body.noscroll{overflow:hidden}
     <!-- You reach this screen by tapping a category, which means you already
          know roughly what you are looking for. Scrolling for it was the only
          option. -->
-    <input type="search" id="ledgerSearch" placeholder="Search this month"
-           autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="row" style="gap:8px">
+      <input type="search" id="ledgerSearch" placeholder="Search this month"
+             autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1">
+      <button class="btn ghost" id="ledgerSelBtn"
+              style="width:auto;padding:11px 14px">Select</button>
+    </div>
     <div class="filters" id="ledgerFilters"></div>
+    <!-- Sits above the list rather than inside it, so re-rendering rows cannot
+         tear the controls out from under a thumb mid-tap. -->
+    <div class="card pickbar" id="pickBar" hidden></div>
     <div class="card" id="ledgerList"></div>
   </section>
 
@@ -982,6 +998,23 @@ body.noscroll{overflow:hidden}
         <p class="hint">What the app decides on its own, and what you taught it. Change one
           and it offers to correct the transactions already filed under it.</p>
         <div id="rulesLearned"></div>
+      </div>
+      <!-- The third role. Discretionary categories are edited on Planning,
+           beside the limits they carry. These have no limits, so there is
+           nothing on Planning for them to sit next to. -->
+      <div class="card">
+        <div class="eyebrow">Unbudgeted</div>
+        <h2 style="margin:4px 0 6px">Costs that are nobody&rsquo;s plan</h2>
+        <p class="hint">Real money that left the account and was never budgeted for &mdash; a
+          repair on a rental property, a one-off you could not have planned. It counts
+          against your cash and your save rate, it counts against no limit, and it stays
+          out of the averages that set next month&rsquo;s plan, so one bad month does not
+          reshape the next three.</p>
+        <div id="unbCats"></div>
+        <div class="row" style="gap:8px;margin-top:8px">
+          <input type="text" id="newUnb" placeholder="Rental property, Medical&hellip;" style="flex:1">
+          <button class="btn" id="addUnb" style="width:auto;padding:11px 16px">Add</button>
+        </div>
       </div>
       <div class="card">
         <div class="eyebrow">Built in</div>
@@ -1144,6 +1177,32 @@ const CAT_ROLE_SEED = [
    None of them is a "ceiling" — a household does not budget discretionary
    spend against rent. */
 const FIXED_SEED = ["Housing","Bills/Utilities","Loans","Insurance","Subscriptions"];
+
+/* THE THIRD ROLE.
+   Every category used to be one of two things, and the bucketing said so:
+   in FC() it was non-discretionary, otherwise it was discretionary. A repair
+   on a rental property fits neither. Charged to a discretionary limit it
+   blames a month's groceries budget for a roof; filed as non-discretionary it
+   enters avgNonDiscretionary(), which is the baseline the surplus projection
+   leans on, so one $2,000 repair quietly costs you ~$667 of projected surplus
+   a month for the next three with nothing on screen to explain it.
+
+   Unbudgeted money is real money that left the account and is nobody's plan:
+
+     - it counts against CASH  — the surplus, the outlook, the projected
+       balance, the save rate. It is gone;
+     - it does not count against LIMITS — no trajectory, no ribbon, no verdict;
+     - it enters NEITHER baseline — excluded from historyAvg() and from
+       avgNonDiscretionary(), so a one-off never reshapes the next three months
+       of planning.
+
+   The pattern is not new here. Cash out already works this way: in `net`,
+   out of `discNet`, its own line. This makes it something you can name. */
+const UNBUDGETED_SEED = ["Rental Property","One-off"];
+function UC(){
+  const u=(S.settings||{}).unbudgetedCategories;
+  return Array.isArray(u) ? u : UNBUDGETED_SEED;
+}
 function FC(){
   const f=(S.settings||{}).fixedCategories;
   return Array.isArray(f)&&f.length ? f : FIXED_SEED;
@@ -1161,7 +1220,9 @@ function catchAllCat(){
 }
 function catchAllName(){ return (catchAllCat()||{}).name || "Uncategorized"; }
 const SYS_CATS    = ["Transfer","Income","Savings"];
-function ALL_CATS(){ return [...TC(), ...FC(), ...SYS_CATS]; }
+function ALL_CATS(){ return [...TC(), ...FC(), ...UC(), ...SYS_CATS]; }
+/* Everything you can file a charge to, in the order the buttons should read. */
+function SPEND_CATS(){ return [...TC(), ...FC(), ...UC()]; }
 
 /* Accounts are user-defined. There is no per-bank parser anywhere in this file
    and there should never be one: CSV shape is sniffed from the header row. What
@@ -1201,6 +1262,7 @@ const DEFAULTS = {
   anaGroup: "overview",  // which third of the Analysis tab is on screen
   catScope: "disc",      // spending-plan card: "disc" or "fixed" (non-discretionary)
   fixedCategories: [...FIXED_SEED],  // editable non-discretionary groups
+  unbudgetedCategories: [...UNBUDGETED_SEED], // hits cash, hits no limit, enters no baseline
   fixedMigrated: false,  // set once the old two-bucket model has been folded in
   cashAcctAdded: false,  // set once the Cash account has been backfilled
   billDupesMerged: false,// set once duplicate declared bills have been collapsed
@@ -1218,6 +1280,8 @@ const DEFAULTS = {
              accent:"ink", blur:false, launch:"dash", defaultPerson:"" },
   catIcons: {},         // pillar -> one glyph
   splitPct: 60,         // percent of a shared bill that is yours
+  typeRules: {},        // merchant -> confirmed type (transfer | income | savings | ...)
+  xferOk: [],           // recipients you have confirmed really are transfers
   shared: {},           // bill name -> true when that bill is split
   accounts: null,       // user-defined; null falls back to ACCOUNT_SEED
   cash: null,           // {amount, date} you typed, for when imports carry no balance
@@ -1330,7 +1394,15 @@ function titleCase(s){
 
 /* ---------- classification ---------- */
 const AMEX_PAY_RX  = /(payment\s*[-\u2013]?\s*thank\s*you|mobile payment|online payment|american express\s*(ach|pmt|payment|e-?pay)|\bamex\b\s*(ach|pmt|payment))/i;
-const TRANSFER_RX  = /(transfer|zelle|venmo|cash app|paypal transfer|to savings|from savings|internal)/i;
+/* Genuinely internal money movement: your own accounts, your own card. */
+const TRANSFER_RX  = /(\btransfer\b|to savings|from savings|internal)/i;
+/* Person-to-person payment apps are NOT internal movement. They are how people
+   pay rent, childcare, a contractor and a friend, and the app cannot tell which
+   from the statement line. Guessing "transfer" excluded them from every total,
+   from recurrence detection, from bill matching AND from the review queue — so
+   a rent payment vanished with nothing anywhere to notice. They are held for
+   your call once per recipient instead, and remembered after that. */
+const PAYAPP_RX    = /(zelle|venmo|cash ?app|paypal)/i;
 const INCOME_RX    = /(payroll|direct dep|dfas|dfas-cleveland|salary|navy fed.*dep|deposit)/i;
 const SAVINGS_RX   = /(savings|tsp|thrift savings|vanguard|fidelity|brokerage|529|ira contrib)/i;
 
@@ -1383,7 +1455,7 @@ function ruleKey(m){ return String(m||"").toLowerCase().trim(); }
 function baseType(t){
   const raw = t.rawDesc||"";
   if (AMEX_PAY_RX.test(raw)) return "transfer";
-  if (TRANSFER_RX.test(raw)) return "transfer";
+  if (TRANSFER_RX.test(raw) && !PAYAPP_RX.test(raw)) return "transfer";
   if (t.amount < 0) return INCOME_RX.test(raw) ? "income" : "refund";
   if (SAVINGS_RX.test(raw)) return "savings";
   return "spend";
@@ -1412,7 +1484,21 @@ function assess(t, pool){
      and inflate detected income, which inflates the save rate. */
   if (t.dupeOf) return { ok:false, reason:"duplicate" };
 
-  if (t.type === "transfer" || t.type === "income" || t.type === "savings") return { ok:true, reason:"" };
+  /* These three used to return ok and vanish. Between them they have now eaten
+     rent paid by Zelle (guessed transfer, excluded from every total) and $4,200
+     of per diem (guessed income, then discarded, because a typed take-home
+     means detected deposits are ignored). Both were silent: no card, no flag,
+     nothing to notice. Money that the app decides about on its own, and then
+     removes from every figure, is the one thing it must not do quietly.
+
+     Asked once per merchant and remembered. A card payment is exempt because
+     there is nothing to ask: "MOBILE PAYMENT - THANK YOU" on a credit card is
+     a card payment and no other thing. */
+  if (t.type === "transfer" || t.type === "income" || t.type === "savings"){
+    if (AMEX_PAY_RX.test(t.rawDesc||"")) return { ok:true, reason:"" };
+    if (typeRuleFor(t.merchant)) return { ok:true, reason:"" };
+    return { ok:false, reason:"auto-typed" };
+  }
 
   if (t.type === "refund" && !t.linkedTo) return { ok:false, reason:"unmatched-refund" };
 
@@ -1490,8 +1576,20 @@ const REASON_TEXT = {
   "ambiguous-merchant": "This merchant lands in different buckets each time",
   "new-merchant":       "First time seeing this merchant",
   "amount-outlier":     "Much larger than usual for this merchant",
-  "bill-duplicate":     "May be the bill you already confirmed, arriving from the bank"
+  "bill-duplicate":     "May be the bill you already confirmed, arriving from the bank",
+  "auto-typed":         "Guessed as a transfer, deposit or saving \u2014 confirm or correct it"
 };
+
+/* What the app decided on its own about a merchant's TYPE, once you confirmed
+   it. Separate from settings.rules, which remembers categories: "Sandra is
+   Housing" and "DFAS is a deposit" are different claims and one should not
+   overwrite the other. */
+function typeRuleFor(merchant){
+  return ((S.settings||{}).typeRules||{})[ruleKey(merchant)] || null;
+}
+function learnType(merchant, type){
+  S.settings.typeRules = {...(S.settings.typeRules||{}), [ruleKey(merchant)]: type};
+}
 
 /* ---------- build ---------- */
 function makeTxn(p){
@@ -1653,6 +1751,14 @@ function resolve(id, cat, teach){
   const t = S.txns.find(x=>x.id===id);
   if (!t) return;
   t.category = cat; t.pending = false; t.reason = "";
+  /* Filing something to a spending category is a statement that it IS
+     spending, so the type has to follow. This was the trap under the whole
+     Zelle problem: a row guessed as a transfer could be filed to Housing,
+     look completely filed, sit in the right category — and still count toward
+     nothing, because every total keys off type and nothing here changed it.
+     A refund keeps its type: "this refund belongs to Groceries" is a real
+     answer and does not make it an outgoing charge. */
+  if (t.type==="transfer" || t.type==="income" || t.type==="savings") t.type="spend";
   const amb = (S.settings.ambiguous||[]).some(a =>
     t.merchant.toLowerCase().includes(a.toLowerCase()));
   if (teach && !amb){
@@ -1751,6 +1857,10 @@ function migrate(){
     S.settings.fixedMigrated=true;
     if(!Array.isArray(S.settings.fixedCategories) || !S.settings.fixedCategories.length)
       S.settings.fixedCategories=[...FIXED_SEED];
+    /* Seeded, not forced: an existing file gets the role available without
+       anything moving into it. Nothing is recategorised on your behalf. */
+    if(!Array.isArray(S.settings.unbudgetedCategories))
+      S.settings.unbudgetedCategories=[...UNBUDGETED_SEED];
     const OLD="Bills", NEW="Bills/Utilities";
     if(!S.settings.fixedCategories.includes(NEW))
       S.settings.fixedCategories.splice(1,0,NEW);
@@ -1888,7 +1998,8 @@ function computeMonthData(ym){
   const held = S.txns.filter(t=> t.pending && monthOf(t)===ym);
   const byCat={}, byPerson={};
   let discretionary=0, fixed=0, refunds=0, refundsDisc=0, refundsFixed=0,
-      transfers=0, extraIncome=0, savings=0, cashOut=0, cashIn=0;
+      transfers=0, extraIncome=0, savings=0, cashOut=0, cashIn=0,
+      unbudgeted=0, refundsUnbudgeted=0;
   for (const t of live){
     if (t.type==="transfer"){ transfers+=Math.abs(t.amount); continue; }
     if (t.type==="income"){ extraIncome+=Math.abs(t.amount); continue; }
@@ -1915,15 +2026,23 @@ function computeMonthData(ym){
          discretionary total, so netting it off that total understated spend.
          Keep the two apart: discNet is the one figure everything reads. */
       if (FC().includes(cat)) refundsFixed+=Math.abs(t.amount);
+      else if (UC().includes(cat)) refundsUnbudgeted+=Math.abs(t.amount);
       else refundsDisc+=Math.abs(t.amount);
     }
+    /* Unbudgeted is checked FIRST. It is the narrower claim: a category is
+       unbudgeted because you said so, where discretionary is only ever the
+       fallback for everything left. */
+    else if (UC().includes(cat)) unbudgeted+=t.amount;
     else if (FC().includes(cat)) fixed+=t.amount;
     else discretionary+=t.amount;
   }
   const heldAmt = held.filter(t=>t.type!=="transfer")
                       .reduce((a,t)=>a+Math.abs(t.amount),0);
-  const net = discretionary + fixed - refunds + cashOut;
+  /* In net, because it left the account. Out of discNet, because it was never
+     anybody's plan. That difference is the entire point of the role. */
+  const net = discretionary + fixed + unbudgeted - refunds + cashOut;
   const discNet = discretionary - refundsDisc;
+  const unbudgetedNet = unbudgeted - refundsUnbudgeted;
   /* Deposits found in the bank export and the take-home figure you typed are
      two views of the same money. Take the larger: a partial month shows only
      part of the pay, while a bonus month shows more than the standing figure. */
@@ -1941,6 +2060,7 @@ function computeMonthData(ym){
   return { ym, live, held, heldAmt, byCat, byPerson, incomeSource, deposits: extraIncome,
            discretionary, discNet, fixed, refunds, refundsDisc, refundsFixed,
            transfers, savings, net, income, cashOut, cashIn,
+           unbudgeted, unbudgetedNet, refundsUnbudgeted,
            saveRate: income>0 ? (income-net)/income : null };
 }
 function monthsWithData(){
@@ -2574,7 +2694,12 @@ function outlook(ym){
      projected forward: ATM withdrawals are lumpy, and running one $140 trip on
      day 3 out to "$1,400 by month end" would be a worse guess than no guess. */
   const cashOut   = d.cashOut||0;
-  const surplus   = stated>0 ? stated - discProj - fixedProj - cashOut : null;
+  /* Not projected, unlike the two planned sides. An unbudgeted cost is a thing
+     that happened, not a rate to extrapolate: a roof repair on the 4th does not
+     imply seven more by the 30th. It counts exactly what has landed. */
+  const unbudgeted = d.unbudgetedNet||0;
+  const surplus   = stated>0
+    ? stated - discProj - fixedProj - cashOut - unbudgeted : null;
   const rate      = stated>0 ? surplus/stated : null;
   const target    = stated>0 && objPct>0 ? stated*objPct/100 : null;
   const vsTarget  = target!=null ? surplus-target : null;
@@ -2630,7 +2755,7 @@ function outlook(ym){
   return { surplus, rate, target, vsTarget, stated, discProj, fixedProj, fixedGross,
            offsetTotal:b.offsetTotal,
            cash, cashEOM, asOfDay, lines, notes, closed, objPct,
-           cashIn:d.cashIn||0, cashOut,
+           cashIn:d.cashIn||0, cashOut, unbudgeted,
            /* Every line that moves the surplus, in the order it moves it, so the
               figure can be checked by adding up. Cash out was missing entirely:
               $2,000 left the account, the surplus dropped by $2,000, and nothing
@@ -2656,6 +2781,9 @@ function outlook(ym){
                rows.push({ label:"Non-discretionary not yet posted",
                            amt:ndUnseen, dir:"out" });
              if(b.offsetTotal>0) rows.push({ label:"Reimbursed to you", amt:b.offsetTotal, dir:"in" });
+             /* Its own step, above cash out. A surplus you cannot explain is
+                worse than a smaller one you can. */
+             if(unbudgeted>0.5) rows.push({ label:"Unbudgeted", amt:unbudgeted, dir:"out" });
              if(cashOut>0) rows.push({ label:"Cash out", amt:cashOut, dir:"out" });
              rows.push({ label:(surplus>=0?"Surplus":"Deficit")+" for the month",
                          amt:Math.abs(surplus||0), dir:surplus>=0?"in":"out", total:true });
@@ -3387,6 +3515,11 @@ let ledgerFilter = "all";
    doing right now, not a setting: a ledger still filtered to "costco" when you
    open it tomorrow is a ledger that appears to have lost your transactions. */
 let ledgerQuery = "";
+/* Selection mode. Not persisted and cleared on leaving the tab: a ledger that
+   is still in selection mode tomorrow, with yesterday's rows ticked, is a way
+   to recategorise something by accident. */
+let ledgerSelect = false;
+let ledgerPicked = new Set();
 let importAccount = accounts()[0].id;
 
 function money(n){
@@ -4381,11 +4514,29 @@ function renderDash(){
     + list.map(x=>'<div class="catrow" data-catrow="'+esc(x.cat)+'" '
       + 'style="margin-top:14px;cursor:pointer"><div class="spread"><strong>'+esc(withIcon(x.cat))+'</strong></div>'
       + ribbon(x.spent,x.target,pace,x.held,cm,dim)+'</div>').join("")
+    /* Unbudgeted money is deliberately outside both scopes, so without a line
+       of its own it would be absent from this card entirely — money that left
+       the account and appears nowhere you look for spending. It sits under the
+       ribbons, unribboned, because there is no limit for it to be measured
+       against and drawing one would be a lie. */
+    + (d.unbudgetedNet>0.5
+       ? '<div class="spread unbrow" style="margin-top:16px;padding-top:12px;'
+         + 'border-top:1px solid var(--rule);cursor:pointer">'
+         + '<span><strong>Unbudgeted</strong>'
+         + '<div class="sm muted" style="margin-top:2px">'
+         + esc(UC().filter(c=>Math.abs(d.byCat[c]||0)>0.005).join(", ")||"one-off costs")
+         + '</div></span>'
+         + '<span class="num mid">'+money(d.unbudgetedNet)+'</span></div>'
+       : '')
     + '<p class="hint" style="margin-top:12px">'
     +   (scope==="disc"
         ? 'Tap a category to see its transactions.'
         : 'Every non-discretionary line for this month is below. Bills are not '
-          + 'limits, so there is nothing to be over.')+'</p>';
+          + 'limits, so there is nothing to be over.')
+    +   (d.unbudgetedNet>0.5
+        ? ' Unbudgeted money counts against your cash and against no limit, and '
+          + 'never enters the averages that set next month\u2019s plan.'
+        : '')+'</p>';
   catEl.querySelectorAll("#catScope button").forEach(b=>{
     b.onclick=()=>{ S.settings.catScope=b.dataset.s; save(); renderDash(); };
   });
@@ -4395,6 +4546,13 @@ function renderDash(){
   catEl.querySelectorAll("[data-catrow]").forEach(r=>{
     r.onclick=()=>{ ledgerFilter=r.dataset.catrow; renderLedger(); go("ledger"); };
   });
+  const unb=catEl.querySelector(".unbrow");
+  if(unb) unb.onclick=()=>{
+    /* Several categories can be unbudgeted, so this opens the first one that
+       actually has money in it this month rather than guessing. */
+    const first=UC().find(c=>Math.abs(d.byCat[c]||0)>0.005);
+    if(first){ ledgerFilter=first; renderLedger(); go("ledger"); }
+  };
   document.getElementById("billsScope").hidden = scope!=="fixed";
 
   const ppl=Object.keys(d.byPerson);
@@ -4592,7 +4750,158 @@ function refreshQueueHeader(){
   if(db){ db.hidden=dupes.length<2; db.textContent="Discard "+dupes.length+" duplicates"; }
 }
 
+/* ============================================================
+   TRANSFERS THAT REPEAT LIKE A BILL
+   ============================================================
+   Rent paid by Zelle was guessed as an internal transfer, and a transfer is
+   excluded from the totals, from recurrence detection, from bill matching and
+   from the review queue — four mechanisms, one upstream guess, and no symptom
+   anywhere. Months of rent simply were not in any figure.
+
+   Changing the guess fixes the next import. It does nothing for the rows
+   already sitting in the file, and re-importing will not revisit them because
+   the dedup hash will recognise every one. They have to be found where they
+   are.
+
+   The grouping is the point. Asked "which of these fourteen Zelle payments was
+   rent" nobody can answer from memory — but the same recipient, the same
+   amount, once a month, three months running is not a memory question any
+   more. */
+function transferBillCandidates(){
+  const ok=new Set((S.settings.xferOk||[]).map(x=>String(x).toLowerCase()));
+  const live=S.txns.filter(t=>!t.pending && t.type==="transfer"
+    && !AMEX_PAY_RX.test(t.rawDesc||"")            /* a card payment is not a bill */
+    && Number(t.amount)>0);
+  const groups={};
+  for(const t of live) (groups[t.merchant]=groups[t.merchant]||[]).push(t);
+
+  const out=[];
+  for(const [merchant,list] of Object.entries(groups)){
+    if(list.length<2 || ok.has(merchant.toLowerCase())) continue;
+    const sorted=[...list].sort((a,b)=>dnum(a.date)-dnum(b.date));
+    const amts=sorted.map(t=>Math.abs(t.amount));
+    const med=median(amts);
+    if(med<=0) continue;
+    /* A steady amount is what makes it a bill rather than a series of
+       one-offs to the same person. Splitting a dinner bill three times is not
+       rent, and the spread is what tells them apart. */
+    const spread=Math.max(...amts.map(a=>Math.abs(a-med)))/med;
+    const months=[...new Set(sorted.map(t=>monthOf(t)))];
+    if(months.length<2) continue;
+    const gaps=[]; for(let i=1;i<sorted.length;i++)
+      gaps.push(dnum(sorted[i].date)-dnum(sorted[i-1].date));
+    const g=median(gaps);
+    out.push({ merchant, list:sorted, months, amount:med, steady:spread<=0.08,
+               monthly:g>=24&&g<=38, total:amts.reduce((a,b)=>a+b,0) });
+  }
+  /* Steady and monthly first — those are the ones most likely to be a bill,
+     and the ones whose absence has done the most damage to the figures. */
+  return out.sort((a,b)=>
+    (b.steady&&b.monthly)-(a.steady&&a.monthly) || b.total-a.total);
+}
+
+function renderXferSort(){
+  const el=document.getElementById("xferSort");
+  const cands=transferBillCandidates();
+  if(!cands.length){ el.innerHTML=""; return; }
+  const cats=SPEND_CATS();
+
+  el.innerHTML='<div class="card">'
+    + '<div class="spread"><span class="eyebrow">Filed as transfers</span>'
+    +   '<span class="eyebrow">'+cands.length+' to check</span></div>'
+    + '<p class="hint" style="margin-top:6px">Money that left an account and was '
+    + 'treated as an internal move, so it counts toward nothing. These repeat like '
+    + 'bills. If one of them is rent or a real bill, file it and every payment in '
+    + 'the group moves with it.</p>'
+    + cands.map((c,i)=>'<div class="card tight xfer" data-x="'+i+'" style="margin-top:12px">'
+        + '<div class="spread"><span>'+esc(c.merchant)+'</span>'
+        +   '<span class="num">'+money(c.amount)
+        +   (c.steady?'':' <span class="lt">varies</span>')+'</span></div>'
+        + '<div class="sm muted" style="margin-top:2px">'
+        +   c.list.length+' payment'+(c.list.length===1?'':'s')
+        +   (c.monthly?' \u00b7 monthly':'')
+        +   ' \u00b7 '+esc(c.months.map(cycleLabel).join(", "))
+        +   ' \u00b7 '+money(c.total)+' total</span></div>'
+        + '<div class="catgrid" style="margin-top:10px">'
+        +   cats.map(x=>'<button class="catbtn" data-xcat="'+esc(x)+'">'
+              + esc(withIcon(x))+'</button>').join("")
+        + '</div>'
+        + '<div class="spread" style="margin-top:8px">'
+        +   '<span class="lt">Files all '+c.list.length+'</span>'
+        +   '<button class="link" data-xskip="1">Really a transfer</button></div>'
+        + '</div>').join("")
+    + '</div>';
+
+  el.querySelectorAll(".xfer").forEach(card=>{
+    const c=cands[Number(card.dataset.x)];
+    card.querySelectorAll("[data-xcat]").forEach(b=>b.onclick=()=>{
+      const cat=b.dataset.xcat;
+      bumpData();
+      for(const t of c.list){
+        /* Both fields, always. Setting the category alone is the trap that
+           made this look fixed while the money still counted for nothing. */
+        t.type="spend"; t.category=cat; t.pending=false; t.reason=""; t.edited=true;
+      }
+      save(); renderAll();
+      toast(c.list.length+" payments filed to "+cat);
+    });
+    card.querySelector("[data-xskip]").onclick=()=>{
+      S.settings.xferOk=[...(S.settings.xferOk||[]), c.merchant];
+      save(); renderXferSort();
+      toast("Left as a transfer");
+    };
+  });
+}
+
+function renderUnbCats(){
+  const el=document.getElementById("unbCats");
+  const list=UC();
+  el.innerHTML = list.length
+    ? list.map((c,i)=>{
+        const used=S.txns.filter(t=>t.category===c).length;
+        return '<div class="row" style="gap:8px;margin-bottom:8px">'
+          + '<input type="text" data-unb="'+i+'" value="'+esc(c)+'" style="flex:1">'
+          + '<span class="lt" style="min-width:64px;text-align:right">'
+          +   (used?used+" txn"+(used===1?"":"s"):"unused")+'</span>'
+          + '<button class="link overc" data-unbdel="'+i+'" aria-label="Remove '+esc(c)+'">'
+          + '\u2715</button></div>';
+      }).join("")
+    : '<div class="empty">No unbudgeted categories. Anything you spend still has to go '
+      + 'somewhere, so without one a one-off lands against a limit.</div>';
+
+  el.querySelectorAll("[data-unb]").forEach(inp=>inp.onchange=()=>{
+    const i=Number(inp.dataset.unb), old=UC()[i], nu=inp.value.trim();
+    if(!nu || nu===old){ renderUnbCats(); return; }
+    if(ALL_CATS().includes(nu)){ toast("There is already a category called that"); renderUnbCats(); return; }
+    const u=[...UC()]; u[i]=nu; S.settings.unbudgetedCategories=u;
+    /* Rename follows the money, exactly as it does for a spending category. A
+       category renamed out from under its transactions would leave them filed
+       to a name that no longer exists, which reads as $0 everywhere. */
+    S.txns.forEach(t=>{ if(t.category===old) t.category=nu; });
+    if(ledgerFilter===old) ledgerFilter=nu;
+    bumpData(); save(); renderAll(); toast("Renamed");
+  });
+
+  el.querySelectorAll("[data-unbdel]").forEach(b=>b.onclick=()=>{
+    const i=Number(b.dataset.unbdel), name=UC()[i];
+    const used=S.txns.filter(t=>t.category===name);
+    if(used.length && !confirm(used.length+" transaction"+(used.length===1?"":"s")
+      +" filed to "+name+". Removing it sends "+(used.length===1?"it":"them")
+      +" back to Review. Continue?")) return;
+    /* Never silently re-home them: they would land against a limit, which is
+       the exact problem this role exists to avoid. Back to Review, where you
+       decide. */
+    used.forEach(t=>{ t.pending=true; t.reason="reopened"; });
+    if(used.length) REASON_TEXT["reopened"]="Its category was removed";
+    S.settings.unbudgetedCategories=UC().filter((_,x)=>x!==i);
+    if(ledgerFilter===name) ledgerFilter="all";
+    bumpData(); save(); renderAll();
+    toast(used.length? used.length+" sent back to Review" : "Removed");
+  });
+}
+
 function renderReview(){
+  renderXferSort();
   renderBillSort();
   renderRecurring();
   const held=S.txns.filter(t=>t.pending);
@@ -4630,7 +4939,7 @@ function renderReview(){
           + lb.count+' rows)</button>' : '')
     + '</div>'
     + held.map(t=>{
-      const cats=[...TC(),...FC()];
+      const cats=SPEND_CATS();
       /* Not "which category" \u2014 the match is on merchant name (or category)
          plus amount, so the identity is already settled. The actual question is
          whether this IS that bill arriving from the bank, or a second real
@@ -4668,6 +4977,24 @@ function renderReview(){
         +   '<button class="catbtn kind" data-kind="cashout">Cash out</button>'
         +   '<button class="catbtn kind" data-kind="cashin">Cash in</button>'
         + '</div>'
+        /* When the app has guessed the TYPE, the first thing to offer is the
+           guess itself. A held row that only offered categories would make
+           confirming a genuine transfer harder than correcting a wrong one,
+           which is backwards: most of these guesses are right, and the few that
+           are wrong are the whole reason for asking. */
+        + (t.reason==="auto-typed"
+           ? '<div class="catgrid alt" style="margin-top:6px">'
+             + '<button class="catbtn kind" data-keep="'+esc(t.type)+'">'
+             + esc({transfer:"Yes \u2014 a transfer",
+                    income:"Yes \u2014 a deposit",
+                    savings:"Yes \u2014 into savings"}[t.type] || "Yes, keep it")
+             + '</button></div>'
+             + '<p class="hint" style="margin:7px 0 0">'
+             + esc({transfer:"A transfer counts toward nothing \u2014 money moving between your own accounts.",
+                    income:"A detected deposit times the cash forecast but never sets your take-home. If this is money the month actually gained, file it as cash in.",
+                    savings:"Money moved to savings, not spent."}[t.type]||"")
+             + ' Answered once, then remembered for '+esc(t.merchant)+'.</p>'
+           : '')
         + (mates.length
            /* Six charges, one decision. The consequence goes in the label, not
               in a second checkbox that could contradict the first. */
@@ -4728,6 +5055,27 @@ function renderReview(){
       settle(before, "Filed to "+b.dataset.cat,
              n=>n+" charges filed to "+b.dataset.cat);
     });
+    /* "Yes, that's right": confirm the guess and stop being asked.
+       Bound AFTER the .catbtn handler above, which would otherwise catch this
+       button too — it carries .catbtn for its looks — and call resolve() with
+       an undefined category, filing the row to nothing while looking answered.
+       onclick is an assignment, so the later binding wins; the same ordering is
+       what keeps the kind buttons below working. */
+    const keep=card.querySelector("[data-keep]");
+    if(keep) keep.onclick=()=>{
+      const before=held();
+      const t=S.txns.find(x=>x.id===id);
+      if(!t) return;
+      learnType(t.merchant, t.type);
+      t.pending=false; t.reason="";
+      /* Every other held row from this merchant was asked the same question
+         and has just been given the same answer. */
+      for(const x of S.txns)
+        if(x.pending && x.reason==="auto-typed" && x.merchant===t.merchant){
+          x.pending=false; x.reason="";
+        }
+      settle(before, "Kept as "+t.type, n=>n+" kept as "+t.type);
+    };
     card.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>{
       const before=held();
       const teach=card.querySelector(".teachbox").checked;
@@ -4798,7 +5146,7 @@ function resolveBillDuplicate(id, mode){
    ============================================================ */
 function renderLedger(){
   const d=monthData(cursor);
-  const opts=["all",...TC(),...FC(),"Fixed","Transfer",...S.settings.people];
+  const opts=["all",...TC(),...FC(),...UC(),"Fixed","Transfer",...S.settings.people];
   const fb=document.getElementById("ledgerFilters");
   fb.innerHTML=opts.map(o=>'<button class="chip" data-f="'+esc(o)+'" aria-pressed="'
     +(ledgerFilter===o)+'">'+esc(o)+'</button>').join("");
@@ -4848,7 +5196,71 @@ function renderLedger(){
       + '<div class="meta">'+t.date+' \u00b7 '+esc(personOf(t))+' \u00b7 '+esc(withIcon(t.category))+'</div></div>'
       + '<div class="amt '+(signed<0?"pathc":"")+'">'+money2(signed)+'</div></div>';
   }).join("");
-  el.querySelectorAll(".txn").forEach(r=>r.onclick=()=>openEditor(r.dataset.id));
+  /* In selection mode a tap picks the row instead of opening it. One gesture,
+     two meanings, and the mode is explicit rather than a long-press nobody
+     discovers. */
+  el.querySelectorAll(".txn").forEach(r=>{
+    if(ledgerSelect){
+      r.classList.toggle("picked", ledgerPicked.has(r.dataset.id));
+      r.onclick=()=>{
+        if(ledgerPicked.has(r.dataset.id)) ledgerPicked.delete(r.dataset.id);
+        else ledgerPicked.add(r.dataset.id);
+        r.classList.toggle("picked");
+        renderPickBar();
+      };
+    } else r.onclick=()=>openEditor(r.dataset.id);
+  });
+  renderPickBar();
+}
+
+/* The bar that appears when anything is picked. It lives outside the list so
+   that re-rendering rows does not tear it out from under a thumb. */
+function renderPickBar(){
+  const bar=document.getElementById("pickBar");
+  if(!bar) return;
+  if(!ledgerSelect || !ledgerPicked.size){ bar.hidden=true; bar.innerHTML=""; return; }
+  const rows=S.txns.filter(t=>ledgerPicked.has(t.id));
+  const total=rows.reduce((a,t)=>a+Math.abs(Number(t.amount)||0),0);
+  bar.hidden=false;
+  bar.innerHTML='<div class="spread"><span><strong>'+rows.length+'</strong> selected</span>'
+    + '<span class="num">'+money(total)+'</span></div>'
+    + '<div class="catgrid" style="margin-top:9px">'
+    +   SPEND_CATS().map(c=>'<button class="catbtn" data-pcat="'+esc(c)+'">'
+          + esc(withIcon(c))+'</button>').join("")
+    + '</div>'
+    + '<div class="spread" style="margin-top:9px">'
+    +   '<button class="link" data-pall="1">Select all shown</button>'
+    +   '<button class="link" data-pnone="1">Clear</button></div>';
+
+  bar.querySelectorAll("[data-pcat]").forEach(b=>b.onclick=()=>{
+    const cat=b.dataset.pcat, ids=[...ledgerPicked];
+    const before=rows.map(t=>({id:t.id,category:t.category,type:t.type,
+                               pending:t.pending,reason:t.reason}));
+    bumpData();
+    for(const t of S.txns) if(ledgerPicked.has(t.id)){
+      t.category=cat;
+      /* The same trap resolve() had: setting a category on a row typed as a
+         transfer leaves it counting toward nothing while looking filed. */
+      if(t.type==="transfer"||t.type==="income"||t.type==="savings") t.type="spend";
+      t.pending=false; t.reason=""; t.edited=true;
+    }
+    ledgerPicked.clear(); ledgerSelect=false;
+    save(); renderAll();
+    toastUndo(ids.length+" moved to "+cat, ()=>{
+      bumpData();
+      for(const b0 of before){
+        const t=S.txns.find(x=>x.id===b0.id);
+        if(t){ t.category=b0.category; t.type=b0.type;
+               t.pending=b0.pending; t.reason=b0.reason; }
+      }
+      save(); renderAll(); toast("Put back");
+    });
+  });
+  bar.querySelector("[data-pall]").onclick=()=>{
+    document.querySelectorAll("#ledgerList .txn").forEach(r=>ledgerPicked.add(r.dataset.id));
+    renderLedger();
+  };
+  bar.querySelector("[data-pnone]").onclick=()=>{ ledgerPicked.clear(); renderLedger(); };
 }
 function reopen(id){
   bumpData();
@@ -4891,7 +5303,7 @@ function openEditor(id){
   const t=S.txns.find(x=>x.id===id); if(!t) return;
   editId=id;
   const wrap=document.getElementById("editSheet"), b=document.getElementById("editBody");
-  const cats=[...TC(),...FC()];
+  const cats=SPEND_CATS();
   const people=(S.settings.people||[]).slice();
   const who=personOf(t);
   if(!people.some(x=>x.toLowerCase()===String(who).toLowerCase())) people.unshift(who);
@@ -6592,7 +7004,7 @@ const SECTION_RENDERERS={
   },
   review:   ()=>{ renderReview(); },
   ledger:   ()=>{ renderLedger(); },
-  settings: ()=>{ renderProfile(); renderRules(); renderData(); }
+  settings: ()=>{ renderProfile(); renderRules(); renderUnbCats(); renderData(); }
 };
 const dirty=new Set();
 function anaGroup(){
@@ -6650,10 +7062,14 @@ function go(v){
   /* A search is a thing you are doing, not a setting. Leaving the box filled
      means coming back to a ledger that appears to have lost most of your
      transactions. */
-  if(v!=="ledger" && ledgerQuery){
+  if(v!=="ledger" && (ledgerQuery || ledgerSelect || ledgerPicked.size)){
     ledgerQuery="";
     const box=document.getElementById("ledgerSearch");
     if(box) box.value="";
+    /* Leaving the tab ends selection. Coming back to a ledger still in
+       selection mode, with yesterday's rows ticked, is a way to recategorise
+       something by accident. */
+    ledgerSelect=false; ledgerPicked.clear();
     dirty.add("ledger");
   }
   if(v==="bills"){
@@ -6769,6 +7185,15 @@ document.getElementById("addAsk").onclick=()=>{
 document.getElementById("mprev").onclick=()=>{ cursor=ymShift(cursor,-1); renderAll(); };
 document.getElementById("mnext").onclick=()=>{ cursor=ymShift(cursor,1); renderAll(); };
 
+document.getElementById("addUnb").onclick=()=>{
+  const v=document.getElementById("newUnb").value.trim();
+  if(!v){ toast("Give it a name"); return; }
+  if(ALL_CATS().includes(v)){ toast("There is already a category called that"); return; }
+  S.settings.unbudgetedCategories=[...UC(), v];
+  document.getElementById("newUnb").value="";
+  bumpData(); save(); renderAll(); toast("Added \u2014 file anything to it from Review");
+};
+
 document.querySelectorAll("#anaGroup button").forEach(b=>b.onclick=()=>{
   S.settings.anaGroup=b.dataset.g; save(); renderSection("analysis");
   window.scrollTo({top:0,behavior:"instant"});
@@ -6777,6 +7202,15 @@ document.querySelectorAll("#anaGroup button").forEach(b=>b.onclick=()=>{
 /* Debounced, because re-filtering and rebuilding the list on every keystroke
    of a search over a couple of thousand rows is exactly the kind of thing that
    makes a phone keyboard feel like it is sticking. */
+document.getElementById("ledgerSelBtn").onclick=()=>{
+  ledgerSelect=!ledgerSelect;
+  if(!ledgerSelect) ledgerPicked.clear();
+  const b=document.getElementById("ledgerSelBtn");
+  b.textContent = ledgerSelect ? "Done" : "Select";
+  b.classList.toggle("ghost", !ledgerSelect);
+  renderLedger();
+};
+
 let ledgerSearchT;
 const ledgerSearchEl=document.getElementById("ledgerSearch");
 if(ledgerSearchEl) ledgerSearchEl.oninput=()=>{
