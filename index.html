@@ -622,6 +622,8 @@ body.noscroll{overflow:hidden}
     <g id="ic-plan"><path d="M3.4 8.4h17.2M3.4 15.6h17.2"/>
       <circle cx="9.1" cy="8.4" r="2.5"/><circle cx="15.1" cy="15.6" r="2.5"/></g>
     <g id="ic-analysis"><path d="M4.4 19.4V12M9.6 19.4V6.2M14.8 19.4v-9.1M20 19.4v-5"/></g>
+    <g id="ic-cash"><rect x="3.2" y="6.4" width="17.6" height="11.2" rx="2.4"/>
+      <circle cx="12" cy="12" r="2.6"/><path d="M6.6 12h.01M17.4 12h.01"/></g>
     <g id="ic-review"><path d="M3.6 13.4h4.2l1.5 2.6h5.4l1.5-2.6h4.2"/>
       <path d="M3.6 13.4 6.1 5.6h11.8l2.5 7.8v3.4a2.6 2.6 0 0 1-2.6 2.6H6.2a2.6 2.6 0 0 1-2.6-2.6Z"/></g>
   </defs>
@@ -841,6 +843,22 @@ body.noscroll{overflow:hidden}
     <div id="recSort"></div>
   </section>
 
+  <!-- THE ACCOUNTING LAYER, deliberately standalone.
+       Every other tab has an opinion: limits, plans, verdicts. This one has
+       none. It says what left the account and what came in, in date order,
+       with a running balance — the arithmetic your bank would recognise.
+       Its own tab for now so it can be judged on its own before deciding
+       where, or whether, it belongs. -->
+  <section id="v-cash">
+    <div class="card" id="cashSummary"></div>
+    <div class="card" id="cashSplit"></div>
+    <div class="card"><div class="eyebrow">Register</div>
+      <p class="hint">Every row, nothing excluded and nothing categorised. Transfers,
+        deposits, savings and cash all appear, because they all moved money.</p>
+      <div id="cashRegister"></div>
+    </div>
+  </section>
+
   <section id="v-ledger">
     <!-- You reach this screen by tapping a category, which means you already
          know roughly what you are looking for. Scrolling for it was the only
@@ -985,7 +1003,7 @@ body.noscroll{overflow:hidden}
           <select id="pLaunch">
             <option value="dash">Spending</option><option value="saving">Saving</option>
             <option value="plan">Planning</option><option value="review">Review</option>
-            <option value="analysis">Analysis</option>
+            <option value="analysis">Analysis</option><option value="cash">Cash</option>
             <option value="ledger">Ledger</option><option value="bills">Bills</option></select></label>
         <label style="margin-top:12px"><span class="lt">Card member for unlabelled imports</span>
           <input type="text" id="pDefPerson" placeholder="Your name"></label>
@@ -1131,6 +1149,9 @@ body.noscroll{overflow:hidden}
   <button data-v="analysis">
     <span class="tabmark" aria-hidden="true">
       <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-analysis"/></svg></span>Analysis</button>
+  <button data-v="cash">
+    <span class="tabmark" aria-hidden="true">
+      <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-cash"/></svg></span>Cash</button>
   <button data-v="review">
     <span class="tabmark" aria-hidden="true">
       <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-review"/></svg></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
@@ -2051,6 +2072,16 @@ function computeMonthData(ym){
   const net = discretionary + fixed + unbudgeted - refunds + cashOut;
   const discNet = discretionary - refundsDisc;
   const unbudgetedNet = unbudgeted - refundsUnbudgeted;
+  const fixedNet = fixed - refundsFixed;
+  /* THE ROLLUP. Three things are tracked, not four:
+       total spending  = everything that left the account
+       discretionary   = what the limits are about
+       non-discretionary = bills PLUS unplanned
+     Unplanned was built as a peer of the other two, which made it a third
+     heading on every card. It is not a peer — a roof repair is not
+     discretionary, so it belongs under non-discretionary, as a member rather
+     than a sibling. */
+  const nonDiscNet = fixedNet + unbudgetedNet;
   /* Deposits found in the bank export and the take-home figure you typed are
      two views of the same money. Take the larger: a partial month shows only
      part of the pay, while a bonus month shows more than the standing figure. */
@@ -2068,7 +2099,7 @@ function computeMonthData(ym){
   return { ym, live, held, heldAmt, byCat, byPerson, incomeSource, deposits: extraIncome,
            discretionary, discNet, fixed, refunds, refundsDisc, refundsFixed,
            transfers, savings, net, income, cashOut, cashIn,
-           unbudgeted, unbudgetedNet, refundsUnbudgeted,
+           unbudgeted, unbudgetedNet, refundsUnbudgeted, fixedNet, nonDiscNet,
            saveRate: income>0 ? (income-net)/income : null };
 }
 function monthsWithData(){
@@ -2718,8 +2749,15 @@ function outlook(ym){
   const discRate = Math.max(g.headed, d.discNet);
   /* Your share of non-discretionary: what has posted, plus what is still
      expected, MINUS what Maja reimburses. A rent split is not income. */
+  /* Declared here, before fixedKnown needs it. It was below the projection
+     block and `const` does not hoist, so the whole tab threw. */
+  const unbudgeted = d.unbudgetedNet||0;
   const fixedGross = (d.fixed - d.refundsFixed) + b.toCome;
-  const fixedKnown = fixedGross - b.offsetTotal;
+  /* What the month has actually committed on the non-discretionary side: bills
+     posted and still expected, plus the unplanned that has already landed.
+     Both halves of one heading, so the projection tops up whichever is short
+     rather than expecting a typical month on top of a real one. */
+  const fixedKnown = fixedGross - b.offsetTotal + unbudgeted;
   const proj = projectSpend({ pace:pace2, closed, discNet:d.discNet, discRate,
                               discBaseline, fixedKnown, ndTypical });
   const discProj = proj.discProj, fixedProj = proj.fixedProj, ndUnseen = proj.ndUnseen;
@@ -2728,12 +2766,12 @@ function outlook(ym){
      projected forward: ATM withdrawals are lumpy, and running one $140 trip on
      day 3 out to "$1,400 by month end" would be a worse guess than no guess. */
   const cashOut   = d.cashOut||0;
-  /* Not projected, unlike the two planned sides. An unbudgeted cost is a thing
-     that happened, not a rate to extrapolate: a roof repair on the 4th does not
-     imply seven more by the 30th. It counts exactly what has landed. */
-  const unbudgeted = d.unbudgetedNet||0;
+  /* Unplanned is now INSIDE the non-discretionary baseline, so subtracting it
+     again here would charge the month twice for the same roof. fixedProj
+     already carries what a month of yours typically costs including its
+     unplanned run rate; what has actually landed is netted against it below. */
   const surplus   = stated>0
-    ? stated - discProj - fixedProj - cashOut - unbudgeted : null;
+    ? stated - discProj - fixedProj - cashOut : null;
   const rate      = stated>0 ? surplus/stated : null;
   const target    = stated>0 && objPct>0 ? stated*objPct/100 : null;
   const vsTarget  = target!=null ? surplus-target : null;
@@ -2808,16 +2846,17 @@ function outlook(ym){
                                                  : "Discretionary at this rate"),
                          amt:discProj, dir:"out" });
              rows.push({ label:"Bills, utilities and housing", amt:fixedGross, dir:"out" });
-             /* Shown as its own step rather than folded into the bills line: it
-                is the one figure here that is an estimate about things the app
-                has not seen, and it should be the easiest to argue with. */
+             /* Unplanned sits with the bills now, under the same heading, but
+                still on its own line: it is the half of non-discretionary that
+                nobody scheduled, and folding it into "bills" would hide that. */
+             if(unbudgeted>0.5)
+               rows.push({ label:"Unplanned", amt:unbudgeted, dir:"out" });
+             /* An estimate about things the app has not seen, so it is the
+                easiest figure here to argue with and gets said out loud. */
              if(ndUnseen>0.5)
                rows.push({ label:"Non-discretionary not yet posted",
                            amt:ndUnseen, dir:"out" });
              if(b.offsetTotal>0) rows.push({ label:"Reimbursed to you", amt:b.offsetTotal, dir:"in" });
-             /* Its own step, above cash out. A surplus you cannot explain is
-                worse than a smaller one you can. */
-             if(unbudgeted>0.5) rows.push({ label:"Unbudgeted", amt:unbudgeted, dir:"out" });
              if(cashOut>0) rows.push({ label:"Cash out", amt:cashOut, dir:"out" });
              rows.push({ label:(surplus>=0?"Surplus":"Deficit")+" for the month",
                          amt:Math.abs(surplus||0), dir:surplus>=0?"in":"out", total:true });
@@ -2997,18 +3036,39 @@ function baselineMonths(ym, n){
   return monthsWithData().filter(m=>m<upto && m<cur).slice(-(n||3));
 }
 
+/* Unplanned money that a month should EXPECT to spend. Most unplanned costs
+   are unplanned individually and routine in aggregate: something goes wrong on
+   a rental property most months, and pretending otherwise projects a surplus
+   you will not have. So it averages in with the bills.
+
+   The exception is the genuinely exceptional — a roof replaced once a decade —
+   and that is a judgement only you can make, so it is a switch on the
+   transaction rather than a rule the app invents. Excluded rows still count
+   against the month they landed in; they just do not tell the next three
+   months what to expect. */
+function baselineUnplanned(ym){
+  return S.txns
+    .filter(t=>!t.pending && monthOf(t)===ym && !t.exclBaseline
+      && UC().includes(t.category))
+    .reduce((a,t)=>a + (t.type==="refund" ? -Math.abs(t.amount) : Math.abs(t.amount)), 0);
+}
+
 function avgNonDiscretionary(n, ym){
   const cur=cycleOf(todayISO());
-  const ms=baselineMonths(ym, n);
-  if(!ms.length){
-    const b=billsThisMonth(cur);
-    return { months:0, amount:Math.max(0,b.posted+b.toCome-b.offsetTotal), live:true };
-  }
-  const tot=ms.reduce((a,m)=>{
+  const one=m=>{
     const b=billsThisMonth(m);
-    return a+Math.max(0,b.posted+b.toCome-b.offsetTotal);
-  },0);
-  return { months:ms.length, amount:tot/ms.length, live:false };
+    return Math.max(0, b.posted + b.toCome - b.offsetTotal)
+         + Math.max(0, baselineUnplanned(m));
+  };
+  const ms=baselineMonths(ym, n);
+  if(!ms.length) return { months:0, amount:one(cur), live:true };
+  const tot=ms.reduce((a,m)=>a+one(m),0);
+  /* Reported apart as well as together, so the projection can say how much of
+     what it expects is bills and how much is the unplanned run rate. */
+  const bills=ms.reduce((a,m)=>{const b=billsThisMonth(m);
+    return a+Math.max(0,b.posted+b.toCome-b.offsetTotal);},0)/ms.length;
+  return { months:ms.length, amount:tot/ms.length, live:false,
+           bills, unplanned:(tot/ms.length)-bills };
 }
 
 function ratePlan(){
@@ -4905,6 +4965,118 @@ function renderXferSort(){
   });
 }
 
+/* ============================================================
+   CASH — the accounting layer
+   ============================================================
+   Three figures, and the app has always had all of them without ever showing
+   them together:
+
+     total spending      everything that left the account
+     discretionary       the half the limits are about
+     non-discretionary   bills plus unplanned
+
+   The first is the sum of the other two plus cash out. Nothing here is
+   projected, nothing is compared to a plan, and nothing is excluded — a
+   transfer moved money whatever the budget thinks of it. */
+function cashView(ym){
+  const d=monthData(ym);
+  const rows=S.txns.filter(t=>!t.pending && monthOf(t)===ym)
+    .map(t=>{
+      /* One sign convention: negative left the account, positive arrived.
+         The budget layer stores magnitudes and reads direction off the type,
+         which is right for totalling categories and useless for a register. */
+      const mag=Math.abs(Number(t.amount)||0);
+      const inbound = t.type==="refund" || t.type==="income" || t.type==="cashin";
+      return { t, signed: inbound ? mag : -mag };
+    })
+    .sort((a,b)=> a.t.date<b.t.date ? -1 : a.t.date>b.t.date ? 1 : (a.t.seq||0)-(b.t.seq||0));
+
+  const inflow  = rows.filter(r=>r.signed>0).reduce((a,r)=>a+r.signed,0);
+  const outflow = rows.filter(r=>r.signed<0).reduce((a,r)=>a-r.signed,0);
+  return { rows, inflow, outflow, movement: inflow-outflow,
+           total: d.net, disc: d.discNet, nonDisc: d.nonDiscNet,
+           bills: d.fixedNet, unplanned: d.unbudgetedNet, cashOut: d.cashOut||0 };
+}
+
+function renderCash(){
+  const v=cashView(cursor);
+  /* cashOnHand() is the app's existing anchor: a balance read off a statement
+     or one you typed, newest wins. Reusing it means the register reconciles
+     against the same figure the outlook already projects from, rather than
+     inventing a second source of truth about your account. */
+  const oh=cashOnHand();
+  const anchor=oh ? Number(oh.amount||0) : 0;
+  const anchorDate=oh ? (oh.date||"") : "";
+
+  document.getElementById("cashSummary").innerHTML=
+      '<div class="spread"><span class="eyebrow">Cash</span>'
+    +   '<span class="eyebrow">'+esc(cycleLabel(cursor))+'</span></div>'
+    + '<div class="spread" style="margin:10px 0 2px;align-items:flex-end">'
+    +   '<div><div class="big num'+(v.movement<0?" overc":" pathc")+'">'
+    +     (v.movement<0?"\u2212":"+")+money(Math.abs(v.movement))+'</div>'
+    +     '<div class="lt" style="margin-top:5px">net movement</div></div>'
+    +   '<div style="text-align:right"><div class="num mid">'+money(v.inflow)+' in</div>'
+    +     '<div class="num mid muted">'+money(v.outflow)+' out</div></div></div>'
+    + '<p class="hint">Everything that moved, in and out, with no exclusions. '
+    + 'This is the figure your bank would agree with.</p>';
+
+  /* The three-way split, stated once, in the order they nest. */
+  const bar=(w,c)=>'<i style="width:'+Math.max(0,Math.min(100,w)).toFixed(1)
+    +'%;background:var(--'+c+')"></i>';
+  const T=v.total||1;
+  document.getElementById("cashSplit").innerHTML=
+      '<div class="spread"><span class="eyebrow">Total spending</span>'
+    +   '<span class="num mid">'+money(v.total)+'</span></div>'
+    + '<div class="meter" style="margin-top:9px;display:flex">'
+    +   bar(v.disc/T*100,"path")+bar(v.nonDisc/T*100,"hold")+bar(v.cashOut/T*100,"quiet")
+    + '</div>'
+    + '<div class="spread" style="margin-top:12px"><span>Discretionary</span>'
+    +   '<span class="num">'+money(v.disc)+'</span></div>'
+    + '<div class="spread" style="margin-top:8px"><span>Non-discretionary</span>'
+    +   '<span class="num">'+money(v.nonDisc)+'</span></div>'
+    + '<div class="sm muted" style="margin-top:2px;padding-left:2px">'
+    +   money(v.bills)+' bills \u00b7 '+money(v.unplanned)+' unplanned</div>'
+    + (v.cashOut>0.5
+       ? '<div class="spread" style="margin-top:8px"><span>Cash out</span>'
+         + '<span class="num">'+money(v.cashOut)+'</span></div>'
+         + '<div class="sm muted" style="margin-top:2px;padding-left:2px">'
+         + 'left the account with no category yet</div>'
+       : '')
+    + '<p class="hint">Non-discretionary is bills plus unplanned. Discretionary is the '
+    + 'only one of the three with limits against it.</p>';
+
+  /* Running balance. It only means anything once you have told the app what
+     the account actually held and when, so it says so rather than counting up
+     from an assumed zero. */
+  const el=document.getElementById("cashRegister");
+  if(!v.rows.length){
+    el.innerHTML='<div class="empty">Nothing in '+esc(cycleLabel(cursor))+'.</div>';
+    return;
+  }
+  let run = anchor>0 ? anchor : null;
+  el.innerHTML =
+      (run===null
+       ? '<p class="hint" style="margin:0 0 8px">Enter your balance on Saving and a '
+         + 'running total appears here.</p>'
+       : '<div class="spread lrow"><span class="muted">Balance '
+         + esc(anchorDate||"at the start")+'</span>'
+         + '<span class="num">'+money(anchor)+'</span></div>')
+    + v.rows.map(r=>{
+        if(run!==null) run += r.signed;
+        return '<div class="txn" data-id="'+r.t.id+'">'
+          + '<div><div class="name">'+esc(r.t.merchant)
+          +   (r.t.type!=="spend"?'<span class="tag xfer">'+esc(r.t.type)+'</span>':'')
+          +   '</div>'
+          + '<div class="meta">'+r.t.date+' \u00b7 '+esc(withIcon(r.t.category))+'</div></div>'
+          + '<div style="text-align:right">'
+          +   '<div class="amt '+(r.signed>0?"pathc":"")+'">'
+          +     (r.signed>0?"+":"\u2212")+money2(Math.abs(r.signed))+'</div>'
+          +   (run!==null?'<div class="sm muted num">'+money(run)+'</div>':'')
+          + '</div></div>';
+      }).join("");
+  el.querySelectorAll(".txn").forEach(x=>x.onclick=()=>openEditor(x.dataset.id));
+}
+
 function renderUnbCats(){
   const el=document.getElementById("unbCats");
   const list=UC();
@@ -5242,7 +5414,10 @@ function renderLedger(){
       +(t.provisional?'<span class="tag pend">pending</span>':"")
       /* An edited row says so. A ledger that lets you change a figure has to
          show which figures were changed, or it stops being a record. */
-      +(t.edited?'<span class="tag one">edited</span>':"");
+      +(t.edited?'<span class="tag one">edited</span>':"")
+      /* Visible in the ledger, because a row that is deliberately outside the
+         projection should say so where you would look for it. */
+      +(t.exclBaseline?'<span class="tag xfer">one-off</span>':"");
     return '<div class="txn" data-id="'+t.id+'"><div class="body">'
       + '<div class="name">'+esc(t.merchant)+tags+'</div>'
       + '<div class="meta">'+t.date+' \u00b7 '+esc(personOf(t))+' \u00b7 '+esc(withIcon(t.category))+'</div></div>'
@@ -5383,6 +5558,18 @@ function openEditor(id){
     +     accounts().map(a=>opt(a.id,a.name,a.id===t.account)).join("")+'</select></label></div>'
     + (t.billId?'<p class="hint">Linked to a declared bill. Changing the amount here is what '
        + 'a variable utility needs \u2014 the bill keeps its schedule and its link.</p>':'')
+    /* Only shown where it means something. Unplanned costs average into the
+       non-discretionary baseline because most of them are routine in
+       aggregate; the genuinely exceptional ones are a judgement the app cannot
+       make, so this is the switch for making it. */
+    + '<div id="eBaseWrap"'+(EDIT_CAT_TYPES.has(t.type||"spend")&&UC().includes(t.category)?'':' hidden')+'>'
+    +   '<label class="teach batchline"><input type="checkbox" id="eBase"'
+    +     (t.exclBaseline?'':' checked')+'> '
+    +     '<span>Typical of this month \u2014 include it in the unplanned average '
+    +     'that projects future months</span></label>'
+    +   '<p class="hint">Untick for a genuinely one-off cost, a roof replaced once a '
+    +   'decade. It still counts against the month it landed in either way.</p>'
+    + '</div>'
     + '<button class="btn" id="eSave">Save changes</button>'
     + '<div class="btn2" style="margin-top:8px">'
     +   '<button class="btn ghost" id="eReview">Send to review</button>'
@@ -5392,12 +5579,19 @@ function openEditor(id){
     + 'want the app to ask about it instead.</p>';
 
   const typeSel=b.querySelector("#eType");
+  const catSel2=b.querySelector("#eCat");
   const syncType=()=>{
     const v=typeSel.value;
     b.querySelector("#eCatWrap").hidden=!EDIT_CAT_TYPES.has(v);
     b.querySelector("#eTypeHint").textContent=(EDIT_TYPES.find(x=>x[0]===v)||[])[2]||"";
+    /* The switch appears and disappears with the category, because outside
+       unplanned there is no average for it to be in or out of. */
+    b.querySelector("#eBaseWrap").hidden =
+      !(EDIT_CAT_TYPES.has(v) && catSel2 && UC().includes(catSel2.value));
   };
-  typeSel.onchange=syncType; syncType();
+  typeSel.onchange=syncType;
+  if(catSel2) catSel2.onchange=syncType;
+  syncType();
 
   b.querySelectorAll("[data-close]").forEach(x=>x.onclick=closeEditor);
   wrap.querySelector(".sheetbg").onclick=closeEditor;
@@ -5411,7 +5605,8 @@ function openEditor(id){
       amount:amt, date, type:typeSel.value,
       category:EDIT_CAT_TYPES.has(typeSel.value)?b.querySelector("#eCat").value:null,
       person:b.querySelector("#ePerson").value,
-      account:b.querySelector("#eAcct").value
+      account:b.querySelector("#eAcct").value,
+      exclBaseline: !b.querySelector("#eBase").checked
     });
     closeEditor(); save(); renderAll();
     toast(r&&r.orphanRefund ? "Saved \u2014 no charge found to attach this refund to" : "Saved");
@@ -5472,6 +5667,9 @@ function applyEdit(id,p){
   else if(t.type==="income") t.category="Income";
   else if(t.type==="savings") t.category="Savings";
   else if(EDIT_CAT_TYPES.has(t.type)) t.category=p.category||catchAllName();
+  /* Only meaningful for unplanned rows, and cleared when a row leaves that
+     role so a stale flag cannot come back to life if it returns. */
+  t.exclBaseline = UC().includes(t.category) ? !!p.exclBaseline : false;
   t.linkedTo=null;
   if(t.type==="refund") linkRefund(t,S.txns.filter(x=>x.id!==t.id));
   t.hash=[t.account,t.date,t.amount.toFixed(2),
@@ -7063,6 +7261,7 @@ const SECTION_RENDERERS={
     if(g==="categories"){ renderSmallMultiples(); renderCreep(); }
     if(g==="history"){ renderHistory(); renderAnalysis(); }
   },
+  cash:     ()=>{ renderCash(); },
   review:   ()=>{ renderReview(); },
   ledger:   ()=>{ renderLedger(); },
   settings: ()=>{ renderProfile(); renderRules(); renderUnbCats(); renderData(); }
