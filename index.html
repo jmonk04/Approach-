@@ -875,11 +875,19 @@ body.noscroll{overflow:hidden}
            lives with the allowance it produces — change it and the figure below
            moves while you are looking at it. -->
       <div id="objWrap" hidden>
-        <label style="margin-top:13px"><span class="lt">Savings objective (% of take-home)</span>
+        <label style="margin-top:13px"><span class="lt" id="pObjLbl">Savings objective</span>
+          <!-- Two ways of saying the same intention. A rate you hold across
+               months, or a figure you have in mind for this one. -->
+          <div class="miniseg" id="objMode" role="group" aria-label="How the objective is stated"
+               style="margin-bottom:8px">
+            <button data-o="percent" aria-pressed="true">% of take-home</button>
+            <button data-o="amount" aria-pressed="false">A set amount</button>
+          </div>
           <div class="row" style="gap:8px">
-            <input type="number" id="pObj" inputmode="decimal" step="1" min="0" max="100" style="flex:1">
+            <input type="number" id="pObj" inputmode="decimal" step="1" min="0" style="flex:1">
             <button class="btn" id="saveObj" style="width:auto;padding:11px 18px">Save</button>
-          </div></label>
+          </div>
+          <p class="hint" id="pObjEcho" style="margin-top:7px"></p></label>
       </div>
       <div id="allowBox"></div>
 
@@ -2105,7 +2113,27 @@ function planFor(ym){
 }
 function targetsFor(ym){ return planFor(ym).targets||{}; }
 function targetOf(ym,c){ return Number(targetsFor(ym)[c]||0); }
+/* An objective can be stated two ways and they answer different questions.
+   "40% of take-home" is a rate you hold across months whatever they pay.
+   "$5,000 this month" is a target you have in mind for THIS month — a deposit
+   to make, a bill coming in January — and expressing it as a percentage means
+   doing arithmetic in your head against a take-home that moves.
+
+   Stored as both: `objective` stays the percentage it always was, so every
+   older plan keeps working untouched, and `objectiveAbs` holds the dollar form.
+   `objectiveMode` says which one you typed, and that is the one that survives
+   a change in take-home. */
 function objectiveFor(ym){ return Number(planFor(ym).objective||0); }
+function objectiveMode(ym){
+  return planFor(ym).objectiveMode==="amount" ? "amount" : "percent";
+}
+/* What the objective is worth in dollars this month — the figure the allowance
+   actually subtracts, whichever way it was typed. */
+function objectiveAmount(ym){
+  const stated=Number(S.settings.income||0);
+  if(objectiveMode(ym)==="amount") return Math.max(0, Number(planFor(ym).objectiveAbs||0));
+  return stated>0 ? stated*objectiveFor(ym)/100 : 0;
+}
 
 /* A month is closed once it is fully past. Closed plans are locked: the record
    of what you were aiming at is not something to revise later. */
@@ -2147,10 +2175,9 @@ function ceilingMode(){
 
 /* Trailing per-category discretionary averages. Excludes the open cycle: a
    month that is four days old would drag every average toward zero. */
-function historyAvg(n){
+function historyAvg(n, ym){
   n=n||3;
-  const cur=cycleOf(todayISO());
-  const ms=monthsWithData().filter(m=>m<cur).slice(-n);
+  const ms=baselineMonths(ym, n);
   if(!ms.length) return { months:0, byCat:{}, total:0 };
   const byCat={};
   for(const m of ms){
@@ -2172,7 +2199,7 @@ function allowance(ym){
   if(mode==="custom") return { mode, limit:null, committed, excess:0, basis:null };
 
   if(mode==="history"){
-    const h=historyAvg(3);
+    const h=historyAvg(3, ym);
     return { mode, limit: h.months?h.total:null, committed,
              excess: h.months?Math.max(0,committed-h.total):0,
              basis: h.months?("your average over the last "+h.months+" month"
@@ -2181,18 +2208,25 @@ function allowance(ym){
 
   /* objective */
   const stated=Number(S.settings.income||0);
-  const objPct=objectiveFor(ym);
   if(stated<=0) return { mode, limit:null, committed, excess:0, basis:null };
   const b=billsThisMonth(ym);
   const d=monthData(ym);
   /* Your share, not the household's: reimbursements come back off the top. */
   const fixedNet=(d.fixed - d.refundsFixed) + b.toCome - b.offsetTotal;
-  const save=stated*objPct/100;
+  const save=objectiveAmount(ym);
+  const objMode=objectiveMode(ym);
   const limit=stated - fixedNet - save;
+  /* The basis names the objective the way you typed it, not the way it was
+     stored. Being told your allowance rests on "a 42% objective" when you
+     asked to save $5,000 is the app answering a question you did not ask. */
   return { mode, limit, committed, excess:Math.max(0,committed-limit),
            basis:"take-home less your share of non-discretionary"
-             +(objPct>0?" and a "+Math.round(objPct)+"% objective":""),
-           stated, fixedNet, save };
+             +(save>0.5
+               ? " and "+(objMode==="amount"
+                   ? "a "+money(save)+" objective"
+                   : "a "+Math.round(objectiveFor(ym))+"% objective")
+               : ""),
+           stated, fixedNet, save, objMode };
 }
 
 function statusOf(spent,target,pace){
@@ -2670,8 +2704,8 @@ function outlook(ym){
      `pace` is the fraction of the cycle elapsed, and it is the weight. */
   const pace2 = closed ? 1 : Math.min(1, Math.max(0, paceOf(ym)));
   const tt    = targetTotal(ym);
-  const hist  = historyAvg(3);
-  const ndAvg = avgNonDiscretionary(3);
+  const hist  = historyAvg(3, ym);
+  const ndAvg = avgNonDiscretionary(3, ym);
   const ndTypical  = ndAvg.months && !ndAvg.live ? ndAvg.amount : null;
 
   /* Discretionary: your own limits are the best statement of what you intend
@@ -2945,9 +2979,27 @@ function committedMonthly(opts){
    closed months. Your share, net of reimbursements — the equation is about
    what is left for YOU to save, so the housemate's half of the rent was never
    yours to save in the first place. */
-function avgNonDiscretionary(n){
+/* The window for both baselines: the n most recent months that are BOTH
+   before the month being asked about AND closed.
+
+   Both used to anchor on today rather than on `ym`, which was right for the
+   current month and wrong either side of it. Viewing September from August
+   averaged the months before AUGUST — May, June, July — when the question was
+   about September. Worse in the other direction: a past month's projection was
+   computed from the three months before today, so March was being projected
+   from May, June and July, months that had not happened yet.
+
+   Open months stay excluded. A month still filling up would drag the average
+   down by however much of it has not arrived. */
+function baselineMonths(ym, n){
   const cur=cycleOf(todayISO());
-  const ms=monthsWithData().filter(m=>m<cur).slice(-(n||3));
+  const upto=(ym && ym<cur) ? ym : cur;
+  return monthsWithData().filter(m=>m<upto && m<cur).slice(-(n||3));
+}
+
+function avgNonDiscretionary(n, ym){
+  const cur=cycleOf(todayISO());
+  const ms=baselineMonths(ym, n);
   if(!ms.length){
     const b=billsThisMonth(cur);
     return { months:0, amount:Math.max(0,b.posted+b.toCome-b.offsetTotal), live:true };
@@ -2971,7 +3023,7 @@ function ratePlan(){
      averaged over closed months. The double-count guard goes with it: actuals
      are FC() categories and ceilings are TC() categories, so by construction
      the two cannot overlap. */
-  const nd = avgNonDiscretionary(3);
+  const nd = avgNonDiscretionary(3, cycleOf(todayISO()));
   const fixed = nd.amount;
   const ceilings = targetTotal(cursor);
   const planned = fixed + ceilings;
@@ -6367,7 +6419,7 @@ function openCeilings(){
 }
 
 function renderAllowance(){
-  const mode=ceilingMode(), a=allowance(cursor), h=historyAvg(3);
+  const mode=ceilingMode(), a=allowance(cursor), h=historyAvg(3, cursor);
   document.querySelectorAll("#ceilMode button").forEach(b=>
     b.setAttribute("aria-pressed", b.dataset.k===mode));
 
@@ -6377,7 +6429,16 @@ function renderAllowance(){
   if(ow){
     ow.hidden = mode!=="objective";
     const oi=document.getElementById("pObj");
-    if(oi && document.activeElement!==oi) oi.value=objectiveFor(cursor)||"";
+    if(oi && document.activeElement!==oi){
+      /* Fill in whichever form was actually typed for this month, not a
+         conversion of it. Someone who asked to save $5,000 should find $5,000
+         in the box, not 42.4. */
+      objModeDraft=null;
+      oi.value = objectiveMode(cursor)==="amount"
+        ? (Number(planFor(cursor).objectiveAbs||0) || "")
+        : (objectiveFor(cursor) || "");
+    }
+    syncObjMode();
   }
 
   const box=document.getElementById("allowBox");
@@ -6488,7 +6549,7 @@ function renderPlan(){
      words. */
   const cats=S.settings.categories||CAT_ROLE_SEED;
   const planTargets=targetsFor(cursor);
-  const havg=historyAvg(3);
+  const havg=historyAvg(3, cursor);
   /* One scale across every row, so the bars are comparable to each other
      rather than each being its own private 100%. */
   const scale=Math.max(1, ...cats.map(c=>
@@ -7224,12 +7285,68 @@ document.querySelectorAll("#anaMode button").forEach(b=>b.onclick=()=>{
 document.querySelectorAll("#ceilMode button").forEach(b=>b.onclick=()=>{
   S.settings.ceilingMode=b.dataset.k; save(); renderAll();
 });
+/* Not persisted until Save: the toggle changes what the box means, and
+   changing what a number means under someone before they have confirmed it is
+   how a 40 becomes $40. */
+let objModeDraft=null;
+function objModeNow(){ return objModeDraft || objectiveMode(cursor); }
+function syncObjMode(){
+  const m=objModeNow(), stated=Number(S.settings.income||0);
+  document.querySelectorAll("#objMode button").forEach(b=>
+    b.setAttribute("aria-pressed", String(b.dataset.o===m)));
+  const box=document.getElementById("pObj");
+  box.max = m==="percent" ? 100 : "";
+  box.step = m==="percent" ? 1 : 50;
+  box.placeholder = m==="percent" ? "40" : "5000";
+  document.getElementById("pObjLbl").textContent =
+    m==="percent" ? "Savings objective (% of take-home)" : "Savings objective (per month)";
+  /* Whichever way you type it, show what it comes to the other way. That is
+     the arithmetic this toggle exists to stop you doing in your head. */
+  const v=Number(box.value)||0;
+  const echo=document.getElementById("pObjEcho");
+  if(!v || stated<=0){ echo.textContent = stated<=0
+    ? "Add your take-home in Profile and this becomes a spending allowance."
+    : ""; return; }
+  echo.textContent = m==="percent"
+    ? money(stated*v/100)+" a month at your current take-home."
+    : Math.round(v/stated*1000)/10+"% of your take-home.";
+}
+document.querySelectorAll("#objMode button").forEach(b=>b.onclick=()=>{
+  objModeDraft=b.dataset.o;
+  const box=document.getElementById("pObj");
+  /* Carry the figure across rather than blanking it: switching from 40% should
+     offer the dollars 40% actually is, not an empty box. */
+  const stated=Number(S.settings.income||0), v=Number(box.value)||0;
+  if(v>0 && stated>0)
+    box.value = objModeDraft==="amount"
+      ? Math.round(stated*v/100)
+      : Math.round(v/stated*1000)/10;
+  syncObjMode();
+});
+document.getElementById("pObj").oninput=syncObjMode;
+
 document.getElementById("saveObj").onclick=()=>{
   if(monthClosed(cursor)){ toast(cycleLabel(cursor)+" is closed \u2014 its plan is locked"); return; }
+  const m=objModeNow();
   const v=Number(document.getElementById("pObj").value);
-  const obj=(v>0&&v<=100)?v:0;
-  setPlan(cursor,{objective:obj}); save(); renderAll();
-  toast(obj?"Objective "+obj+"% for "+cycleLabel(cursor):"Objective cleared for "+cycleLabel(cursor));
+  const stated=Number(S.settings.income||0);
+  if(m==="amount"){
+    const amt=v>0?v:0;
+    /* The percentage is kept in step so nothing that reads `objective`
+       — an older card, a future one — sees a stale figure. */
+    setPlan(cursor,{ objectiveMode:"amount", objectiveAbs:amt,
+                     objective: stated>0 ? Math.round(amt/stated*1000)/10 : 0 });
+    objModeDraft=null; save(); renderAll();
+    toast(amt? money(amt)+" objective for "+cycleLabel(cursor)
+             : "Objective cleared for "+cycleLabel(cursor));
+  } else {
+    const obj=(v>0&&v<=100)?v:0;
+    setPlan(cursor,{ objectiveMode:"percent", objective:obj,
+                     objectiveAbs: stated>0 ? Math.round(stated*obj/100) : 0 });
+    objModeDraft=null; save(); renderAll();
+    toast(obj?"Objective "+obj+"% for "+cycleLabel(cursor)
+             :"Objective cleared for "+cycleLabel(cursor));
+  }
 };
 document.getElementById("saveTargets").onclick=()=>{
   document.querySelectorAll("#targetInputs [data-name]").forEach(i=>{
