@@ -545,7 +545,9 @@ details.tuck>.hint{margin-top:4px}
 .recap .rrow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
   padding:9px 0;border-top:1px solid var(--rule);text-align:left;font-size:var(--f3)}
 .recap .rrow .num{font-size:var(--f4)}
+.recap .rrow.rtotal{border-top:1.5px solid var(--ink);font-weight:600}
 .recap .rrows{margin:16px 0 4px}
+.recap{max-height:calc(100dvh - 40px);overflow-y:auto}
 .recap .rflag{display:inline-block;margin-top:12px;padding:5px 10px;border-radius:999px;
   font-size:var(--f2);letter-spacing:.05em;text-transform:uppercase;
   background:var(--track);color:var(--ink)}
@@ -591,6 +593,43 @@ body.noscroll{overflow:hidden}
    nothing: the same failure as the sheet overlay, one layer down. */
 .toast.show{opacity:1}
 .toast .tundo{pointer-events:auto}
+
+/* ---- cash-flow ledger ---- */
+.cfl .sec{margin-top:14px}
+.cfl .sech{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  font-size:var(--f2);letter-spacing:.12em;text-transform:uppercase;color:var(--quiet);
+  padding-bottom:6px;border-bottom:1px solid var(--rule)}
+.cfl .sech .num{font-size:var(--f4);letter-spacing:0;color:var(--ink)}
+.cfl details.grp{border-bottom:1px solid var(--rule)}
+.cfl details.grp>summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;
+  gap:8px;padding:10px 0;font-size:var(--f3)}
+.cfl details.grp>summary::-webkit-details-marker{display:none}
+.cfl details.grp>summary::before{content:"\203A";color:var(--quiet);display:inline-block;
+  width:9px;transition:transform .18s ease}
+.cfl details.grp[open]>summary::before{transform:rotate(90deg)}
+.cfl .gl{flex:1;min-width:0}
+.cfl .gc{color:var(--quiet);font-size:var(--f2)}
+.cfl .gv{font-size:var(--f4);white-space:nowrap}
+.cfl .rws{padding:0 0 8px 17px}
+.cfl .rw{display:flex;align-items:baseline;gap:8px;padding:6px 0;font-size:var(--f3);
+  border-top:1px dashed var(--rule);cursor:pointer}
+.cfl .rw:first-child{border-top:0}
+.cfl .rw .dt{color:var(--quiet);font-size:var(--f2);width:38px;flex:none}
+.cfl .rw .mn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfl .rw .ac{color:var(--quiet);font-size:var(--f2)}
+.cfl .rw .num{white-space:nowrap}
+.cfl .kindsel{font-size:var(--f2);padding:2px 4px;margin:0;width:auto;min-height:0;height:auto}
+.cfl .tot{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0 2px;
+  border-top:1.5px solid var(--ink);margin-top:10px;font-weight:600}
+.cfl .tot .num{font-size:var(--f5)}
+.cfl .flat{display:flex;justify-content:space-between;gap:10px;padding:8px 0;
+  font-size:var(--f3);border-bottom:1px solid var(--rule)}
+.cfl .bank{margin-top:8px;font-size:var(--f3);line-height:1.5}
+.cfl .bank .r{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+.cfl .verd{margin-top:8px;padding:9px 11px;border-radius:10px;font-size:var(--f3);line-height:1.45;
+  background:var(--track)}
+.cfl .verd.ok{color:var(--path)}
+.cfl .verd.bad{color:var(--over)}
 </style>
 </head>
 <body>
@@ -733,6 +772,9 @@ body.noscroll{overflow:hidden}
 
   <section id="v-saving">
     <div class="card verdict" id="saveCard"></div>
+    <!-- The ledger behind the saving figure: every row of money in and out,
+         what was left out and why, and a check against the bank. -->
+    <div class="card" id="cashLedger"></div>
     <div class="card" id="outlookCard"></div>
     <!-- Moved off Planning. Every other card there is scoped to the month in
          the header; this one never reads the cursor, because "when do I reach
@@ -1491,9 +1533,18 @@ function baseType(t){
 }
 function autoCategory(t){
   const learned = S.settings.rules[ruleKey(t.merchant)];
-  /* A remembered cash-out/cash-in comes back as a type, not a category. */
-  if (learned==="__cashout") return { cat:null, kind:"cashout", why:"learned" };
-  if (learned==="__cashin")  return { cat:null, kind:"cashin",  why:"learned" };
+  /* A remembered kind (cash out, card payment, pay, rental...) comes back as a
+     type, not a category — and only in the direction it was taught. A rule
+     learned on a debit never files a credit: that is exactly how a card's
+     "payment received" was booked as cash leaving. */
+  if (typeof learned==="string" && learned.startsWith("__")){
+    let kind=learned.slice(2);
+    if(kind==="cashin") kind="otherin";
+    const inward = IN_KINDS.some(k=>k[0]===kind);
+    if (inward === isInflow(t))
+      return { cat:null, kind, why:"learned" };
+    return { cat:null, why:"unknown" };
+  }
   if (learned) return { cat: learned, why: "learned" };
   for (const [rx,,role] of RULES){
     if (!role) continue;
@@ -1524,7 +1575,10 @@ function assess(t, pool){
      there is nothing to ask: "MOBILE PAYMENT - THANK YOU" on a credit card is
      a card payment and no other thing. */
   if (t.type === "transfer" || t.type === "income" || t.type === "savings"){
-    if (AMEX_PAY_RX.test(t.rawDesc||"")) return { ok:true, reason:"" };
+    if (t.crossAccount || AMEX_PAY_RX.test(t.rawDesc||"")) return { ok:true, reason:"" };
+    /* A remembered kind for this merchant answers the question already. */
+    const k=autoCategory(t);
+    if (k.kind) return { ok:true, reason:"", kind:k.kind };
     if (typeRuleFor(t.merchant)) return { ok:true, reason:"" };
     return { ok:false, reason:"auto-typed" };
   }
@@ -1606,7 +1660,8 @@ const REASON_TEXT = {
   "new-merchant":       "First time seeing this merchant",
   "amount-outlier":     "Much larger than usual for this merchant",
   "bill-duplicate":     "May be the bill you already confirmed, arriving from the bank",
-  "auto-typed":         "Guessed as a transfer, deposit or saving \u2014 confirm or correct it"
+  "auto-typed":         "Guessed as a transfer, deposit or saving \u2014 confirm or correct it",
+  "wrong-direction":    "Was filed as money going the other way \u2014 say what this is"
 };
 
 /* What the app decided on its own about a merchant's TYPE, once you confirmed
@@ -1671,9 +1726,152 @@ function linkRefund(t, pool){
 /* cross-account: the NFCU payment to Amex must not be counted as spending,
    because every charge it covers is already in the Amex ledger */
 function markCrossAccount(t){
-  if (t.account==="nfcu" && AMEX_PAY_RX.test(t.rawDesc)){
-    t.type="transfer"; t.category="Transfer"; t.crossAccount=true;
+  if (isCardPaymentText(t)) markInternal(t, true);
+}
+
+/* ============================================================
+   CARD PAYMENTS — the one movement that must never count.
+   Paying a card is money moving from checking to the card. Every purchase it
+   covers is already on the card's own ledger, so counting the payment as well
+   counts the same dollars twice.
+
+   It used to be recognised in one place only: an account literally named
+   "nfcu", with a description matching Amex wording. Everything else fell
+   through — a payment worded "AMEX EPAYMENT", a Chase autopay, and, on the
+   card's own statement, the "PAYMENT RECEIVED" credit. Those landed in Review
+   as an unknown merchant or an unmatched refund, the natural tap was "Cash
+   out", the choice was remembered, and from then on every card payment left
+   the month TWICE: once as the checking-side debit, and once as the card-side
+   credit, because cash out took Math.abs() of a credit and booked money in as
+   money out. That is the shape of the October close.
+
+   Now: wording on either side, on any account by its KIND, and a pairing pass
+   that catches what wording misses — a checking outflow and a card credit for
+   the same amount within a week are one payment, whatever either is called.
+   ============================================================ */
+const CARD_WORD_RX = /(amex|american express|chase|citi\b|citicard|capital one|cap one|discover|barclay|synchrony|wells fargo card|credit card|crd\b|card ?services|cardmember|nfcu (visa|card|cc)|navy federal (visa|card|cc|credit card))/i;
+const PAY_WORD_RX  = /(pay|pymt|pmt|epay|autopay|payment|ach)/i;
+const CARD_CREDIT_RX = /(payment|pymt|pmt|autopay|thank you|epay)/i;
+function isWallet(id){ return id==="cash"; }
+/* Direction of a row. Imported rows carry a sign (positive = money leaving),
+   but an edited row stores a magnitude and reads direction off its type, so
+   the type decides wherever it can and the sign only where it cannot. */
+function flowSign(t){
+  if(t.type==="income"||t.type==="cashin"||t.type==="refund") return 1;
+  if(t.type==="spend"||t.type==="cashout") return -1;
+  return Number(t.amount)<0 ? 1 : -1;
+}
+function isInflow(t){ return flowSign(t)>0; }
+function isCashAcct(id){ return acct(id).kind==="cash" && !isWallet(id); }
+function isCardPaymentText(t){
+  const raw=t.rawDesc||"";
+  /* money in on a card, worded as a payment */
+  if (isCard(t.account) && Number(t.amount)<0 && CARD_CREDIT_RX.test(raw)) return true;
+  /* money out of a cash account, worded as paying a card */
+  if (isCashAcct(t.account) && !isInflow(t)
+      && (AMEX_PAY_RX.test(raw) || (CARD_WORD_RX.test(raw) && PAY_WORD_RX.test(raw)))) return true;
+  return false;
+}
+function markInternal(t, cardPay){
+  t.type="transfer"; t.category="Transfer"; t.crossAccount=!!cardPay;
+  t.pending=false; t.reason=""; delete t.inKind;
+}
+/* Pair what the wording missed. Only a card credit already recognised as a
+   payment can claim a checking outflow, one to one, same amount to the cent,
+   within seven days — a coincidental $50 utility next to a $50 refund is not
+   a payment, and neither side alone is enough. Returns how many rows moved. */
+function pairCardPayments(rows){
+  rows=rows||S.txns;
+  let n=0;
+  const claimed=new Set(rows.filter(t=>t.pairedWith).map(t=>t.id));
+  const credits=rows.filter(t=>isCard(t.account) && isInflow(t) && t.type==="transfer"
+                            && !claimed.has(t.id));
+  for(const c of credits){
+    const amt=Math.abs(c.amount);
+    const cand=rows.filter(x=>!claimed.has(x.id) && x.id!==c.id && isCashAcct(x.account)
+        && !isInflow(x) && Math.abs(Math.abs(x.amount)-amt)<0.011
+        && Math.abs(dnum(x.date)-dnum(c.date))<=7
+        && x.type!=="income" && x.type!=="cashin")
+      .sort((a,b)=>Math.abs(dnum(a.date)-dnum(c.date))-Math.abs(dnum(b.date)-dnum(c.date)));
+    const x=cand[0];
+    if(!x) continue;
+    if(x.type!=="transfer" || !x.crossAccount){ markInternal(x,true); n++; }
+    x.pairedWith=c.id; c.pairedWith=x.id; c.crossAccount=true;
+    claimed.add(x.id); claimed.add(c.id);
   }
+  return n;
+}
+/* The repair for files already carrying the double count. Anything worded as
+   a card payment becomes internal whatever it was filed as; anything it pairs
+   with does too; and a remembered "cash out" for a payment merchant is
+   replaced, so next month's statement does not re-teach the mistake. */
+function repairCardPayments(){
+  let n=0;
+  const fixedMerchants=new Set();
+  for(const t of S.txns){
+    if(t.type==="transfer" && t.crossAccount) continue;
+    if(isCardPaymentText(t)){ markInternal(t,true); n++; fixedMerchants.add(ruleKey(t.merchant)); }
+  }
+  const before=new Set(S.txns.filter(t=>t.type==="transfer"&&t.crossAccount).map(t=>t.id));
+  n+=pairCardPayments();
+  for(const t of S.txns) if(t.crossAccount && !before.has(t.id)) fixedMerchants.add(ruleKey(t.merchant));
+  const R=S.settings.rules||{};
+  for(const k of fixedMerchants){
+    /* Only drop the rule if EVERY row from that merchant is now a payment —
+       a merchant name shared with real spending keeps its rule. */
+    const all=S.txns.filter(t=>ruleKey(t.merchant)===k);
+    if(all.length && all.every(t=>t.type==="transfer"&&t.crossAccount)){
+      R[k]="__cardpay";
+    }
+  }
+  return n;
+}
+
+/* ============================================================
+   KINDS OF MONEY — what a row IS, before which category it is in.
+   Directional: a kind for money in can only be given to money in, and one
+   for money out only to money out. "Cash out" on a credit is how a payment
+   received was booked as money spent.
+   ============================================================ */
+const IN_KINDS  = [["pay","Pay"],["rental","Rental income"],["reimb","Reimbursement"],
+                   ["otherin","Other income"],["xferin","From my other account"]];
+const OUT_KINDS = [["cashout","Cash out (ATM)"],["cardpay","Card payment"],
+                   ["saveout","To savings or investments"],["xferout","To my other account"]];
+const INKIND_LABEL={ pay:"Pay", rental:"Rental income", reimb:"Reimbursements", other:"Other income" };
+function applyKind(t, kind){
+  delete t.inKind;
+  if(kind==="cashout"){ t.type="cashout"; }
+  else if(kind==="cardpay"){ markInternal(t,true); }
+  else if(kind==="saveout"){ t.type="savings"; t.category="Savings"; t.crossAccount=false; }
+  else if(kind==="xferin"||kind==="xferout"){ markInternal(t,false); }
+  else {
+    t.type="income"; t.category="Income";
+    t.inKind = kind==="otherin"||kind==="cashin" ? "other" : kind;
+  }
+  t.pending=false; t.reason="";
+}
+/* Which bucket of money-in a row belongs to. A remembered per-merchant choice
+   wins; an old "cash in" row defaults to Other, a detected deposit to Pay. */
+function inKindOf(t){
+  if(t.inKind) return t.inKind;
+  const r=(S.settings.inKindRules||{})[ruleKey(t.merchant)];
+  if(r) return r;
+  /* A payment-app deposit into a household that splits bills is, almost
+     always, the other person paying their share. Guessed, shown, and one tap
+     to change in the cash-flow ledger. */
+  if(PAYAPP_RX.test(t.rawDesc||"") && Object.keys((S.settings||{}).shared||{}).length) return "reimb";
+  return t.type==="cashin" ? "other" : "pay";
+}
+function setInKind(merchant, kind){
+  const k=ruleKey(merchant);
+  S.settings.inKindRules={...(S.settings.inKindRules||{}), [k]:kind};
+  let n=0;
+  for(const t of S.txns)
+    if(ruleKey(t.merchant)===k && (t.type==="income"||t.type==="cashin")){
+      t.type="income"; t.inKind=kind; n++;
+    }
+  bumpData();
+  return n;
 }
 
 function monthOf(t){
@@ -1715,9 +1913,12 @@ function ingest(parts){
     const a=assess(t,pool);
     t.pending=!a.ok;
     t.reason=a.reason;
-    if(a.kind) t.type=a.kind;
+    if(a.kind) applyKind(t, a.kind);
     if(a.billTxn) t.billMatch=a.billTxn;
   }
+  /* Card payments the wording missed, paired across accounts — including a
+     checking debit in this file against a card credit imported last week. */
+  pairCardPayments(pool);
   S.txns = pool;
   S.txns.sort(byDateDesc);
   const held = fresh.filter(t=>t.pending).length;
@@ -1759,20 +1960,28 @@ function discardDuplicates(){
    downstream has to special-case a category name. The remembered rule uses a
    reserved key that cannot collide with a category, since a user could
    legitimately name one "Cash". */
-const KIND_RULE={ cashout:"__cashout", cashin:"__cashin" };
 function resolveKind(id, kind, teach){
   bumpData();
   const t=S.txns.find(x=>x.id===id);
   if(!t) return;
-  t.type=kind; t.pending=false; t.reason="";
+  const inward=IN_KINDS.some(k=>k[0]===kind);
+  /* The direction guard. The buttons only offer valid kinds, but this is the
+     one place every path goes through. */
+  if(inward !== isInflow(t)) return;
+  applyKind(t, kind);
   if(teach){
-    S.settings.rules[ruleKey(t.merchant)]=KIND_RULE[kind];
+    S.settings.rules[ruleKey(t.merchant)]="__"+kind;
+    if(inward && t.inKind)
+      S.settings.inKindRules={...(S.settings.inKindRules||{}), [ruleKey(t.merchant)]:t.inKind};
     S.txns.forEach(x=>{
-      if(x.pending && x.merchant===t.merchant && x.reason==="new-merchant"){
-        x.type=kind; x.pending=false; x.reason="";
+      if(x.pending && x.merchant===t.merchant
+         && (x.reason==="new-merchant"||x.reason==="auto-typed"||x.reason==="unmatched-refund")
+         && inward===isInflow(x)){
+        applyKind(x, kind);
       }
     });
   }
+  if(kind==="cardpay") pairCardPayments();
 }
 
 function resolve(id, cat, teach){
@@ -1922,6 +2131,23 @@ function migrate(){
     const to=catMigrationFor(t.category);
     if(to){ t.category=to; n++; }
   }
+  /* Cash flows, once. Card payments counted as spending come out, and any row
+     filed as a kind that runs the wrong way — a credit marked "cash out" — is
+     sent back to Review rather than guessed at: it was counted as money
+     leaving when money arrived, and only you know what it was. */
+  if(!S.settings.flowsV1){
+    S.settings.flowsV1=true;
+    const fixed=repairCardPayments();
+    let wrong=0;
+    for(const t of S.txns){
+      if(t.pending) continue;
+      if(t.type==="cashout" && Number(t.amount)<0){
+        t.pending=true; t.reason="wrong-direction"; wrong++;
+      }
+    }
+    if(fixed||wrong) S.flowRepair={ fixed, wrong };
+    n+=fixed+wrong;
+  }
   for(const b of (S.settings.bills||[])){
     const to=catMigrationFor(b.category);
     if(to) b.category=to;
@@ -1988,11 +2214,22 @@ function dropRule(key){ delete (S.settings.rules||{})[key]; }
 
 /* ---------- cash on hand, straight from the bank's own running balance ---------- */
 function currentCash(){
-  const b=S.txns.filter(t=>t.account==="nfcu" && typeof t.balance==="number");
-  if(!b.length) return null;
-  b.sort((x,y)=> x.date===y.date ? x.seq-y.seq : (x.date<y.date?-1:1));
-  const last=b[b.length-1];
-  return { amount:last.balance, date:last.date };
+  /* Every cash account that carries balances, not just one named "nfcu" —
+     savings at the same bank is cash on hand too. Each account's latest
+     day-end balance, summed; dated by the newest of them. */
+  let amount=0, date=null, any=false;
+  for(const a of accounts()){
+    if(!isCashAcct(a.id)) continue;
+    const rows=S.txns.filter(t=>t.account===a.id && t.reason!=="duplicate");
+    const withBal=rows.filter(t=>typeof t.balance==="number");
+    if(!withBal.length) continue;
+    const last=withBal.map(t=>t.date).sort().pop();
+    const c=dayClose(rows.filter(t=>t.date===last));
+    if(c==null) continue;
+    amount+=c; any=true;
+    if(!date || last>date) date=last;
+  }
+  return any ? { amount, date } : null;
 }
 
 /* ---------- month math ---------- */
@@ -2013,8 +2250,8 @@ function personOf(t){
    milliseconds. bumpData() is called from save() — which every mutation path
    goes through — and again directly from each mutator, so a path that renders
    before it saves still reads fresh. */
-let mdCache=new Map();
-function bumpData(){ mdCache.clear(); }
+let mdCache=new Map(), flCache=new Map();
+function bumpData(){ mdCache.clear(); flCache.clear(); }
 function monthData(ym){
   const hit=mdCache.get(ym);
   if(hit) return hit;
@@ -2093,15 +2330,199 @@ function computeMonthData(ym){
   /* Cash in ADDS, where a detected salary deposit does not: the deposit is the
      take-home you already typed arriving, but a reimbursement is money the
      month genuinely gained on top of it. */
-  const base = stated>0 ? stated : extraIncome;
-  const income = base + cashIn;
+  /* What actually arrived. The surplus no longer reads this — outlook() owns
+     income, pay versus rental versus reimbursement, actual versus expected —
+     so this is only "money in on file", for summaries. */
+  const income = extraIncome + cashIn;
   const incomeSource = stated>0 ? "stated" : extraIncome>0 ? "bank" : "none";
   return { ym, live, held, heldAmt, byCat, byPerson, incomeSource, deposits: extraIncome,
            discretionary, discNet, fixed, refunds, refundsDisc, refundsFixed,
            transfers, savings, net, income, cashOut, cashIn,
            unbudgeted, unbudgetedNet, refundsUnbudgeted, fixedNet, nonDiscNet,
-           saveRate: income>0 ? (income-net)/income : null };
+           saveRate: null };
 }
+/* ============================================================
+   CASH FLOWS — every row in a month, sorted into exactly one place.
+
+     IN        pay · rental · reimbursements · other income
+     OUT       discretionary · non-discretionary · cash out
+     MOVED     to or from accounts Path does not track (savings, brokerage)
+     INTERNAL  card payments and transfers between your own accounts —
+               shown, never counted
+     HELD      in Review, out of everything until answered
+
+   Saved = IN − OUT. That is the one definition. Every surface that reports
+   what a month let you keep reads it from here or from outlook(), which uses
+   these same actuals and only projects what has not happened yet.
+
+   Spending is the household's gross, and Maja's payments back are a line of
+   money in — because that is what the bank sees. The Spending tab still shows
+   your share against your limits; this is the cash.
+   ============================================================ */
+function savedEff(t){
+  if(t.type==="spend")   return -Number(t.amount);
+  if(t.type==="refund"||t.type==="income"||t.type==="cashin") return Math.abs(t.amount);
+  if(t.type==="cashout") return -Math.abs(t.amount);
+  return 0;
+}
+function cashEff(t){
+  if(t.type==="transfer"||t.type==="savings") return flowSign(t)*Math.abs(t.amount);
+  return savedEff(t);
+}
+function flows(ym){
+  const hit=flCache.get(ym);
+  if(hit) return hit;
+  const v=computeFlows(ym);
+  flCache.set(ym,v);
+  return v;
+}
+function computeFlows(ym){
+  const d=monthData(ym);
+  const inRows={ pay:[], rental:[], reimb:[], other:[] };
+  const moved=[], internal=[], cardPay=[];
+  let walletSpend=0;
+  for(const t of d.live){
+    if(t.type==="income"||t.type==="cashin"){ (inRows[inKindOf(t)]||inRows.other).push(t); continue; }
+    if(t.type==="transfer"||t.type==="savings"){
+      if(t.crossAccount){ cardPay.push(t); continue; }
+      /* A transfer is internal only if its other leg is on file: same amount,
+         opposite direction, another of your accounts, within three days.
+         Otherwise the money really left (or arrived from) somewhere Path does
+         not track, and it belongs on the "moved" line. */
+      const leg=S.txns.find(x=>x.id!==t.id && x.account!==t.account && !x.pending
+        && (x.type==="transfer"||x.type==="savings")
+        && flowSign(x)===-flowSign(t)
+        && Math.abs(Math.abs(x.amount)-Math.abs(t.amount))<0.011
+        && Math.abs(dnum(x.date)-dnum(t.date))<=3);
+      (leg?internal:moved).push(t);
+      continue;
+    }
+    if(isWallet(t.account) && t.type==="spend") walletSpend+=Number(t.amount);
+  }
+  const sum=a=>a.reduce((s,t)=>s+Math.abs(t.amount),0);
+  const inTot={ pay:sum(inRows.pay), rental:sum(inRows.rental),
+                reimb:sum(inRows.reimb), other:sum(inRows.other) };
+  const moneyIn=inTot.pay+inTot.rental+inTot.reimb+inTot.other;
+  /* An ATM withdrawal you later spend from your wallet and record is the same
+     money twice — once leaving checking, once as the purchase. The recorded
+     cash spending is the better description, so it covers the withdrawal
+     first and only the unexplained remainder counts as cash out. */
+  const atmCovered=Math.min(d.cashOut, Math.max(0,walletSpend));
+  const cashOutNet=d.cashOut-atmCovered;
+  const disc=d.discNet, nonDisc=d.nonDiscNet;
+  const moneyOut=disc+nonDisc+cashOutNet;
+  const saved=moneyIn-moneyOut;
+  const movedOut=moved.filter(t=>!isInflow(t)).reduce((a,t)=>a+Math.abs(t.amount),0);
+  const movedIn =moved.filter(t=> isInflow(t)).reduce((a,t)=>a+Math.abs(t.amount),0);
+  return { ym, d, inRows, inTot, moneyIn, disc, nonDisc, cashOut:d.cashOut, cashOutNet,
+           atmCovered, walletSpend, moneyOut, saved, moved, movedOut, movedIn,
+           internal, cardPay, held:d.held, heldAmt:d.heldAmt,
+           recon: reconcile(ym, saved, atmCovered) };
+}
+
+/* ---- THE BANK CHECK ----
+   Saved is a statement about the month. The bank balance is a fact about the
+   account. They differ for known reasons — a card charged this month and paid
+   next, money moved to brokerage, a held row — and every one of those is a
+   line here. Whatever is left after the known reasons is "unexplained", and
+   that figure is the one that would have caught the October close: a card
+   payment counted twice leaves the bank change and the app's change thousands
+   of dollars apart, with nothing else to account for it. */
+function dayClose(rows){
+  /* Rows from one account, one date. Banks order a day's rows inconsistently,
+     so "the last row" is a guess. The close is the balance that is BOTH some
+     row's running balance AND what you get by taking any row's balance, adding
+     back that row, and applying the whole day — only the true first row and
+     the true last row agree on it. */
+  const withBal=rows.filter(r=>typeof r.balance==="number");
+  if(!withBal.length) return null;
+  const dayNet=rows.reduce((a,r)=>a+cashEff(r),0);
+  const closes=withBal.map(r=>r.balance);
+  for(const r of withBal){
+    const open=r.balance-cashEff(r);       // the balance before this row
+    const close=open+dayNet;               // if it was the day's first row
+    if(closes.some(c=>Math.abs(c-close)<0.011)) return close;
+  }
+  const last=withBal.slice().sort((a,b)=>(a.seq||0)-(b.seq||0)).pop();
+  return last.balance;
+}
+function acctBalanceBounds(id, ym){
+  const all=S.txns.filter(t=>t.account===id && t.reason!=="duplicate");
+  if(!all.some(t=>typeof t.balance==="number")) return null;
+  const first=cycleFirst(ym), next=cycleFirst(ymShift(ym,1));
+  const inMonth=all.filter(t=>t.date>=first && t.date<next);
+  const byDate=new Map();
+  for(const t of all){ if(!byDate.has(t.date)) byDate.set(t.date,[]); byDate.get(t.date).push(t); }
+  const dates=[...byDate.keys()].sort();
+  /* Start: the close of the last day before the month that has rows, else
+     reconstructed from the month's first day. */
+  const before=dates.filter(x=>x<first);
+  let start=null, startNote="";
+  if(before.length){
+    start=dayClose(byDate.get(before[before.length-1]));
+    if(start==null) startNote="no balance on the last statement day before the month";
+  }
+  const mDates=dates.filter(x=>x>=first && x<next);
+  if(start==null && mDates.length){
+    const fr=byDate.get(mDates[0]);
+    const c=dayClose(fr);
+    if(c!=null){ start=c+fr.reduce((a,r)=>a-cashEff(r),0); startNote=""; }
+  }
+  if(!mDates.length) return { start, end:start, through:null, rows:[] };
+  const lastDate=mDates[mDates.length-1];
+  const end=dayClose(byDate.get(lastDate));
+  return { start, end, through:lastDate, rows:inMonth, startNote };
+}
+function reconcile(ym, savedActual, atmCovered){
+  const first=cycleFirst(ym), next=cycleFirst(ymShift(ym,1));
+  const inWin=t=>t.date>=first && t.date<next;
+  const d=monthData(ym);
+  const cashRows=S.txns.filter(t=>isCashAcct(t.account) && inWin(t) && t.reason!=="duplicate");
+  const expected=cashRows.reduce((a,t)=>a+cashEff(t),0);
+  /* Bridge from Saved to the change the rows themselves put through checking. */
+  const L=[];
+  const add=(label,amt,why)=>{ if(Math.abs(amt)>=0.005) L.push({label,amt,why}); };
+  const sv=t=>savedEff(t);
+  const cards=d.live.filter(t=>!isCashAcct(t.account) && !isWallet(t.account));
+  add("Spent on cards — paid from checking when the bill is paid",
+      -cards.reduce((a,t)=>a+sv(t),0), "cards");
+  const wallet=d.live.filter(t=>isWallet(t.account));
+  add("Spent from your wallet — never touched checking",
+      -wallet.reduce((a,t)=>a+sv(t),0)-atmCovered, "wallet");
+  const live=cashRows.filter(t=>!t.pending);
+  add("Card payments out of checking",
+      live.filter(t=>t.type==="transfer"&&t.crossAccount).reduce((a,t)=>a+cashEff(t),0), "cardpay");
+  add("Moved to or from other accounts",
+      live.filter(t=>(t.type==="transfer"&&!t.crossAccount)||t.type==="savings")
+          .reduce((a,t)=>a+cashEff(t),0), "moved");
+  add("Held for review — the bank has it, Path doesn’t yet",
+      cashRows.filter(t=>t.pending).reduce((a,t)=>a+cashEff(t),0), "held");
+  /* A refund dated this month but booked to the month of its charge, or the
+     other way round. Same money, different month. */
+  const booked=live.filter(t=>savedEff(t)!==0 && monthOf(t)!==ym).reduce((a,t)=>a+cashEff(t),0)
+             - d.live.filter(t=>isCashAcct(t.account) && !inWin(t)).reduce((a,t)=>a+sv(t),0);
+  add("Booked to a different month (refunds follow their charge)", booked, "month");
+  const bridged=savedActual+L.reduce((a,l)=>a+l.amt,0);
+  /* Should be zero by construction. If it is not, something in the model is
+     wrong, and the honest thing is to show it rather than absorb it. */
+  add("Not accounted for by the model", expected-bridged, "residual");
+
+  /* Then the bank itself, per account that carries balances. */
+  const accts=accounts().filter(a=>isCashAcct(a.id)).map(a=>{
+    const b=acctBalanceBounds(a.id, ym);
+    if(!b) return { id:a.id, name:a.name, has:false };
+    const rowsDelta=b.rows.reduce((s,t)=>s+cashEff(t),0);
+    const bankDelta=(b.start!=null && b.end!=null) ? b.end-b.start : null;
+    return { id:a.id, name:a.name, has:true, start:b.start, end:b.end, through:b.through,
+             bankDelta, rowsDelta, startNote:b.startNote,
+             gap: bankDelta==null ? null : bankDelta-rowsDelta };
+  });
+  const checked=accts.filter(a=>a.has && a.gap!=null);
+  const gap=checked.reduce((s,a)=>s+a.gap,0);
+  return { expected, lines:L, accts, checked:checked.length>0,
+           unexplained: checked.length ? gap : null };
+}
+
 function monthsWithData(){
   const s=new Set(S.txns.filter(t=>!t.pending).map(monthOf));
   s.add(cycleOf(todayISO()));
@@ -2707,13 +3128,38 @@ function projectSpend({pace, closed, discNet, discRate, discBaseline, fixedKnown
 }
 
 function outlook(ym){
-  const d=monthData(ym), b=billsThisMonth(ym), g=trajectory(ym);
+  const d=monthData(ym), b=billsThisMonth(ym), g=trajectory(ym), F=flows(ym);
   const dim=daysIn(ym), closed=paceOf(ym)>=1;
-  /* d.income, not the raw setting: cash in for this month is part of what it
-     had to work with, and the surplus is the one figure everything reads. */
-  const stated=d.income;
   const objPct=objectiveFor(ym);
   const notes=[];
+
+  /* ---- 0. MONEY IN. Actuals first, the typed take-home only as a forecast.
+     Income used to be ONE typed number, with every real deposit set aside as
+     "timing only". So the app never knew what actually arrived: rent from a
+     tenant counted for nothing, and with no take-home typed the month's income
+     fell back to whatever had been tagged "cash in" — October closed against
+     $200. A closed month now uses what landed. An open month uses the larger
+     of what has landed and the take-home you expect, so a paycheck still to
+     come is not a deficit on the 3rd. */
+  const typed=Number(S.settings.income||0);
+  const payAct=F.inTot.pay;
+  const pay = closed ? (payAct>0 ? payAct : typed) : Math.max(payAct, typed);
+  const payAssumed = closed ? (payAct===0 && typed>0) : (payAct < typed);
+  const rental=F.inTot.rental, otherIn=F.inTot.other;
+  const stated = pay + rental + otherIn;            // income: the denominator of every rate
+  /* Reimbursements are cash in, but not income — counting Maja's half of the
+     rent as earnings would inflate the save rate. They offset spending.
+     Expected from the split until her payment lands; what actually landed
+     once the month is over. */
+  const reimbExp=b.offsetTotal, reimbAct=F.inTot.reimb;
+  const reimb = closed ? (reimbAct>0 ? reimbAct : reimbExp) : Math.max(reimbAct, reimbExp);
+  const reimbAssumed = closed ? (reimbAct===0 && reimbExp>0) : (reimbAct < reimbExp);
+  if(closed && payAssumed)
+    notes.push("No pay is on file for this month, so your typed take-home of "+money(typed)
+      +" stands in for it. Import the checking account for the real figure.");
+  if(closed && reimbAssumed)
+    notes.push("No reimbursement is tagged this month, so the "+money(reimbExp)
+      +" your split expects stands in. If it arrived, tag the deposit as a reimbursement in the cash flow.");
 
   /* ---- 1. SURPLUS: a full-cycle P&L, not a bank balance. Take-home minus
      everything that will have gone out by the last day.
@@ -2765,15 +3211,27 @@ function outlook(ym){
      surplus or the projected balance is wrong. Taken at face value rather than
      projected forward: ATM withdrawals are lumpy, and running one $140 trip on
      day 3 out to "$1,400 by month end" would be a worse guess than no guess. */
-  const cashOut   = d.cashOut||0;
+  /* Net of any withdrawal your recorded wallet spending already describes —
+     see flows(). */
+  const cashOut   = F.cashOutNet||0;
   /* Unplanned is now INSIDE the non-discretionary baseline, so subtracting it
      again here would charge the month twice for the same roof. fixedProj
      already carries what a month of yours typically costs including its
-     unplanned run rate; what has actually landed is netted against it below. */
+     unplanned run rate; what has actually landed is netted against it below.
+
+     fixedProj is YOUR SHARE (it is built net of the split). The cash version
+     puts the household's gross back and takes Maja's payments as money in, so
+     a month she paid late, short or extra reads as exactly that. When her
+     payment matches the split, the two are identical to the cent. */
+  const ndGross   = fixedProj + b.offsetTotal;
   const surplus   = stated>0
-    ? stated - discProj - fixedProj - cashOut : null;
+    ? stated + reimb - discProj - ndGross - cashOut : null;
   const rate      = stated>0 ? surplus/stated : null;
-  const target    = stated>0 && objPct>0 ? stated*objPct/100 : null;
+  /* The objective in dollars, whichever way it was typed — the close used to
+     print a 40% objective as "$40" and compare dollars of savings to it. */
+  const target    = stated>0 ? (objectiveMode(ym)==="amount"
+                      ? (Number(planFor(ym).objectiveAbs)||null)
+                      : (objPct>0 ? stated*objPct/100 : null)) : null;
   const vsTarget  = target!=null ? surplus-target : null;
 
   /* ---- 2. CASH AT THE LAST DAY: starting balance plus the cycle's surplus.
@@ -2787,23 +3245,34 @@ function outlook(ym){
     asOfDay = cycleOf(cash.date)===ym
       ? Math.min(dim, Math.max(1, dayIndex(cash.date,ym)))
       : (cycleOf(cash.date)<ym ? 0 : dim);
-    if(surplus!=null){
-      cashEOM = cash.amount + surplus;
+    /* A closed month does not need projecting: where the bank ended it is on
+       file. */
+    const ends=F.recon.accts.filter(a=>a.has && a.end!=null);
+    if(closed && ends.length){
+      cashEOM=ends.reduce((a,x)=>a+x.end,0);
+      lines=ends.map(a=>({ label:a.name+" at month end", amt:a.end, dir:"in" }));
+    }
+    else if(surplus!=null){
+      /* A balance dated inside the month already contains everything that has
+         happened so far. Adding the whole month's surplus to it counted the
+         month twice — a closed October showed $68,500 against $60,950 in the
+         bank. Only what is still to come is added: the projected surplus less
+         what is already on file. */
+      const inMonth = cycleOf(cash.date)===ym;
+      const toCome = inMonth ? surplus - F.saved : surplus;
+      cashEOM = cash.amount + toCome;
       lines=[
-        { label:"Starting cash",           amt:cash.amount, dir:"in" },
-        { label:"Surplus over the month",  amt:surplus,     dir:surplus>=0?"in":"out" }
+        { label:inMonth?"Cash on hand, "+cash.date.slice(5).replace("-","/"):"Starting cash",
+          amt:cash.amount, dir:"in" },
+        { label:inMonth?"Still to come this month":"Surplus over the month",
+          amt:toCome, dir:toCome>=0?"in":"out" }
       ];
-      /* The whole cycle's surplus is added to the balance you gave. If that
-         balance is mid-cycle it already contains part of it. */
-      if(asOfDay>1)
-        notes.push("This adds the full month's surplus to a balance dated day "+asOfDay
-          +". If that balance already reflects spending and pay from this month, enter it as of day 1 instead.");
     }
     const scheduledPay=(b.pays||[]).reduce((a,r)=>a+r.amount,0);
-    if(scheduledPay>0 && stated>0
-       && Math.abs(scheduledPay-stated)>Math.max(50,stated*0.02))
+    if(scheduledPay>0 && typed>0
+       && Math.abs(scheduledPay-typed)>Math.max(50,typed*0.02))
       notes.push("Scheduled paychecks total "+money(scheduledPay)+" against the "
-        +money(stated)+" take-home in your profile. One of them is out of date.");
+        +money(typed)+" take-home in your profile. One of them is out of date.");
   }
   /* Say out loud when the figure is leaning on history rather than on this
      month's receipts, and how hard. Early in a cycle that is most of it. */
@@ -2821,44 +3290,42 @@ function outlook(ym){
       notes.push("Day "+Math.max(1,dayIndex(todayISO(),ym))+" of "+dim+", so this is still "
         +"partly a forecast: "+parts.join("; ")+".");
   }
-  if(stated<=0) notes.push("No take-home set, so there is no surplus to compute. Add it in Profile.");
+  if(stated<=0) notes.push("No income on file for this month and no take-home set, so there is nothing to measure saving against. Import the checking account, or add your take-home in Profile.");
   if(d.heldAmt>0) notes.push(money(d.heldAmt)+" held for review is in neither figure.");
 
-  return { surplus, rate, target, vsTarget, stated, discProj, fixedProj, fixedGross,
-           offsetTotal:b.offsetTotal,
+  return { surplus, rate, target, vsTarget, stated, discProj, fixedProj, fixedGross, ndGross,
+           offsetTotal:b.offsetTotal, typed, pay, payAct, payAssumed, rental, otherIn,
+           reimb, reimbAct, reimbExp, reimbAssumed, flows:F,
            cash, cashEOM, asOfDay, lines, notes, closed, objPct,
            cashIn:d.cashIn||0, cashOut, unbudgeted,
            /* Every line that moves the surplus, in the order it moves it, so the
-              figure can be checked by adding up. Cash out was missing entirely:
-              $2,000 left the account, the surplus dropped by $2,000, and nothing
-              on any screen said why. "stated" already contains cash in, so the
-              take-home line has to show the base or the two double-count. */
+              figure can be checked by adding up — and the lines are the same
+              buckets the cash-flow ledger lists row by row. A line that is a
+              forecast rather than money on file says so in its label. */
            breakdown:(function(){
-             const base=stated-(d.cashIn||0);
-             const rows=[{ label:"Take-home", amt:base, dir:"in" }];
-             if(d.cashIn>0) rows.push({ label:"Cash in", amt:d.cashIn, dir:"in" });
-             /* The labels have to say WHICH number this is. "Discretionary at
-                this rate" was true of the old arithmetic and is no longer true
-                of this one, and a waterfall you cannot reconcile against the
-                hero is not proof of anything. */
+             const rows=[];
+             if(pay>0) rows.push({ label: payAssumed
+                 ? (closed ? "Pay (take-home — none imported)"
+                           : (payAct>0 ? "Pay ("+money(payAct)+" in, rest expected)" : "Pay, expected"))
+                 : "Pay", amt:pay, dir:"in" });
+             if(rental>0) rows.push({ label:"Rental income", amt:rental, dir:"in" });
+             if(otherIn>0) rows.push({ label:"Other income", amt:otherIn, dir:"in" });
+             if(reimb>0) rows.push({ label: reimbAssumed
+                 ? (reimbAct>0 ? "Reimbursements ("+money(reimbAct)+" in, rest expected)"
+                               : "Reimbursements, expected from your split")
+                 : "Reimbursements", amt:reimb, dir:"in" });
              rows.push({ label:closed ? "Discretionary spending"
                            : (discBaseline!=null ? "Discretionary, projected"
                                                  : "Discretionary at this rate"),
                          amt:discProj, dir:"out" });
              rows.push({ label:"Bills, utilities and housing", amt:fixedGross, dir:"out" });
-             /* Unplanned sits with the bills now, under the same heading, but
-                still on its own line: it is the half of non-discretionary that
-                nobody scheduled, and folding it into "bills" would hide that. */
-             if(unbudgeted>0.5)
+             if(Math.abs(unbudgeted)>0.5)
                rows.push({ label:"Unplanned", amt:unbudgeted, dir:"out" });
-             /* An estimate about things the app has not seen, so it is the
-                easiest figure here to argue with and gets said out loud. */
              if(ndUnseen>0.5)
                rows.push({ label:"Non-discretionary not yet posted",
                            amt:ndUnseen, dir:"out" });
-             if(b.offsetTotal>0) rows.push({ label:"Reimbursed to you", amt:b.offsetTotal, dir:"in" });
              if(cashOut>0) rows.push({ label:"Cash out", amt:cashOut, dir:"out" });
-             rows.push({ label:(surplus>=0?"Surplus":"Deficit")+" for the month",
+             rows.push({ label:(surplus>=0?"Saved":"Overspent")+(closed?" this month":" by month end"),
                          amt:Math.abs(surplus||0), dir:surplus>=0?"in":"out", total:true });
              return rows;
            })() };
@@ -2872,9 +3339,11 @@ function trailingSavings(n){
   n=n||3;
   const cur=cycleOf(todayISO());
   const ms=monthsWithData().filter(m=>m<cur).slice(-n);
-  const rows=ms.map(m=>monthData(m)).filter(d=>d.income>0);
+  /* The same saved figure every other surface shows — this used to run its
+     own income-minus-gross-spend arithmetic and disagree with all of them. */
+  const vals=ms.map(m=>outlook(m).surplus).filter(v=>v!=null).sort((a,b)=>a-b);
+  const rows=vals;
   if(!rows.length) return null;
-  const vals=rows.map(d=>d.income-d.net).sort((a,b)=>a-b);
   const mid=Math.floor(vals.length/2);
   return { monthly: vals.length%2?vals[mid]:(vals[mid-1]+vals[mid])/2, months: rows.length };
 }
@@ -3336,20 +3805,25 @@ function fixedLines(ym){
 function cashFlow(ym, mode){
   const d=monthData(ym);
   const plan = mode==="plan";
-  const income = plan ? Number(S.settings.income||0) : d.income;
-  let housing, bills, disc;
+  const F = plan ? null : flows(ym);
+  const income = plan ? Number(S.settings.income||0) : F.moneyIn;
+  let housing, bills, disc, cashout=0;
   if(plan){
     const rows=billRows(ym);
     housing = rows.filter(r=>r.category==="Housing").reduce((a,r)=>a+r.monthly,0);
     bills   = rows.filter(r=>r.category!=="Housing").reduce((a,r)=>a+r.monthly,0);
     disc    = targetTotal(ym);
   } else {
+    /* Off the cash-flow model, so this split and the ledger are the same
+       money: unplanned sits with bills, cash out is its own slice, and the
+       remainder is the month's saved figure to date, not a fourth formula. */
     housing = d.byCat["Housing"]||0;
-    bills   = FC().filter(c=>c!=="Housing").reduce((a,c)=>a+(d.byCat[c]||0),0);
-    disc    = TC().reduce((a,c)=>a+(d.byCat[c]||0),0);
+    bills   = F.nonDisc - housing;
+    disc    = F.disc;
+    cashout = F.cashOutNet;
   }
-  const out=housing+bills+disc;
-  return { mode: plan?"plan":"actual", income, housing, bills, disc,
+  const out=housing+bills+disc+cashout;
+  return { mode: plan?"plan":"actual", income, housing, bills, disc, cashout,
            remainder: income-out, out, heldAmt: plan?0:d.heldAmt };
 }
 
@@ -3687,7 +4161,7 @@ function isBestMonth(ym){
   const score=m=>{
     const d=monthData(m);
     if(d.held.length) return null;
-    return d.income>0 ? d.income-d.net : -d.discNet;
+    return outlook(m).surplus;
   };
   const mine=score(ym);
   if(mine===null) return false;
@@ -3695,50 +4169,79 @@ function isBestMonth(ym){
 }
 
 function openRecap(ym){
-  const d=monthData(ym), tgt=targetTotal(ym), obj=objectiveFor(ym);
-  const kept = d.income>0 ? d.income-d.net : null;
+  /* The close reads the SAME figure as the Saving tab — outlook(), which for
+     a closed month is nothing but what happened. It used to do its own
+     arithmetic (income minus the household's gross outgoings, cash out and
+     unplanned included but shown nowhere), print the objective's percentage
+     as dollars, and pin "Finished under" — a statement about discretionary
+     limits — directly beneath a five-figure deficit. Now the rows add up to
+     the headline, and nothing congratulates a month that lost money. */
+  const d=monthData(ym), tgt=targetTotal(ym), o=outlook(ym), R=o.flows.recon;
   const unsure = d.held.length>0;
-  const best = !unsure && isBestMonth(ym);
+  const known = o.surplus!=null;
+  const saved = known ? o.surplus : null;
   const underLimit = tgt>0 && d.discNet<=tgt;
-  const metObjective = obj>0 && kept!==null && kept>=obj;
+  const metObjective = known && o.target!=null && saved>=o.target;
+  const best = !unsure && known && saved>0 && isBestMonth(ym);
 
-  const hero = kept!==null ? kept : d.discNet;
-  const heroLabel = kept!==null ? "kept" : "spent on discretionary";
-  const tone = kept!==null ? (kept>=0?"pathc":"overc") : (underLimit?"pathc":"overc");
+  const hero = known ? saved : d.discNet;
+  const tone = known ? (saved>=0?"pathc":"overc") : (underLimit?"pathc":"overc");
 
-  const row=(l,v,cls)=>'<div class="rrow"><span>'+l+'</span>'
+  const row=(l,v,cls,total)=>'<div class="rrow'+(total?' rtotal':'')+'"><span>'+l+'</span>'
     + '<span class="num'+(cls?" "+cls:"")+'">'+v+'</span></div>';
+  const neg=v=>"\u2212"+money(Math.abs(v));
+  const tieOK = R.checked && Math.abs(R.unexplained)<1;
 
   const body=document.getElementById("recapBody");
   body.innerHTML=
       '<div class="rmonth" id="recapTitle">'+cycleLabel(ym)+' \u00b7 closed</div>'
     + '<div class="rbig num '+tone+'">'+money(Math.abs(hero))+'</div>'
-    + '<div class="rsub">'+(kept!==null
-        ? (kept>=0?"kept out of "+money(d.income):"more than you brought in")
-        : heroLabel)+'</div>'
-    /* One gate for every flag rather than three separate ones — the first
-       draft gated "best month" and "finished under" on certainty and let
-       "objective met" through, which is the exact failure the rule exists to
-       stop. Nothing congratulatory renders while a figure can still move. */
-    + (unsure ? ''
+    + '<div class="rsub">'+(known
+        ? (saved>=0 ? "saved out of "+money(o.stated)+" earned"
+                    : "more went out than came in")
+        : "spent on discretionary")+'</div>'
+    /* Nothing congratulatory while a figure can still move, and nothing
+       congratulatory on a month that lost money. */
+    + (unsure || !known || saved<0 ? ''
        : best         ? '<div class="rflag best">Best month yet</div>'
        : metObjective ? '<div class="rflag">Objective met</div>'
-       : (underLimit&&tgt>0) ? '<div class="rflag">Finished under</div>'
+       : underLimit   ? '<div class="rflag">Under your limits</div>'
        : '')
-    + '<div class="rrows">'
-    +   (tgt>0?row("Discretionary",money(d.discNet)+" of "+money(tgt),
-             underLimit?"pathc":"overc"):"")
-    +   (d.fixed>0?row("Non-discretionary",money(d.fixed)):"")
-    +   (d.saveRate!=null?row("Save rate",Math.round(d.saveRate*100)+"%"):"")
-    +   (obj>0&&kept!==null?row("Objective",money(obj),metObjective?"pathc":""):"")
-    + '</div>'
+    + (known
+       ? '<div class="rrows">'
+         + row("Money in"+(o.payAssumed||o.reimbAssumed?" *":""), money(o.stated+o.reimb))
+         + row("Discretionary"+(tgt>0?" \u00b7 limit "+money(tgt):""), neg(o.discProj),
+               tgt>0?(underLimit?"pathc":"overc"):"")
+         + row("Non-discretionary", neg(o.ndGross))
+         + (o.cashOut>0 ? row("Cash out", neg(o.cashOut)) : "")
+         + row(saved>=0?"Saved":"Overspent", money(Math.abs(saved)), tone, true)
+         + '</div>'
+         + '<div class="rrows" style="margin-top:6px">'
+         + (o.rate!=null ? row("Save rate", Math.round(o.rate*100)+"% of income") : "")
+         + (o.target!=null ? row("Objective", money(o.target), metObjective?"pathc":"overc") : "")
+         + (R.checked ? row("Bank check", tieOK ? "Ties to the bank"
+              : money(Math.abs(R.unexplained))+" unexplained", tieOK?"pathc":"overc") : "")
+         + '</div>'
+         + (o.payAssumed||o.reimbAssumed
+            ? '<div class="sm muted" style="margin-top:8px">* '
+              + (o.payAssumed?"No pay imported \u2014 your typed take-home stands in. ":"")
+              + (o.reimbAssumed?"No reimbursement tagged \u2014 your split\u2019s expected share stands in.":"")
+              + '</div>' : '')
+       : '<div class="rwarn">No income is on file for '+cycleLabel(ym)+', so Path can\u2019t say '
+         + 'what this month let you save. Import the checking account, or set your take-home '
+         + 'in Profile.</div>')
     /* The honest caveat, and it replaces the celebration rather than sitting
        underneath it. */
     + (unsure
-       ? '<div class="rwarn"><strong>'+d.held.length+' charge'
+       ? '<div class="rwarn"><strong>'+d.held.length+' row'
          + (d.held.length>1?'s':'')+'</strong> from '+cycleLabel(ym)
          + ' are still in Review, so these figures could move by up to '
          + money(d.heldAmt)+'.</div>'
+       : '')
+    + (R.checked && !tieOK
+       ? '<div class="rwarn">'+esc(R.accts.filter(a=>a.gap!=null).map(a=>a.name).join(" and "))
+         + ' moved '+money(Math.abs(R.unexplained))
+         + ' differently from what Path has on file. The cash flow on Saving shows where to look.</div>'
        : '')
     + '<button class="btn" id="recapDone" style="margin-top:16px">Done</button>'
     + '<button class="btn ghost" id="recapOpen" style="margin-top:8px">See '
@@ -4014,6 +4517,7 @@ function renderFlow(){
     { k:"Rent or mortgage", v:f.housing,  c:"#2B3F4A" },
     { k:"Bills and utilities", v:f.bills, c:"#5F8090" },
     { k:"Discretionary",   v:f.disc,     c:"var(--hold)" },
+    { k:"Cash out",        v:f.cashout||0, c:"#8A9BA6" },
     { k: short?"Shortfall":"Left over", v:Math.abs(f.remainder),
       c: short?"var(--over)":"var(--path)" }
   ].filter(s=>s.v>0.5);
@@ -4049,7 +4553,7 @@ function renderFlow(){
     +   '</div>'
     + '</div>'
     + '<div class="spread sm muted" style="margin-top:10px;border-top:1px solid var(--rule);padding-top:9px">'
-    +   '<span>'+(f.mode==="plan"?"Planned take-home":"Income this month")+'</span>'
+    +   '<span>'+(f.mode==="plan"?"Planned take-home":"Money in so far, reimbursements included")+'</span>'
     +   '<span class="num">'+money(f.income)+'</span></div>'
     + (f.heldAmt>0?'<div class="sm muted" style="margin-top:6px">'+money(f.heldAmt)
         +' held for review is not in this split.</div>':'');
@@ -4408,6 +4912,180 @@ function renderOutlook(){
   };
 }
 
+
+/* ============================================================
+   THE CASH-FLOW LEDGER — the rows behind the saving figure.
+   There was no screen that said, in one place: here is every dollar that
+   came in, every dollar that went out, and what was deliberately left out.
+   So when the close said $17,737 there was nowhere to go to find out why.
+   This is that place. Everything on it is ON FILE — no projection — and it
+   adds up: in minus out is the saved line, to the cent, and the bank check
+   underneath says whether the checking account agrees.
+   ============================================================ */
+function renderCashLedger(){
+  const el=document.getElementById("cashLedger");
+  if(!el) return;
+  const F=flows(cursor), d=F.d, R=F.recon, closed=paceOf(cursor)>=1;
+  const dshort=iso=>iso.slice(5).replace("-","/");
+  const rowHTML=(t,extra)=>'<div class="rw" data-edit="'+t.id+'">'
+    + '<span class="dt num">'+dshort(t.date)+'</span>'
+    + '<span class="mn">'+esc(t.merchant)+' <span class="ac">· '+esc(acct(t.account).name)+'</span></span>'
+    + (extra||'')
+    + '<span class="num">'+money2(Math.abs(t.amount))+'</span></div>';
+  const grp=(label,rows,total,opts)=>{
+    opts=opts||{};
+    if(!rows.length && !opts.always) return '';
+    return '<details class="grp"><summary><span class="gl">'+esc(label)
+      + (rows.length?' <span class="gc">'+rows.length+'</span>':'')+'</span>'
+      + '<span class="num gv '+(opts.cls||'')+'">'+(opts.sign||'')+money(Math.abs(total))+'</span></summary>'
+      + '<div class="rws">'+(opts.body || rows.map(t=>rowHTML(t, opts.extra?opts.extra(t):'')).join(""))+'</div></details>';
+  };
+  const kindSel=t=>'<select class="kindsel" data-kind-m="'+esc(t.merchant)+'" aria-label="What this deposit is">'
+    + ["pay","rental","reimb","other"].map(k=>'<option value="'+k+'"'+(inKindOf(t)===k?' selected':'')+'>'
+      + {pay:"Pay",rental:"Rental",reimb:"Reimb.",other:"Other"}[k]+'</option>').join("")+'</select>';
+
+  const sp=d.live.filter(t=>t.type==="spend"||t.type==="refund");
+  const signed=t=>t.type==="refund"?-Math.abs(t.amount):Number(t.amount);
+  const catOf=t=>{
+    if(t.type==="refund" && t.linkedTo){ const o=S.txns.find(x=>x.id===t.linkedTo); if(o) return o.category; }
+    return t.category;
+  };
+  const discRows=sp.filter(t=>!FC().includes(catOf(t)) && !UC().includes(catOf(t)));
+  const ndRows=sp.filter(t=>FC().includes(catOf(t)) || UC().includes(catOf(t)));
+  const byCatBody=(rows)=>{
+    const m=new Map();
+    for(const t of rows){ const c=catOf(t); if(!m.has(c)) m.set(c,[]); m.get(c).push(t); }
+    return [...m.entries()].map(([c,rs])=>[c,rs,rs.reduce((a,t)=>a+signed(t),0)])
+      .sort((a,b)=>b[2]-a[2])
+      .map(([c,rs,v])=>'<details class="grp"><summary><span class="gl">'+esc(c)
+        +' <span class="gc">'+rs.length+'</span></span><span class="num gv">'+money(v)+'</span></summary>'
+        +'<div class="rws">'+rs.sort(byDateDesc).map(t=>rowHTML(t)).join("")+'</div></details>').join("");
+  };
+  const cashOutRows=d.live.filter(t=>t.type==="cashout");
+
+  const head='<div class="spread"><span class="eyebrow">Cash flow</span>'
+    + '<span class="eyebrow">'+(closed?"month closed":"on file so far")+'</span></div>';
+  if(!d.live.length && !d.held.length){
+    el.className="card cfl";
+    el.innerHTML=head+'<div class="empty">Nothing on file for this month yet. Import checking and '
+      + 'every card and this lists every dollar in and out.</div>';
+    return;
+  }
+
+  let h=head;
+  /* ---- in ---- */
+  h+='<div class="sec"><div class="sech"><span>Money in</span><span class="num pathc">'+money(F.moneyIn)+'</span></div>'
+    + grp("Pay", F.inRows.pay, F.inTot.pay, {extra:kindSel, always:true,
+        body: F.inRows.pay.length ? null : '<div class="sm muted" style="padding:6px 0">No pay on file. '
+          + (Number(S.settings.income||0)>0 ? 'Saving uses your typed take-home until it lands.' : 'Import checking to bring it in.')+'</div>'})
+    + grp("Rental income", F.inRows.rental, F.inTot.rental, {extra:kindSel})
+    + grp("Reimbursements", F.inRows.reimb, F.inTot.reimb, {extra:kindSel})
+    + grp("Other income", F.inRows.other, F.inTot.other, {extra:kindSel})
+    + '</div>';
+  /* ---- out ---- */
+  h+='<div class="sec"><div class="sech"><span>Money out</span><span class="num">−'+money(F.moneyOut)+'</span></div>'
+    + grp("Discretionary", discRows, F.disc, {always:true, body:byCatBody(discRows)||'<div class="sm muted" style="padding:6px 0">None.</div>'})
+    + grp("Non-discretionary", ndRows, F.nonDisc, {always:true, body:byCatBody(ndRows)||'<div class="sm muted" style="padding:6px 0">None.</div>'})
+    + (cashOutRows.length ? grp("Cash out", cashOutRows, F.cashOutNet, {body:
+        cashOutRows.map(t=>rowHTML(t)).join("")
+        + (F.atmCovered>0.005 ? '<div class="sm muted" style="padding:6px 0">'+money(F.atmCovered)
+          + ' of this is covered by cash spending you recorded from your wallet, so it is counted '
+          + 'there instead of twice.</div>' : '')}) : '')
+    + '</div>';
+  /* ---- total ---- */
+  h+='<div class="tot"><span>'+(F.saved>=0?"Saved":"Overspent")+(closed?"":" so far")+'</span>'
+    + '<span class="num '+(F.saved>=0?"pathc":"overc")+'">'+money(Math.abs(F.saved))+'</span></div>';
+  if(!closed) h+='<p class="hint" style="margin-top:6px">What has actually happened. The Saving figure '
+    + 'above adds what is still expected — the rest of your pay, bills not yet posted, the rest of '
+    + 'the month’s spending.</p>';
+
+  /* ---- not counted ---- */
+  const cp=F.cardPay, mv=F.moved, inn=F.internal;
+  /* Both legs of a payment are listed, so you can see each pair; the amount
+     is counted once — the money leaving, or the money arriving if that is
+     the only leg on file. */
+  const oneSide=rs=>{
+    const o=rs.filter(t=>!isInflow(t)).reduce((a,t)=>a+Math.abs(t.amount),0);
+    return o || rs.reduce((a,t)=>a+Math.abs(t.amount),0);
+  };
+  if(cp.length||mv.length||inn.length){
+    h+='<div class="sec"><div class="sech"><span>Not counted, and why</span><span></span></div>'
+      + grp("Card payments \u2014 the purchases are already counted on the card", cp, oneSide(cp),
+            {extra:t=>t.pairedWith?'<span class="ac">paired</span>':''})
+      + grp("Between your own accounts", inn, oneSide(inn))
+      + grp("Moved to or from other accounts", mv, F.movedOut-F.movedIn,
+            {sign:F.movedOut>=F.movedIn?"":"−",
+             extra:t=>'<span class="ac">'+(isInflow(t)?"in":"out")+'</span>'})
+      + '</div>';
+  }
+  /* ---- held ---- */
+  if(d.held.length){
+    h+='<div class="flat" style="margin-top:12px"><span>'+d.held.length+' row'+(d.held.length>1?'s':'')
+      + ' held in Review, in none of the above</span>'
+      + '<button class="link" data-go="review">Review</button></div>';
+  }
+  /* ---- the bank ---- */
+  h+='<div class="sec"><div class="sech"><span>Bank check</span><span></span></div>';
+  const acs=R.accts;
+  if(!acs.some(a=>a.has)){
+    h+='<p class="hint" style="margin-top:8px">No running balances on file for '
+      + esc(acs.map(a=>a.name).join(" or ")||"a checking account")
+      + '. Export checking with a balance column (or as OFX) and this checks every figure above '
+      + 'against what the bank actually did.</p>';
+  } else {
+    for(const a of acs){
+      if(!a.has){ h+='<div class="bank muted">'+esc(a.name)+': no balances in its imports.</div>'; continue; }
+      if(a.gap==null){
+        h+='<div class="bank muted">'+esc(a.name)+': '+(a.start==null
+          ? 'no balance from before this month, so there is nothing to start from. Import the previous statement too.'
+          : 'no balance on the last day with rows.')+'</div>';
+        continue;
+      }
+      const ok=Math.abs(a.gap)<1;
+      h+='<div class="bank">'
+        + '<div class="r"><span>'+esc(a.name)+'</span><span class="num">'+money(a.start)+' → '+money(a.end)+'</span></div>'
+        + '<div class="r muted"><span>Bank moved'+(a.through&&!closed?' through '+dshort(a.through):'')+'</span>'
+        +   '<span class="num">'+(a.bankDelta>=0?"+":"−")+money(Math.abs(a.bankDelta))+'</span></div>'
+        + '<div class="r muted"><span>Rows on file account for</span><span class="num">'
+        +   (a.rowsDelta>=0?"+":"−")+money(Math.abs(a.rowsDelta))+'</span></div>'
+        + '<div class="verd '+(ok?'ok':'bad')+'">'+(ok
+            ? 'Ties to the bank. Every dollar that moved through '+esc(a.name)+' is on file.'
+            : money(Math.abs(a.gap))+' unexplained. '+(a.gap<0
+                ? 'More left the account than Path has rows for — a missing statement, or rows deleted.'
+                : 'More stayed in the account than Path has rows for — a duplicate, or a row with its direction flipped.'))
+        + '</div></div>';
+    }
+  }
+  /* The bridge: why "saved" and "the bank moved" are different numbers. */
+  if(R.lines.length){
+    h+='<details class="reveal"><summary>Why saved and the bank differ</summary>'
+      + '<div class="bank">'
+      + '<div class="r"><span>Saved'+(closed?'':' so far')+'</span><span class="num">'+(F.saved>=0?"+":"−")+money(Math.abs(F.saved))+'</span></div>'
+      + R.lines.map(l=>'<div class="r'+(l.why==="residual"?' overc':'')+'"><span>'+esc(l.label)+'</span><span class="num">'
+          +(l.amt>=0?"+":"−")+money(Math.abs(l.amt))+'</span></div>').join("")
+      + '<div class="r" style="border-top:1px solid var(--ink);margin-top:4px;padding-top:6px;font-weight:600">'
+      +   '<span>Change in checking, per the rows</span><span class="num">'+(R.expected>=0?"+":"−")+money(Math.abs(R.expected))+'</span></div>'
+      + '</div></details>';
+  }
+  h+='</div>';
+
+  el.className="card cfl";
+  el.innerHTML=h;
+  el.querySelectorAll("[data-edit]").forEach(r=>r.onclick=e=>{
+    if(e.target.closest("select")) return;
+    openEditor(r.dataset.edit);
+  });
+  el.querySelectorAll("select[data-kind-m]").forEach(sel=>{
+    sel.onclick=e=>e.stopPropagation();
+    sel.onchange=()=>{
+      const n=setInKind(sel.dataset.kindM, sel.value);
+      save(); renderAll();
+      toast(n+" deposit"+(n>1?"s":"")+" from "+sel.dataset.kindM+" now "+INKIND_LABEL[sel.value].toLowerCase());
+    };
+  });
+  el.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+}
+
 /* ---------- FIRST RUN ----------
    A fresh phone opens on an empty trajectory with no clue what to do. This is
    a checklist rather than a wizard: nothing is blocked, order is yours, and it
@@ -4510,6 +5188,7 @@ function renderDash(){
   renderSetup();
   renderTrajectory();
   renderOutlook();
+  renderCashLedger();
   renderIncome();
   renderFlow();
   renderFoldSummary();
@@ -4538,10 +5217,11 @@ function renderDash(){
      the way 25% and 42% once did on the same screen. */
   const sc=document.getElementById("saveCard"), obj=objectiveFor(cursor)/100;
   const ok=outlook(cursor);
-  if(!d.income || ok.surplus==null){
+  if(ok.surplus==null){
     sc.className="card verdict unset";
     sc.innerHTML='<div class="eyebrow">Saving</div>'
-      + '<div class="empty">Add your monthly take-home in Profile and this fills in.</div>';
+      + '<div class="empty">No income on file for this month. Import the checking account '
+      + 'so pay and deposits come in, or add your take-home in Profile as a forecast.</div>';
   } else {
     const up=ok.surplus>=0, rate=ok.rate;
     const tone = !up ? "overc" : (obj>0 && rate<obj) ? "holdc" : "pathc";
@@ -4555,7 +5235,7 @@ function renderDash(){
       + '</div>'
       + '<div class="vwhy" style="margin-top:12px">'
       +   '<div class="r"><span class="num mid '+tone+'" style="font-size:14px;min-width:74px">'
-      +     Math.abs(rate*100).toFixed(0)+'%</span><span>of your take-home</span></div>'
+      +     Math.abs(rate*100).toFixed(0)+'%</span><span>of your income</span></div>'
       +   (ok.cash
           ? '<div class="r"><span class="num mid" style="font-size:14px;min-width:74px">'
             + money(ok.cash.amount)+'</span><span>total cash on hand</span></div>'
@@ -4574,8 +5254,10 @@ function renderDash(){
       +   waterfallHTML(ok)
       +   '<p class="hint" style="margin-top:10px">Each bar starts where the one above it '
       +   'ended, so the width of a step is what it cost you and its position is what was '
-      +   'left at that point. Cash out is money that left the account with no category yet; '
-      +   'cash in is money the month gained that is not your salary.'
+      +   'left at that point. Money in is what actually landed \u2014 pay, rental, '
+      +   'reimbursements \u2014 with your typed take-home standing in only for pay that has '
+      +   'not arrived yet. Spending is the household\u2019s, since reimbursements are counted '
+      +   'as they come in. Every row behind each bar is in the cash flow below.'
       +   (ok.closed?''
            :' Early in a month there is little to measure, so both spending sides start '
             +'from what a month of yours normally costs and shift onto this month\u2019s '
@@ -5197,9 +5879,12 @@ function renderReview(){
            and a reimbursement is the month gaining money, not losing it.
            Forcing either into a spending bucket is how a category gets blamed
            for money it never saw. */
+        /* Only the kinds that run in this row's direction. Offering "Cash out"
+           on a credit is how a card's payment-received line got booked as money
+           leaving, on top of the checking debit that actually paid it. */
         + '<div class="catgrid alt">'
-        +   '<button class="catbtn kind" data-kind="cashout">Cash out</button>'
-        +   '<button class="catbtn kind" data-kind="cashin">Cash in</button>'
+        +   (isInflow(t) ? IN_KINDS : OUT_KINDS).map(k=>
+              '<button class="catbtn kind" data-kind="'+k[0]+'">'+esc(k[1])+'</button>').join("")
         + '</div>'
         /* When the app has guessed the TYPE, the first thing to offer is the
            guess itself. A held row that only offered categories would make
@@ -5210,12 +5895,12 @@ function renderReview(){
            ? '<div class="catgrid alt" style="margin-top:6px">'
              + '<button class="catbtn kind" data-keep="'+esc(t.type)+'">'
              + esc({transfer:"Yes \u2014 a transfer",
-                    income:"Yes \u2014 a deposit",
+                    income:"Yes \u2014 it\u2019s pay",
                     savings:"Yes \u2014 into savings"}[t.type] || "Yes, keep it")
              + '</button></div>'
              + '<p class="hint" style="margin:7px 0 0">'
              + esc({transfer:"A transfer counts toward nothing \u2014 money moving between your own accounts.",
-                    income:"A detected deposit times the cash forecast but never sets your take-home. If this is money the month actually gained, file it as cash in.",
+                    income:"Kept as pay. If it is rent from a tenant, Maja paying you back, or anything else, pick that above — each is its own line in the cash flow.",
                     savings:"Money moved to savings, not spent."}[t.type]||"")
              + ' Answered once, then remembered for '+esc(t.merchant)+'.</p>'
            : '')
@@ -5304,9 +5989,8 @@ function renderReview(){
       const before=held();
       const teach=card.querySelector(".teachbox").checked;
       resolveKind(id,b.dataset.kind,teach);
-      const one=b.dataset.kind==="cashout" ? "Filed as cash out" : "Added to take-home";
-      settle(before, one, n=>n+" charges filed as "
-             +(b.dataset.kind==="cashout"?"cash out":"take-home"));
+      const lab=([...IN_KINDS,...OUT_KINDS].find(k=>k[0]===b.dataset.kind)||[,"filed"])[1];
+      settle(before, "Filed as "+lab.toLowerCase(), n=>n+" rows filed as "+lab.toLowerCase());
     });
     const dropBtn=card.querySelector("[data-drop]");
     if(dropBtn) dropBtn.onclick=()=>{
@@ -7771,7 +8455,13 @@ document.getElementById("doClear").onclick=()=>{
   const start=pro().launch||"dash";
   go(start); lastView=start;
   renderAll();
-  if(wipedFromSeed)
+  if(S.flowRepair){
+    const r=S.flowRepair; S.flowRepair=null; save();
+    toast((r.fixed?r.fixed+" card payment"+(r.fixed>1?"s":"")+" no longer counted as spending":"")
+      +(r.fixed&&r.wrong?" \u00b7 ":"")
+      +(r.wrong?r.wrong+" row"+(r.wrong>1?"s":"")+" back in Review":""));
+  }
+  else if(wipedFromSeed)
     toast("Storage was empty \u2014 rules and limits rebuilt from the seed");
   /* Last, and only once the app behind it is fully drawn — the recap covers
      the screen, so anything that would have shifted underneath it needs to
