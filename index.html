@@ -1166,6 +1166,7 @@ body.noscroll{overflow:hidden}
       <button class="btn ghost" id="doSeed">Copy seed line</button>
       <hr>
       <button class="btn danger" id="doClear">Erase everything</button>
+      <p class="hint" id="buildTag" style="margin-top:14px;text-align:center"></p>
     </div>
     </div>
   </section>
@@ -1223,6 +1224,10 @@ body.noscroll{overflow:hidden}
    APP_NAME is the product. MAIN_TAB is the tab that answers "am I okay this
    month" — deliberately NOT the same word, because a tab named after the whole
    app tells you nothing about what's on it. */
+/* Which build this phone is running. Change it on every deploy: the service
+   worker swaps versions silently on the second launch, and without a label
+   there is no way to tell from the phone whether a paste has landed. */
+const APP_BUILD = "2026-11-01 \u00b7 cash flows";
 const APP_NAME = "Path";
 const MAIN_TAB = "Spending";
 
@@ -8450,6 +8455,8 @@ document.getElementById("doClear").onclick=()=>{
   /* names fall back to the constants at the top of the script */
   applyNames();
   applyTheme();
+  const bt=document.getElementById("buildTag");
+  if(bt) bt.textContent="Build "+APP_BUILD;
   document.getElementById("mDate").value=todayISO();
   cursor=cycleOf(todayISO());
   const start=pro().launch||"dash";
