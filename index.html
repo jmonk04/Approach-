@@ -758,16 +758,11 @@ body.noscroll{overflow:hidden}
       </div>
     </div>
 
-    <details class="fold" id="foldRest">
-      <summary><span class="eyebrow">The rest of the month</span>
-        <span class="chev" aria-hidden="true">&#8250;</span></summary>
-      <div class="inner">
-        <div class="card" id="incomeCard"></div>
-        <div class="card" id="flowCard"></div>
-        <div class="card" id="splitCard"></div>
-        <div class="card" id="peopleCard"></div>
-      </div>
-    </details>
+    <!-- "The rest of the month" fold lived here: Money in, Where the cash goes,
+         Where the month went. All three restated the cash side with their own
+         arithmetic, and that is what Saving's cash flow is for. Spending is
+         spending against your limits; who spent it is the one thing kept. -->
+    <div class="card" id="peopleCard" hidden></div>
   </section>
 
   <section id="v-saving">
@@ -883,22 +878,6 @@ body.noscroll{overflow:hidden}
     <div id="xferSort"></div>
     <div id="billSort"></div>
     <div id="recSort"></div>
-  </section>
-
-  <!-- THE ACCOUNTING LAYER, deliberately standalone.
-       Every other tab has an opinion: limits, plans, verdicts. This one has
-       none. It says what left the account and what came in, in date order,
-       with a running balance — the arithmetic your bank would recognise.
-       Its own tab for now so it can be judged on its own before deciding
-       where, or whether, it belongs. -->
-  <section id="v-cash">
-    <div class="card" id="cashSummary"></div>
-    <div class="card" id="cashSplit"></div>
-    <div class="card"><div class="eyebrow">Register</div>
-      <p class="hint">Every row, nothing excluded and nothing categorised. Transfers,
-        deposits, savings and cash all appear, because they all moved money.</p>
-      <div id="cashRegister"></div>
-    </div>
   </section>
 
   <section id="v-ledger">
@@ -1045,7 +1024,7 @@ body.noscroll{overflow:hidden}
           <select id="pLaunch">
             <option value="dash">Spending</option><option value="saving">Saving</option>
             <option value="plan">Planning</option><option value="review">Review</option>
-            <option value="analysis">Analysis</option><option value="cash">Cash</option>
+            <option value="analysis">Analysis</option>
             <option value="ledger">Ledger</option><option value="bills">Bills</option></select></label>
         <label style="margin-top:12px"><span class="lt">Card member for unlabelled imports</span>
           <input type="text" id="pDefPerson" placeholder="Your name"></label>
@@ -1192,9 +1171,6 @@ body.noscroll{overflow:hidden}
   <button data-v="analysis">
     <span class="tabmark" aria-hidden="true">
       <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-analysis"/></svg></span>Analysis</button>
-  <button data-v="cash">
-    <span class="tabmark" aria-hidden="true">
-      <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-cash"/></svg></span>Cash</button>
   <button data-v="review">
     <span class="tabmark" aria-hidden="true">
       <svg class="glyph" viewBox="0 0 24 24"><use href="#ic-review"/></svg></span>Review<span class="badge" id="reviewBadge" style="display:none">0</span></button>
@@ -1227,7 +1203,7 @@ body.noscroll{overflow:hidden}
 /* Which build this phone is running. Change it on every deploy: the service
    worker swaps versions silently on the second launch, and without a label
    there is no way to tell from the phone whether a paste has landed. */
-const APP_BUILD = "2026-11-01 \u00b7 cash flows";
+const APP_BUILD = "2026-11-01c \u00b7 cash flows, one cash view";
 const APP_NAME = "Path";
 const MAIN_TAB = "Spending";
 
@@ -2696,37 +2672,6 @@ function statusOf(spent,target,pace){
 /* ============================================================
    INCOMING CASH
    ============================================================ */
-function incomeView(ym){
-  const deposits=S.txns.filter(t=>!t.pending && monthOf(t)===ym && t.type==="income")
-    .sort((a,b)=>a.date<b.date?-1:1)
-    .map(t=>({date:t.date, name:t.merchant, amount:Math.abs(t.amount), account:t.account}));
-  const received=deposits.reduce((a,d)=>a+d.amount,0);
-
-  /* find the regular paycheck so we can say when the next one lands */
-  const all=S.txns.filter(t=>!t.pending && t.type==="income");
-  const groups={};
-  for(const t of all){ (groups[t.merchant]=groups[t.merchant]||[]).push(t); }
-  let source=null;
-  for(const [name,list] of Object.entries(groups)){
-    if(list.length<3) continue;
-    const sorted=[...list].sort((a,b)=>dnum(a.date)-dnum(b.date));
-    const gaps=[]; for(let i=1;i<sorted.length;i++) gaps.push(dnum(sorted[i].date)-dnum(sorted[i-1].date));
-    const g=median(gaps);
-    const cad=CADENCE.find(c=>g>=c.lo&&g<=c.hi);
-    if(!cad) continue;
-    const amts=sorted.map(t=>Math.abs(t.amount));
-    const med=median(amts);
-    const last=sorted[sorted.length-1];
-    const cand={ name, cadence:cad.name, amount:med, monthly:med*(30.44/cad.per),
-                 last:last.date, next:nextDue(last.date,cad) };
-    if(!source||cand.monthly>source.monthly) source=cand;
-  }
-  const expected = source ? source.monthly : Number(S.settings.income||0);
-  return { deposits, received, source, expected,
-           stated:Number(S.settings.income||0),
-           shortOfExpected: expected>0 ? Math.max(0,expected-received) : 0 };
-}
-
 /* ============================================================
    BILLS THIS MONTH — what has posted, what is still coming.
    Only counts bills we have actually watched post before.
@@ -3807,33 +3752,6 @@ function fixedLines(ym){
 }
 
 /* Where the money goes: housing, the rest of the bills, the four ceilings, what's left */
-function cashFlow(ym, mode){
-  const d=monthData(ym);
-  const plan = mode==="plan";
-  const F = plan ? null : flows(ym);
-  const income = plan ? Number(S.settings.income||0) : F.moneyIn;
-  let housing, bills, disc, cashout=0;
-  if(plan){
-    const rows=billRows(ym);
-    housing = rows.filter(r=>r.category==="Housing").reduce((a,r)=>a+r.monthly,0);
-    bills   = rows.filter(r=>r.category!=="Housing").reduce((a,r)=>a+r.monthly,0);
-    disc    = targetTotal(ym);
-  } else {
-    /* Off the cash-flow model, so this split and the ledger are the same
-       money: unplanned sits with bills, cash out is its own slice, and the
-       remainder is the month's saved figure to date, not a fourth formula. */
-    housing = d.byCat["Housing"]||0;
-    bills   = F.nonDisc - housing;
-    disc    = F.disc;
-    cashout = F.cashOutNet;
-  }
-  const out=housing+bills+disc+cashout;
-  return { mode: plan?"plan":"actual", income, housing, bills, disc, cashout,
-           remainder: income-out, out, heldAmt: plan?0:d.heldAmt };
-}
-
-
-
 /* ============================================================
    SCREENSHOT / APP-LAYOUT PASTE
    Text lifted out of a phone screenshot stacks merchant, date and
@@ -4475,99 +4393,7 @@ function ribbon(spent,target,pace,unresolved,mode,dim){
 
 
 /* ---------- INCOMING CASH ---------- */
-function renderIncome(){
-  const v=incomeView(cursor);
-  const el=document.getElementById("incomeCard");
-  if(!v.deposits.length && !v.stated){
-    el.innerHTML='<div class="eyebrow">Money in</div>'
-      + '<div class="empty">Import the cash account and every deposit shows up here.</div>';
-    return;
-  }
-  el.innerHTML='<div class="spread"><span class="eyebrow">Money in</span>'
-    + (v.source?'<span class="eyebrow">next '+v.source.next+'</span>':'')+'</div>'
-    + '<div class="big num pathc" style="margin:8px 0 2px">'+money(v.received||v.stated)+'</div>'
-    + '<div class="sm muted">'
-    +   (v.deposits.length
-        ? v.deposits.length+' deposit'+(v.deposits.length>1?'s':'')+' this month'
-        : 'from the take-home figure you set \u2014 no deposits imported yet')+'</div>'
-    + (v.deposits.length
-       ? '<div style="margin-top:12px">'+v.deposits.map(d=>
-           '<div class="spread eq"><span>'+esc(d.name)+'</span>'
-           + '<span class="num"><span class="muted" style="font-size:11px">'+d.date.slice(5)+'</span>  '
-           + money2(d.amount)+'</span></div>').join("")+'</div>'
-       : '')
-    + (v.source && v.shortOfExpected>50
-       ? '<div class="warn"><span class="num">'+money(v.shortOfExpected)+'</span> of the usual '
-         + money(v.expected)+' has not landed yet. Next '+v.source.cadence+' deposit expected '
-         + v.source.next+'.</div>'
-       : '')
-    + (v.source && v.stated>0 && Math.abs(v.source.monthly-v.stated)/Math.max(1,v.stated)>0.12
-       ? '<div class="sm muted" style="margin-top:9px">Deposits average '+money(v.source.monthly)
-         + '/mo, against the '+money(v.stated)+' you entered. Worth updating in Profile.</div>'
-       : '');
-}
-
 /* ---------- WHERE THE CASH GOES ---------- */
-let flowMode="actual";
-function renderFlow(){
-  const f=cashFlow(cursor,flowMode);
-  const el=document.getElementById("flowCard");
-  if(!f.income && !f.out){
-    el.innerHTML='<div class="eyebrow">Where the cash goes</div>'
-      + '<div class="empty">Add income and a month of transactions to see the split.</div>';
-    return;
-  }
-  const short=f.remainder<0;
-  const segs=[
-    { k:"Rent or mortgage", v:f.housing,  c:"#2B3F4A" },
-    { k:"Bills and utilities", v:f.bills, c:"#5F8090" },
-    { k:"Discretionary",   v:f.disc,     c:"var(--hold)" },
-    { k:"Cash out",        v:f.cashout||0, c:"#8A9BA6" },
-    { k: short?"Shortfall":"Left over", v:Math.abs(f.remainder),
-      c: short?"var(--over)":"var(--path)" }
-  ].filter(s=>s.v>0.5);
-  const total=segs.reduce((a,s)=>a+s.v,0)||1;
-
-  const R=52, CX=64, CY=64, C=2*Math.PI*R;
-  let off=0;
-  const ring=segs.map(s=>{
-    const len=(s.v/total)*C;
-    const el='<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="'+s.c+'" '
-      + 'stroke-width="20" stroke-dasharray="'+(len-1.5).toFixed(2)+' '+(C-len+1.5).toFixed(2)+'" '
-      + 'stroke-dashoffset="'+(-off).toFixed(2)+'" transform="rotate(-90 '+CX+' '+CY+')"/>';
-    off+=len; return el;
-  }).join("");
-
-  el.innerHTML='<div class="spread"><span class="eyebrow">Where the cash goes</span>'
-    + '<div class="miniseg" id="flowMode">'
-    +   '<button data-f="actual" aria-pressed="'+(flowMode==="actual")+'">This month</button>'
-    +   '<button data-f="plan" aria-pressed="'+(flowMode==="plan")+'">Plan</button></div></div>'
-    + '<div class="flowwrap">'
-    +   '<svg viewBox="0 0 128 128" class="donut" role="img" aria-label="Cash flow split">'
-    +     '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="var(--track)" stroke-width="20"/>'
-    +     ring
-    +     '<text x="'+CX+'" y="'+(CY-2)+'" text-anchor="middle" class="dnum">'
-    +       (f.income>0?Math.round(Math.abs(f.remainder)/f.income*100)+"%":"\u2014")+'</text>'
-    +     '<text x="'+CX+'" y="'+(CY+13)+'" text-anchor="middle" class="dlab">'
-    +       (short?"SHORT":"LEFT")+'</text>'
-    +   '</svg>'
-    +   '<div class="legend2">'
-    +     segs.map(s=>'<div class="lrow"><span class="sw" style="background:'+s.c+'"></span>'
-    +       '<span class="lk">'+s.k+'</span>'
-    +       '<span class="num lv">'+money(s.v)+'</span></div>').join("")
-    +   '</div>'
-    + '</div>'
-    + '<div class="spread sm muted" style="margin-top:10px;border-top:1px solid var(--rule);padding-top:9px">'
-    +   '<span>'+(f.mode==="plan"?"Planned take-home":"Money in so far, reimbursements included")+'</span>'
-    +   '<span class="num">'+money(f.income)+'</span></div>'
-    + (f.heldAmt>0?'<div class="sm muted" style="margin-top:6px">'+money(f.heldAmt)
-        +' held for review is not in this split.</div>':'');
-
-  el.querySelectorAll("#flowMode button").forEach(b=>b.onclick=()=>{
-    flowMode=b.dataset.f; renderFlow();
-  });
-}
-
 /* ---------- TRAJECTORY ---------- */
 function recoveryHTML(p){
   if(!p) return '';
@@ -4811,18 +4637,6 @@ function renderTrajectory(){
 
 /* ---------- BILLS AT A GLANCE ---------- */
 /* ---------- fold summary: enough to decide whether to open it ---------- */
-function renderFoldSummary(){
-  const d=monthData(cursor), b=billsThisMonth(cursor);
-  const bits=[];
-  if(d.income>0) bits.push(money(d.income)+" in");
-  if(b.toCome>0) bits.push(money(b.toCome)+" to come");
-  if(b.posted>0) bits.push(money(b.posted)+" in bills");
-  const s=document.querySelector("#foldRest > summary .eyebrow");
-  if(s) s.textContent = bits.length
-    ? "Rest of the month \u00b7 "+bits.slice(0,2).join(" \u00b7 ")
-    : "The rest of the month";
-}
-
 /* ---------- OUTLOOK ---------- */
 function renderOutlook(){
   const o=outlook(cursor), el=document.getElementById("outlookCard");
@@ -5194,21 +5008,7 @@ function renderDash(){
   renderTrajectory();
   renderOutlook();
   renderCashLedger();
-  renderIncome();
-  renderFlow();
-  renderFoldSummary();
 
-  /* committed vs discretionary */
-  document.getElementById("splitCard").innerHTML =
-    '<div class="eyebrow">Where the month went</div>'
-    + '<div class="split"><div><div class="sm muted">Committed</div>'
-    +   '<div class="mid num">'+money(d.fixed)+'</div>'
-    +   '<div class="sm muted">housing, utilities, insurance</div></div>'
-    + '<div><div class="sm muted">Discretionary</div>'
-    +   '<div class="mid num">'+money(disc)+'</div>'
-    +   '<div class="sm muted">against your spending limits</div></div></div>'
-    + (d.transfers?'<hr><div class="spread sm muted"><span>Card payments netted out</span>'
-       + '<span class="num">'+money(d.transfers)+'</span></div>':'');
 
   /* The saving answer, shaped like the Spending card: one hero figure, then
      the second-order metrics under it. The hero is the AMOUNT expected to be
@@ -5354,7 +5154,9 @@ function renderDash(){
   };
   document.getElementById("billsScope").hidden = scope!=="fixed";
 
+  /* Only worth a card when more than one person is spending. */
   const ppl=Object.keys(d.byPerson);
+  document.getElementById("peopleCard").hidden = ppl.length<2;
   document.getElementById("peopleCard").innerHTML='<div class="eyebrow">By person</div>'
     + (ppl.length?ppl.sort((a,b)=>d.byPerson[b]-d.byPerson[a]).map(p=>
         '<div class="spread" style="margin-top:10px"><span>'+esc(p)+'</span>'
@@ -5652,117 +5454,10 @@ function renderXferSort(){
   });
 }
 
-/* ============================================================
-   CASH — the accounting layer
-   ============================================================
-   Three figures, and the app has always had all of them without ever showing
-   them together:
-
-     total spending      everything that left the account
-     discretionary       the half the limits are about
-     non-discretionary   bills plus unplanned
-
-   The first is the sum of the other two plus cash out. Nothing here is
-   projected, nothing is compared to a plan, and nothing is excluded — a
-   transfer moved money whatever the budget thinks of it. */
-function cashView(ym){
-  const d=monthData(ym);
-  const rows=S.txns.filter(t=>!t.pending && monthOf(t)===ym)
-    .map(t=>{
-      /* One sign convention: negative left the account, positive arrived.
-         The budget layer stores magnitudes and reads direction off the type,
-         which is right for totalling categories and useless for a register. */
-      const mag=Math.abs(Number(t.amount)||0);
-      const inbound = t.type==="refund" || t.type==="income" || t.type==="cashin";
-      return { t, signed: inbound ? mag : -mag };
-    })
-    .sort((a,b)=> a.t.date<b.t.date ? -1 : a.t.date>b.t.date ? 1 : (a.t.seq||0)-(b.t.seq||0));
-
-  const inflow  = rows.filter(r=>r.signed>0).reduce((a,r)=>a+r.signed,0);
-  const outflow = rows.filter(r=>r.signed<0).reduce((a,r)=>a-r.signed,0);
-  return { rows, inflow, outflow, movement: inflow-outflow,
-           total: d.net, disc: d.discNet, nonDisc: d.nonDiscNet,
-           bills: d.fixedNet, unplanned: d.unbudgetedNet, cashOut: d.cashOut||0 };
-}
-
-function renderCash(){
-  const v=cashView(cursor);
-  /* cashOnHand() is the app's existing anchor: a balance read off a statement
-     or one you typed, newest wins. Reusing it means the register reconciles
-     against the same figure the outlook already projects from, rather than
-     inventing a second source of truth about your account. */
-  const oh=cashOnHand();
-  const anchor=oh ? Number(oh.amount||0) : 0;
-  const anchorDate=oh ? (oh.date||"") : "";
-
-  document.getElementById("cashSummary").innerHTML=
-      '<div class="spread"><span class="eyebrow">Cash</span>'
-    +   '<span class="eyebrow">'+esc(cycleLabel(cursor))+'</span></div>'
-    + '<div class="spread" style="margin:10px 0 2px;align-items:flex-end">'
-    +   '<div><div class="big num'+(v.movement<0?" overc":" pathc")+'">'
-    +     (v.movement<0?"\u2212":"+")+money(Math.abs(v.movement))+'</div>'
-    +     '<div class="lt" style="margin-top:5px">net movement</div></div>'
-    +   '<div style="text-align:right"><div class="num mid">'+money(v.inflow)+' in</div>'
-    +     '<div class="num mid muted">'+money(v.outflow)+' out</div></div></div>'
-    + '<p class="hint">Everything that moved, in and out, with no exclusions. '
-    + 'This is the figure your bank would agree with.</p>';
-
-  /* The three-way split, stated once, in the order they nest. */
-  const bar=(w,c)=>'<i style="width:'+Math.max(0,Math.min(100,w)).toFixed(1)
-    +'%;background:var(--'+c+')"></i>';
-  const T=v.total||1;
-  document.getElementById("cashSplit").innerHTML=
-      '<div class="spread"><span class="eyebrow">Total spending</span>'
-    +   '<span class="num mid">'+money(v.total)+'</span></div>'
-    + '<div class="meter" style="margin-top:9px;display:flex">'
-    +   bar(v.disc/T*100,"path")+bar(v.nonDisc/T*100,"hold")+bar(v.cashOut/T*100,"quiet")
-    + '</div>'
-    + '<div class="spread" style="margin-top:12px"><span>Discretionary</span>'
-    +   '<span class="num">'+money(v.disc)+'</span></div>'
-    + '<div class="spread" style="margin-top:8px"><span>Non-discretionary</span>'
-    +   '<span class="num">'+money(v.nonDisc)+'</span></div>'
-    + '<div class="sm muted" style="margin-top:2px;padding-left:2px">'
-    +   money(v.bills)+' bills \u00b7 '+money(v.unplanned)+' unplanned</div>'
-    + (v.cashOut>0.5
-       ? '<div class="spread" style="margin-top:8px"><span>Cash out</span>'
-         + '<span class="num">'+money(v.cashOut)+'</span></div>'
-         + '<div class="sm muted" style="margin-top:2px;padding-left:2px">'
-         + 'left the account with no category yet</div>'
-       : '')
-    + '<p class="hint">Non-discretionary is bills plus unplanned. Discretionary is the '
-    + 'only one of the three with limits against it.</p>';
-
-  /* Running balance. It only means anything once you have told the app what
-     the account actually held and when, so it says so rather than counting up
-     from an assumed zero. */
-  const el=document.getElementById("cashRegister");
-  if(!v.rows.length){
-    el.innerHTML='<div class="empty">Nothing in '+esc(cycleLabel(cursor))+'.</div>';
-    return;
-  }
-  let run = anchor>0 ? anchor : null;
-  el.innerHTML =
-      (run===null
-       ? '<p class="hint" style="margin:0 0 8px">Enter your balance on Saving and a '
-         + 'running total appears here.</p>'
-       : '<div class="spread lrow"><span class="muted">Balance '
-         + esc(anchorDate||"at the start")+'</span>'
-         + '<span class="num">'+money(anchor)+'</span></div>')
-    + v.rows.map(r=>{
-        if(run!==null) run += r.signed;
-        return '<div class="txn" data-id="'+r.t.id+'">'
-          + '<div><div class="name">'+esc(r.t.merchant)
-          +   (r.t.type!=="spend"?'<span class="tag xfer">'+esc(r.t.type)+'</span>':'')
-          +   '</div>'
-          + '<div class="meta">'+r.t.date+' \u00b7 '+esc(withIcon(r.t.category))+'</div></div>'
-          + '<div style="text-align:right">'
-          +   '<div class="amt '+(r.signed>0?"pathc":"")+'">'
-          +     (r.signed>0?"+":"\u2212")+money2(Math.abs(r.signed))+'</div>'
-          +   (run!==null?'<div class="sm muted num">'+money(run)+'</div>':'')
-          + '</div></div>';
-      }).join("");
-  el.querySelectorAll(".txn").forEach(x=>x.onclick=()=>openEditor(x.dataset.id));
-}
+/* The experimental Cash tab lived here: a register with "nothing excluded".
+   Retired once the cash-flow ledger on Saving existed. Excluding nothing was
+   the flaw, not the feature — a card payment and the charges it pays are the
+   same money, so its "net movement" counted every paid card twice. */
 
 function renderUnbCats(){
   const el=document.getElementById("unbCats");
@@ -7950,7 +7645,6 @@ const SECTION_RENDERERS={
     if(g==="categories"){ renderSmallMultiples(); renderCreep(); }
     if(g==="history"){ renderHistory(); renderAnalysis(); }
   },
-  cash:     ()=>{ renderCash(); },
   review:   ()=>{ renderReview(); },
   ledger:   ()=>{ renderLedger(); },
   settings: ()=>{ renderProfile(); renderRules(); renderUnbCats(); renderData(); }
@@ -8021,6 +7715,9 @@ function go(v){
     ledgerSelect=false; ledgerPicked.clear();
     dirty.add("ledger");
   }
+  /* The Cash tab is gone; anything still pointing at it (a saved "open on"
+     preference) lands on Saving, where its replacement is. */
+  if(v==="cash") v="saving";
   if(v==="bills"){
     if(S.settings.catScope!=="fixed"){ S.settings.catScope="fixed"; save(); renderDash(); }
     v="dash";
